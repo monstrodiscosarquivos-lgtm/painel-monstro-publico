@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting">
+<title>Sua raspadinha chegou - Monstro Discos</title>
+</head>
+<!--
+  Email pronto da campanha raspadinha-outubro (código da campanha no Painel tem de ser exatamente raspadinha-outubro). Guia: docs/RASPADINHA.md.
+  Antes de usar no Brevo:
+  1. Troque LINK_DA_CAMPANHA pelo link "Botão do email (Brevo)" da aba Raspadinha do Painel
+     (já vem com as UTMs e com {{ contact.EMAIL }}, que o Brevo troca pelo email de cada pessoa).
+  2. Troque ENDERECO_DA_PAGINA pelo endereço do GitHub Pages (linha "Raspadinha: endereço da página" em Configurações).
+  3. O link do WhatsApp da loja já vem com mensagem pronta.
+  4. Pode mandar para a base toda: o sorteio só acontece quando a pessoa raspa, e cada email raspa uma vez.
+  5. Se os prêmios da campanha forem outros, ajuste a frase "pode ser 10%, 15%, 20% ou até 50%" e a pré-visualização.
+-->
+<body style="margin:0;padding:0;background-color:#0a0a0a;font-family:Arial,Helvetica,sans-serif;">
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">Raspe o selo e descubra seu desconto na Monstro. Pode ser até 15%.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0a0a;">
+<tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+  <tr><td align="center" style="padding:30px 20px 6px;">
+    <a href="https://lojamonstro.com.br/?utm_source=brevo&amp;utm_medium=email&amp;utm_campaign=raspadinha" style="text-decoration:none;">
+      <img src="https://img.mailinblue.com/10149514/images/content_library/original/690bc589040af79e31a84433.png" alt="Monstro Discos" width="170" style="display:block;width:170px;height:auto;">
+    </a>
+  </td></tr>
+
+  <tr><td align="center" style="padding:16px 30px 0;">
+    <span style="font-size:12px;letter-spacing:3px;color:#e63946;font-weight:700;text-transform:uppercase;display:block;">Raspadinha Monstro</span>
+    <span style="font-size:34px;font-weight:900;color:#ffffff;line-height:1.08;display:block;margin-top:10px;">{{ contact.FIRSTNAME | default : "EI" }}, TEM UMA RASPADINHA<br>ESPERANDO VOCÊ</span>
+    <span style="font-size:15px;color:#cccccc;display:block;margin-top:12px;line-height:1.55;">A gente separou uma raspadinha pra você. É só tocar no botão, raspar o selo do disco com o dedo e ver quanto você ganhou de desconto na loja.</span>
+  </td></tr>
+
+  <tr><td align="center" style="padding:22px 30px 0;">
+    <a href="https://monstrodiscosarquivos-lgtm.github.io/raspadinha/?c=raspadinha-outubro&amp;utm_campaign=raspadinha-outubro&amp;utm_source=brevo&amp;utm_medium=email&amp;e={{ contact.EMAIL }}" style="text-decoration:none;">
+      <img src="https://monstrodiscosarquivos-lgtm.github.io/raspadinha/cartela-fechada.jpg" alt="Cartela da raspadinha: raspe o selo do disco" width="540" style="display:block;width:100%;max-width:540px;height:auto;border-radius:10px;">
+    </a>
+  </td></tr>
+
+  <tr><td align="center" style="padding:22px 30px 6px;">
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background-color:#e63946;border-radius:8px;">
+      <a href="https://monstrodiscosarquivos-lgtm.github.io/raspadinha/?c=raspadinha-outubro&amp;utm_campaign=raspadinha-outubro&amp;utm_source=brevo&amp;utm_medium=email&amp;e={{ contact.EMAIL }}" style="display:inline-block;padding:16px 40px;color:#ffffff;font-size:17px;font-weight:900;text-decoration:none;letter-spacing:0.5px;">QUERO RASPAR &#8594;</a>
+    </td></tr></table>
+  </td></tr>
+
+  <tr><td align="center" style="padding:8px 40px 8px;">
+    <span style="font-size:13px;color:#999999;display:block;line-height:1.6;">Raspe o selo e descubra seu desconto: pode ser 5%, 10% ou até 15%, em compras a partir de R$ 100. Uma raspadinha por email. Depois de raspar, o botão já leva pra loja com o desconto aplicado.</span>
+  </td></tr>
+
+  <tr><td align="center" style="padding:10px 30px 4px;">
+    <span style="font-size:11px;color:#666666;display:block;line-height:1.6;">Uma cartela por pessoa. Cupom de uso único, válido no site lojamonstro.com.br até a data acima.<br>Parcelamos em até 12x &#183; Embalagem reforçada &#183; Retirada na loja em Goiânia</span>
+  </td></tr>
+
+  <tr><td align="center" style="padding:22px 30px;border-top:1px solid #1a1a1a;">
+    <a href="https://instagram.com/lojamonstrodiscos" style="font-size:12px;color:#888888;text-decoration:none;">Instagram</a>
+    <span style="color:#444444;">&#160;&#160;&#183;&#160;&#160;</span>
+    <a href="https://api.whatsapp.com/send/?phone=5562984884142&amp;text=Oi!%20Vim%20pelo%20email%20da%20raspadinha%20da%20Monstro." style="font-size:12px;color:#888888;text-decoration:none;">WhatsApp</a>
+    <span style="color:#444444;">&#160;&#160;&#183;&#160;&#160;</span>
+    <a href="https://lojamonstro.com.br/" style="font-size:12px;color:#888888;text-decoration:none;">Site</a>
+    <span style="font-size:12px;color:#555555;display:block;margin-top:12px;">Monstro Discos &#183; Rua 12, 35, Setor Central, Goiânia</span>
+    <span style="font-size:11px;color:#444444;display:block;margin-top:6px;">Você recebeu este email porque é cliente da Monstro Discos. <a href="{{ unsubscribe }}" style="color:#666666;">Descadastrar</a></span>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

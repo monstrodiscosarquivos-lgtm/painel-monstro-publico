@@ -1,0 +1,31 @@
+# Segredos: nunca vão para o GitHub
+.env
+credenciais/
+*.json.key
+service-account*.json
+
+# Dados de clientes: nunca vão para o GitHub
+dados/
+Cadastro de Discos/
+*.csv
+*.xlsx
+# Planilhas de referência também ficam só na cópia privada em dados/.
+
+# Python
+__pycache__/
+.venv/
+*.pyc
+.pytest_cache/
+
+# Códigos de recuperação e cópias de segurança de contas: nunca versionar
+github-recovery-codes*
+*recovery-codes*
+*recovery_codes*
+*backup-codes*
+*.pem
+*.p12
+id_rsa*
+
+# Cópia independente preparada para migração, sem histórico antigo
+migracao-publica/
+*.aes256

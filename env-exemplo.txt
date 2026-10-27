@@ -1,0 +1,17 @@
+# Copie este arquivo para .env e preencha. O .env nunca vai para o GitHub.
+NUVEMSHOP_STORE_ID=2399989
+NUVEMSHOP_TOKEN=
+NUVEMSHOP_USER_AGENT=Painel Monstro (contato@monstrodiscos.com.br)
+BREVO_API_KEY=
+GOOGLE_SERVICE_ACCOUNT_FILE=credenciais/google-service-account.json
+PLANILHA_ID=
+# Segurança: enquanto for "sim", nada é alterado no Brevo, só simulado.
+BREVO_MODO_TESTE=sim
+# Custos automáticos do Meta: acesso somente de leitura (ads_read).
+META_ADS_ACCOUNT_ID=
+META_ADS_TOKEN=
+META_ADS_API_VERSION=v24.0
+# Cadastro de discos: token pessoal do Discogs, só no .env local e GitHub Secrets.
+DISCOGS_TOKEN=
+# Cache público: 32 bytes aleatórios em base64. Não imprimir nem versionar a chave real.
+CACHE_KEY=

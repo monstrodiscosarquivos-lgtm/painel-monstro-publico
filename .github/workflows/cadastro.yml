@@ -1,0 +1,80 @@
+name: Cadastro de discos aprovados
+
+# Rodada curta (D-068): cria na Nuvemshop, ocultos, os discos que o Túlio aprovou no Painel.
+# Disparada pelo vigia do Apps Script (apps-script/vigia-cadastro.gs) poucos minutos depois da
+# aprovação, para não esperar a rotina de hora em hora. Também pode ser rodada à mão em
+# Actions > Cadastro de discos aprovados > Run workflow. A rotina de hora em hora continua
+# criando os aprovados que sobrarem, então se o vigia falhar nada se perde.
+on:
+  repository_dispatch:
+    types: [cadastro]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rotina-painel     # mesma fila da rotina: nunca as duas ao mesmo tempo
+  cancel-in-progress: false
+
+jobs:
+  cadastro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Instalar o Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Instalar as bibliotecas
+        run: pip install -r requirements.txt
+
+      - name: Recuperar somente o envelope criptografado
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: dados/cache-publico/api.aes256
+          key: dados-api-aes256-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: dados-api-aes256-v1-
+
+      - name: Autenticar e descriptografar cache (dados/api só no runner)
+        env:
+          CACHE_KEY: ${{ secrets.CACHE_KEY }}
+        run: python -m painel_monstro.cache_seguro restaurar
+
+      - name: Criar os discos aprovados
+        env:
+          NUVEMSHOP_STORE_ID: ${{ secrets.NUVEMSHOP_STORE_ID }}
+          NUVEMSHOP_TOKEN: ${{ secrets.NUVEMSHOP_TOKEN }}
+          NUVEMSHOP_USER_AGENT: ${{ secrets.NUVEMSHOP_USER_AGENT }}
+          PLANILHA_ID: ${{ secrets.PLANILHA_ID }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          META_ADS_ACCOUNT_ID: ${{ secrets.META_ADS_ACCOUNT_ID }}
+          META_ADS_TOKEN: ${{ secrets.META_ADS_TOKEN }}
+          DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
+          META_ADS_API_VERSION: ${{ vars.META_ADS_API_VERSION || 'v24.0' }}
+          BREVO_MODO_TESTE: ${{ vars.BREVO_MODO_TESTE || 'sim' }}
+        run: python -m painel_monstro.rotina --so-cadastro
+
+      - name: Criptografar dados antes de guardar
+        id: cache_seguro
+        if: ${{ always() }}
+        env:
+          CACHE_KEY: ${{ secrets.CACHE_KEY }}
+        run: python -m painel_monstro.cache_seguro guardar
+
+      - name: Guardar somente cache criptografado
+        if: ${{ always() && steps.cache_seguro.outputs.pronto == 'sim' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: dados/cache-publico/api.aes256
+          key: dados-api-aes256-v1-${{ github.run_id }}-${{ github.run_attempt }}

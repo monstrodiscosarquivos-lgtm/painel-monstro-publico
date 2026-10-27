@@ -1,0 +1,91 @@
+name: Rotina do Painel
+
+# De hora em hora: coletor pela API da Nuvemshop (só leitura), motor da régua e dos indicadores,
+# e gravação na Planilha Google. Também pode ser rodada à mão em Actions > Rotina do Painel > Run workflow.
+on:
+  schedule:
+    - cron: '7 * * * *'   # minuto 7 de cada hora (evita o horário de pico, o minuto 0)
+  workflow_dispatch:
+    inputs:
+      completo:
+        description: 'Baixar tudo de novo da Nuvemshop (use só se algo estiver estranho)'
+        type: boolean
+        default: false
+      anuncios_historico:
+        description: 'Rebaixar histórico de anúncios do Meta desde julho/2025 (na primeira vez é automático)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read           # a rotina só lê o código; não escreve no repositório
+
+concurrency:
+  group: rotina-painel     # nunca duas rotinas ao mesmo tempo
+  cancel-in-progress: false
+
+jobs:
+  rotina:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Instalar o Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Instalar as bibliotecas
+        run: pip install -r requirements.txt
+
+      # D-079: dados/api nunca é cacheado diretamente; só AES-256-GCM autenticado.
+      - name: Recuperar somente o envelope criptografado
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: dados/cache-publico/api.aes256
+          key: dados-api-aes256-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: dados-api-aes256-v1-
+
+      - name: Autenticar e descriptografar cache (dados/api só no runner)
+        env:
+          CACHE_KEY: ${{ secrets.CACHE_KEY }}
+        run: python -m painel_monstro.cache_seguro restaurar
+
+      - name: Rodar a rotina (coletor, motor, planilha)
+        env:
+          NUVEMSHOP_STORE_ID: ${{ secrets.NUVEMSHOP_STORE_ID }}
+          NUVEMSHOP_TOKEN: ${{ secrets.NUVEMSHOP_TOKEN }}
+          NUVEMSHOP_USER_AGENT: ${{ secrets.NUVEMSHOP_USER_AGENT }}
+          PLANILHA_ID: ${{ secrets.PLANILHA_ID }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          META_ADS_ACCOUNT_ID: ${{ secrets.META_ADS_ACCOUNT_ID }}
+          META_ADS_TOKEN: ${{ secrets.META_ADS_TOKEN }}
+          DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
+          META_ADS_API_VERSION: ${{ vars.META_ADS_API_VERSION || 'v24.0' }}
+          # Modo teste do Brevo: fica "sim" a menos que exista a variável do repositório BREVO_MODO_TESTE
+          # (Settings > Secrets and variables > Actions > Variables). Só o Túlio muda isso.
+          BREVO_MODO_TESTE: ${{ vars.BREVO_MODO_TESTE || 'sim' }}
+          COMPLETO: ${{ inputs.completo && '--completo' || '' }}
+          ANUNCIOS_HISTORICO: ${{ inputs.anuncios_historico && '--anuncios-historico' || '' }}
+        run: python -m painel_monstro.rotina $COMPLETO $ANUNCIOS_HISTORICO
+
+      - name: Criptografar dados antes de guardar
+        id: cache_seguro
+        if: ${{ always() }}
+        env:
+          CACHE_KEY: ${{ secrets.CACHE_KEY }}
+        run: python -m painel_monstro.cache_seguro guardar
+
+      - name: Guardar somente cache criptografado
+        if: ${{ always() && steps.cache_seguro.outputs.pronto == 'sim' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: dados/cache-publico/api.aes256
+          key: dados-api-aes256-v1-${{ github.run_id }}-${{ github.run_attempt }}

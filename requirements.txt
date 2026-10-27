@@ -1,0 +1,12 @@
+﻿# Python 3.12
+requests>=2.32
+pandas>=2.2
+python-dotenv>=1.0
+gspread>=6.1
+google-auth>=2.30
+pytest>=8.0
+pyyaml>=6.0
+Pillow>=11.0
+opencv-python-headless>=4.10
+openpyxl>=3.1
+cryptography>=46.0

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting">
+<title>Seu cupom da raspadinha vence em breve - Monstro Discos</title>
+</head>
+<!--
+  Lembrete da raspadinha (Painel Monstro, D-071). Guia: docs/RASPADINHA.md, parte "Lembrete no Brevo".
+  Quem envia é a automação do Brevo "Painel · Raspadinha lembrete" (gatilho: contato entra na lista de mesmo nome).
+  O Painel grava no contato, antes de colocá-lo na lista:
+    RASP_CUPOM     código do cupom (ex.: RASPAK7Q2MX)
+    RASP_PREMIO    "15% de desconto", "frete grátis" ou "R$ 20 de desconto"
+    RASP_VALIDADE  último dia do cupom, dd/mm
+    RASP_CAMPANHA  nome da campanha
+    RASP_MINIMO    "em compras a partir de R$ 100" ou vazio
+  O link do WhatsApp já vem com mensagem pronta e o código do cupom (o Brevo troca {{contact.RASP_CUPOM}}).
+  Assunto sugerido: {{ contact.FIRSTNAME | default : "Ei" }}, seu cupom de {{ contact.RASP_PREMIO }} vence {{ contact.RASP_VALIDADE }}
+-->
+<body style="margin:0;padding:0;background-color:#0a0a0a;font-family:Arial,Helvetica,sans-serif;">
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">Seu cupom {{ contact.RASP_CUPOM }} vale até {{ contact.RASP_VALIDADE }}. Depois disso ele some.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0a0a;">
+<tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+  <tr><td align="center" style="padding:30px 20px 6px;">
+    <a href="https://lojamonstro.com.br/?utm_source=brevo&amp;utm_medium=email&amp;utm_campaign=raspadinha-lembrete" style="text-decoration:none;">
+      <img src="https://img.mailinblue.com/10149514/images/content_library/original/690bc589040af79e31a84433.png" alt="Monstro Discos" width="170" style="display:block;width:170px;height:auto;">
+    </a>
+  </td></tr>
+
+  <tr><td align="center" style="padding:16px 30px 0;">
+    <span style="font-size:12px;letter-spacing:3px;color:#e63946;font-weight:700;text-transform:uppercase;display:block;">Raspadinha Monstro</span>
+    <span style="font-size:32px;font-weight:900;color:#ffffff;line-height:1.1;display:block;margin-top:10px;">{{ contact.FIRSTNAME | default : "EI" }}, SEU DESCONTO<br>VENCE {{ contact.RASP_VALIDADE }}</span>
+    <span style="font-size:15px;color:#cccccc;display:block;margin-top:12px;line-height:1.55;">Você raspou e ganhou <strong style="color:#ffffff;">{{ contact.RASP_PREMIO }}</strong> na Loja Monstro, mas o cupom ainda não foi usado. Ele vale até {{ contact.RASP_VALIDADE }} e depois disso some.</span>
+  </td></tr>
+
+  <tr><td align="center" style="padding:24px 30px 0;">
+    <table role="presentation" cellpadding="0" cellspacing="0" style="border:2px dashed #f4c430;border-radius:10px;"><tr><td align="center" style="padding:16px 34px;">
+      <span style="font-size:12px;color:#999999;letter-spacing:2px;display:block;">SEU CUPOM</span>
+      <span style="font-size:30px;font-weight:900;color:#f4c430;letter-spacing:3px;display:block;margin-top:4px;">{{ contact.RASP_CUPOM }}</span>
+    </td></tr></table>
+  </td></tr>
+
+  <tr><td align="center" style="padding:22px 30px 6px;">
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background-color:#e63946;border-radius:8px;">
+      <a href="https://lojamonstro.com.br/discount/{{ contact.RASP_CUPOM }}?redirect_to=/" style="display:inline-block;padding:16px 40px;color:#ffffff;font-size:17px;font-weight:900;text-decoration:none;letter-spacing:0.5px;">USAR MEU DESCONTO &#8594;</a>
+    </td></tr></table>
+  </td></tr>
+
+  <tr><td align="center" style="padding:8px 40px 8px;">
+    <span style="font-size:13px;color:#999999;display:block;line-height:1.6;">O botão abre a loja com o cupom já aplicado: é só escolher os discos. Se o desconto não aparecer no pagamento, digite o código acima no campo de cupom. {{ contact.RASP_MINIMO }}</span>
+  </td></tr>
+
+  <tr><td align="center" style="padding:10px 30px 4px;">
+    <span style="font-size:11px;color:#666666;display:block;line-height:1.6;">Cupom de uso único, válido no site lojamonstro.com.br até {{ contact.RASP_VALIDADE }}.<br>Parcelamos em até 12x &#183; Embalagem reforçada &#183; Retirada na loja em Goiânia</span>
+  </td></tr>
+
+  <tr><td align="center" style="padding:22px 30px;border-top:1px solid #1a1a1a;">
+    <a href="https://instagram.com/lojamonstrodiscos" style="font-size:12px;color:#888888;text-decoration:none;">Instagram</a>
+    <span style="color:#444444;">&#160;&#160;&#183;&#160;&#160;</span>
+    <a href="https://api.whatsapp.com/send/?phone=5562984884142&amp;text=Oi!%20Vim%20pelo%20email%20da%20raspadinha%20e%20quero%20usar%20meu%20cupom%20{{contact.RASP_CUPOM}}" style="font-size:12px;color:#888888;text-decoration:none;">WhatsApp</a>
+    <span style="color:#444444;">&#160;&#160;&#183;&#160;&#160;</span>
+    <a href="https://lojamonstro.com.br/" style="font-size:12px;color:#888888;text-decoration:none;">Site</a>
+    <span style="font-size:12px;color:#555555;display:block;margin-top:12px;">Monstro Discos &#183; Rua 12, 35, Setor Central, Goiânia</span>
+    <span style="font-size:11px;color:#444444;display:block;margin-top:6px;">Você recebeu este email porque jogou a raspadinha da Monstro Discos. <a href="{{ unsubscribe }}" style="color:#666666;">Descadastrar</a></span>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>
