@@ -37,6 +37,27 @@ def _palavras(texto: Any) -> list[str]:
     return re.findall(r'[a-z0-9]+', _sem_acento(texto))
 
 
+# Palavras de estado do disco: não são obrigatórias no nome do produto (D-085)
+ESTADO = {'usado', 'usada', 'usados', 'usadas', 'lacrado', 'lacrada', 'lacrados', 'novo', 'nova', 'importado', 'importada',
+          'nacional'}
+
+
+def palavras_do_desejo(desejo: Any) -> list[str]:
+    """Palavras que precisam aparecer no nome do produto (D-085).
+
+    Muita gente pede colando o nome de um produto esgotado da loja, com subtítulo, ano e estado:
+    "LP Jon Bon Jovi: Blaze Of Glory / Young Guns II (1990) (Vinil usado)". Regras:
+    - o que vem depois de "/" é subtítulo ou lado B: fica de fora;
+    - anos entre parênteses ("(1990)") ficam de fora; ano solto continua valendo ("Nenhum de Nós 1992");
+    - palavras de formato e de estado (LP, vinil, usado, lacrado...) e palavras de 1 ou 2 letras ficam de fora;
+    - o resto dentro de parênteses continua obrigatório ("(Versão Espanha)", "(Vinil Vermelho Splatter)").
+    """
+    t = re.sub(r'\s+', ' ', _sem_acento(desejo))
+    t = t.split('/')[0]
+    t = re.sub(r'\(([^)]*)\)', lambda m: ' ' + re.sub(r'\b\d{4}\b', ' ', m.group(1)) + ' ', t)
+    return [w for w in _palavras(t) if len(w) >= 3 and w not in FORMATOS and w not in ESTADO]
+
+
 def formato_do_produto(nome: Any) -> str:
     """Formato pelo começo do nome do produto: "LP Violator ..." -> "lp". Vazio se não reconhecer."""
     p = _palavras(nome)

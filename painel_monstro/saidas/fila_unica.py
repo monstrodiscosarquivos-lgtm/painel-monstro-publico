@@ -281,7 +281,7 @@ def alertas_garimpo(desejos: pd.DataFrame, produtos: pd.DataFrame, params: c.Par
         fone = c.telefone_whatsapp(r.get('telefone'))
         if (email and email in bloqueio) or (fone and fone in bloqueio):
             continue
-        palavras = [w for w in limpar(r.get('desejo')).split() if len(w) >= 3 and w not in garimpo.FORMATOS]
+        palavras = garimpo.palavras_do_desejo(r.get('desejo'))  # D-085: ignora subtítulo após '/', ano entre parênteses e estado
         formato = garimpo.formato_do_pedido(r.get('formato'), r.get('desejo'))
         quando = cp_momento(r.get('data'))
         contato = email or fone or str(r.get('nome') or '').strip().lower()

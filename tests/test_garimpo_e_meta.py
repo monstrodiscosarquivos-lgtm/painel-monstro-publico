@@ -278,3 +278,21 @@ def test_camiseta_nao_avisa_disco_e_disco_nao_avisa_camiseta():
     assert formato_do_pedido('', 'camiseta do Ramones') == 'camiseta'
     assert formato_do_produto('Camiseta Ramones - Logo (P)') == 'camiseta'
     assert formato_do_produto('LP Ramones - Ramones (Vinil Usado)') == 'lp'
+
+
+def test_palavras_do_desejo_d085():
+    from painel_monstro.saidas.garimpo import palavras_do_desejo
+
+    def casa(desejo, nome):
+        import unicodedata
+        n = unicodedata.normalize('NFKD', nome).encode('ascii', 'ignore').decode().lower()
+        return all(w in n for w in palavras_do_desejo(desejo))
+
+    pedido = 'Jon Bon Jovi LP Jon Bon Jovi: Blaze Of Glory / Young Guns II (1990) (Vinil usado)'
+    assert casa(pedido, 'LP Jon Bon Jovi - Blaze of Glory (1990) - (Vinil Usado)')
+    graf = 'Graforréia Xilarmônica LP Graforréia Xilarmônica - Coisa de Louco II (Vinil Vermelho Splatter) (Série Ouro)'
+    assert not casa(graf, 'LP Graforréia Xilarmônica - Coisa de Louco II (Azul Splatter)')
+    assert casa(graf, 'LP Graforréia Xilarmônica - Coisa de Louco II (Vinil Vermelho Splatter) (Série Ouro)')
+    assert not casa('Nenhum de Nós 1992', 'LP Nenhum de Nós - Cardume (1989) - (Vinil Usado)')
+    assert not casa('Júpiter Maçã Uma Tarde na Fruteira (Versão Espanha)', 'LP Júpiter Maçã - Uma Tarde na Fruteira (Versão Brasil)')
+    assert casa('rita lee', 'LP Rita Lee e Roberto de Carvalho 1990 (Novo/Lacrado)')
