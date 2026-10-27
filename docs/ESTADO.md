@@ -2,7 +2,12 @@
 
 Atualize este arquivo ao fim de toda sessão. Ele responde a uma pergunta: onde o projeto está agora?
 
-**Última atualização:** 27/10/2026: D-082 (escolher se o disco aparece na loja ao aprovar no Cadastro) e D-083 (excluir de uma vez na Nuvemshop os cupons cancelados da raspadinha) implementadas, `Painel.html` regerado e testes passando (717 em pytest + 42 em `apps-script/teste_local.js`). Nenhum push ou alteração em serviços externos.
+**Última atualização:** 27/10/2026: D-078 (`scripts/cadastro_lote.py` para cadastro de discos por agente local) implementada com 37 testes novos (754 testes passando em pytest + 42 em `apps-script/teste_local.js`). Lote `2026-10-27` (`2026-10-27-01` e `2026-10-27-02`) conferido e gravado na planilha com confirmação do Túlio.
+
+## D-078 · cadastro de discos por agente local (`scripts/cadastro_lote.py`, 27/10/2026)
+
+- **Script `scripts/cadastro_lote.py`:** implementa os subcomandos `folhas`, `recorte`, `conferir`, `gravar` e `renomear-lote` conforme `docs/CADASTRO_IA_SCRIPT.md` e `docs/CADASTRO_IA.md`, lendo `CADASTRO_PASTA_LOCAL` (padrão `J:\Meu Drive\Cadastro de Discos\entrada`) em `painel_monstro/config.py`. Reproduz byte a byte as 35 linhas de `cadastro_rascunhos` e as 141 linhas de `cadastro_fotos` do lote de referência `2026-10-26` e atinge 92,1% de acerto automático de cantos nas fotos reais (meta >= 90%).
+- **Lote `2026-10-27` gravado:** 29 fotos na pasta `entrada` agrupadas em `dados/cadastro_ia/2026-10-27/lote.json`: 7 grupos pulados (`d01` a `d07`: 3 de imagens avulsas/lacrados do Discogs, 2 de sobras do lote 2026-10-26, 1 disco consignado de bolinha prata Beto Guedes e 1 foto avulsa de Roberto Carlos já publicado) e 2 rascunhos gravados em `cadastro_rascunhos` e `cadastro_fotos` com as 12 fotos renomeadas na pasta `entrada` (`2026-10-27-01` LP Jon Bon Jovi - Blaze of Glory 1990 R$ 100 VG+/VG+ e `2026-10-27-02` LP Nenhum de Nós - Cardume 1989 R$ 75 VG+/VG+).
 
 ## D-082 e D-083 · publicar disco ao aprovar e excluir cupons cancelados (27/10/2026)
 

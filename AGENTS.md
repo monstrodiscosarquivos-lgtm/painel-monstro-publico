@@ -209,6 +209,7 @@ Confirmação D-058 (13/10/2026): mesmo VOLTA10<MÊS> no carrinho e email, usado
 - Discogs somente GET; `DISCOGS_TOKEN` exclusivamente no .env/Secrets, sem fotos do Discogs. Preço da etiqueta é manual, referência não substitui preço. Revisar os R$200 fictícios do piloto antes de aprovar.
 - `scripts/corrigir_frete.py` é ferramenta separada, fora da rotina/Actions. NÃO executar sem autorização escrita. Aplicação exige a frase exata `pode aplicar as correções de frete`, `--aplicar` e `--autorizacao`; só peso e medidas das linhas Sim, relatório privado antes/depois. Nenhuma autorização de cadastro libera esta correção.
 - Contratos e limites operacionais: `docs/CADASTRO.md` e bloco Avisar o Cowork no ESTADO. UTM não foi ligada aos pedidos por ausência dos campos na API consultada.
+- A identificação de fotos novas segue `docs/CADASTRO_IA.md` (`scripts/cadastro_lote.py`, D-078).
 
 
 ## Migração pública preparada (D-079, 26/10/2026)

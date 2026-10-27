@@ -15,3 +15,4 @@ META_ADS_API_VERSION=v24.0
 DISCOGS_TOKEN=
 # Cache público: 32 bytes aleatórios em base64. Não imprimir nem versionar a chave real.
 CACHE_KEY=
+CADASTRO_PASTA_LOCAL=J:\Meu Drive\Cadastro de Discos\entrada

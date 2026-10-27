@@ -28,6 +28,7 @@ class Config:
     meta_ads_token: str = field(default='', repr=False)
     meta_ads_api_version: str = 'v24.0'
     discogs_token: str = field(default='', repr=False)
+    cadastro_pasta_local: str = ''
 
 
 def carregar(caminho_env: str = ARQUIVO_ENV) -> Config:
@@ -49,6 +50,7 @@ def carregar(caminho_env: str = ARQUIVO_ENV) -> Config:
         meta_ads_token=pegar('META_ADS_TOKEN'),
         meta_ads_api_version=pegar('META_ADS_API_VERSION') or 'v24.0',
         discogs_token=pegar('DISCOGS_TOKEN'),
+        cadastro_pasta_local=pegar('CADASTRO_PASTA_LOCAL'),
         # Seguro por padrão: só desliga com "nao" escrito de propósito.
         brevo_modo_teste=pegar('BREVO_MODO_TESTE').lower() not in ('nao', 'não', 'no', 'false', '0'),
     )
@@ -58,5 +60,5 @@ _CHAVES = {
     'NUVEMSHOP_STORE_ID', 'NUVEMSHOP_TOKEN', 'NUVEMSHOP_USER_AGENT', 'BREVO_API_KEY',
     'GOOGLE_SERVICE_ACCOUNT_FILE', 'GOOGLE_SERVICE_ACCOUNT_JSON', 'PLANILHA_ID', 'BREVO_MODO_TESTE',
     'META_ADS_ACCOUNT_ID', 'META_ADS_TOKEN', 'META_ADS_API_VERSION',
-    'DISCOGS_TOKEN',
+    'DISCOGS_TOKEN', 'CADASTRO_PASTA_LOCAL',
 }

@@ -163,6 +163,14 @@ Implemente também a exportação mensal de públicos para o Meta (quem não abr
 
 ---
 
+## Cadastrar discos novos
+
+```
+Leia docs/CADASTRO_IA.md e cadastre os discos novos da pasta entrada.
+```
+
+---
+
 ## Sempre que abrir uma sessão nova (ou trocar de agente)
 
 ```
