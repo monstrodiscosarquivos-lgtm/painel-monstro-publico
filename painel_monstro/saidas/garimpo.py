@@ -7,8 +7,8 @@ Os pedidos vêm de dois lugares da Planilha Google, lidos juntos a cada rodada:
 Colunas aceitas (o cabeçalho é reconhecido pelo texto, não pela posição):
   data: "Carimbo de data/hora" ou `data`; contato: "Seu nome" e "Seu WhatsApp com DDD" (ou a pergunta antiga, junta,
   "Seu nome e WhatsApp com DDD"; na aba desejos, `telefone`, `nome`, `email`);
-  artista: "Artista ou banda"; disco: "Qual disco você procura?"; formato (opcional): "Formato" (LP, CD, Compacto, Fita K7, DVD
-  ou Qualquer formato); `status`: escreva "Avisado" para parar de avisar. Sem a pergunta Formato, vale o que estiver escrito no
+  artista: "Artista ou banda"; disco: "Qual disco você procura?"; formato (opcional): "Formato" (LP, CD, Compacto, Fita K7, DVD,
+  Camiseta ou Qualquer formato); `status`: escreva "Avisado" para parar de avisar. Sem a pergunta Formato, vale o que estiver escrito no
   pedido ("CD ...", "LP ...", "vinil"); sem nada, qualquer formato serve.
 
 O aviso (modelo ALERTA_GARIMPO) entra na fila única de WhatsApp (`fila_unica.alertas_garimpo`): nunca é enviado
@@ -28,7 +28,8 @@ PREFIXO_DAS_ABAS_DO_FORMULARIO = ('respostas ao formul', 'form responses', 'resp
 COLUNAS = ['email', 'telefone', 'nome', 'desejo', 'data', 'status', 'origem', 'formato']
 # Palavra do pedido ou do nome do produto -> formato. O nome do produto começa pelo formato ("LP ...", "CD ...").
 FORMATOS = {'lp': 'lp', 'lps': 'lp', 'vinil': 'lp', 'vinis': 'lp', 'vinyl': 'lp', 'cd': 'cd', 'cds': 'cd', 'compacto': 'compacto',
-            'compactos': 'compacto', 'k7': 'k7', 'fita': 'k7', 'fitas': 'k7', 'cassete': 'k7', 'dvd': 'dvd', 'box': 'box'}
+            'compactos': 'compacto', 'k7': 'k7', 'fita': 'k7', 'fitas': 'k7', 'cassete': 'k7', 'dvd': 'dvd', 'box': 'box',
+            'camiseta': 'camiseta', 'camisetas': 'camiseta', 'camisa': 'camiseta', 'camisas': 'camiseta', 'merch': 'camiseta'}
 QUALQUER = ('qualquer', 'tanto faz', 'todos')
 
 

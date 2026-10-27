@@ -248,7 +248,7 @@ def test_pedido_de_cd_nao_avisa_quando_so_chega_lp():
 def test_formato_do_produto_e_do_pedido():
     assert garimpo.formato_do_produto('Cd Helloween - Chameleon (CD Usado)') == 'cd'
     assert garimpo.formato_do_produto('LP Violator - Unholy Retribution') == 'lp'
-    assert garimpo.formato_do_produto('Camiseta Monstro') == ''
+    assert garimpo.formato_do_produto('Camiseta Monstro') == 'camiseta'
     assert garimpo.formato_do_pedido('', 'CD Jupiter Apple - Uma Tarde na Fruteira') == 'cd'
     assert garimpo.formato_do_pedido('Fita K7', '') == 'k7'
     assert garimpo.formato_do_pedido('Qualquer formato', 'LP Abbey Road') == ''
@@ -270,3 +270,11 @@ def test_disco_que_voltou_ao_estoque_depois_do_pedido_avisa():
     assert len(fu.alertas_garimpo(desejo(data='2026-10-09 10:00'), produtos, PARAMS, AGORA_UTC, {}, set(), api_ok())) == 1
     produtos.loc[0, 'no_estoque_desde'] = '2026-10-08'   # já estava em estoque quando pediu
     assert fu.alertas_garimpo(desejo(data='2026-10-09 10:00'), produtos, PARAMS, AGORA_UTC, {}, set(), api_ok()) == []
+
+
+def test_camiseta_nao_avisa_disco_e_disco_nao_avisa_camiseta():
+    from painel_monstro.saidas.garimpo import formato_do_pedido, formato_do_produto
+    assert formato_do_pedido('Camiseta', 'Ramones') == 'camiseta'
+    assert formato_do_pedido('', 'camiseta do Ramones') == 'camiseta'
+    assert formato_do_produto('Camiseta Ramones - Logo (P)') == 'camiseta'
+    assert formato_do_produto('LP Ramones - Ramones (Vinil Usado)') == 'lp'
