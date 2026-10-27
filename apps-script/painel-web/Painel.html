@@ -501,6 +501,7 @@ footer a{color:var(--muted)}
     <div class="tbl" id="cm-ped"></div>
     <h3 style="margin-top:22px">Meses registrados</h3>
     <div class="tbl" id="cm-hist"></div>
+    <div class="cfg-group" id="cm-man"></div>
     <div class="cfg-group" id="cm-semcom"></div>
     <div class="cfg-group" id="cm-cfg"></div>
     <div class="secerr" id="e-com" hidden></div>
@@ -696,9 +697,9 @@ const RANGES = {
   acd: "anuncios_campanha_dia!A1:T3000", ahoje: "anuncios_hoje!A1:K400", aads: "anuncios_anuncios!A1:S300", asem: "anuncios_semana!A1:U600",
   aalert: "anuncios_alertas!A1:F100", ares: "anuncios_resumo!A1:B20", anotas: "anuncios_notas!A1:E400", adir: "anuncios_direcao!A1:C400",
   pedMail: "pedidos!B1:B8000", itens: "itens!C1:I9000", prodA: "produtos!B1:H7000", prodM: "produtos!M1:M7000", prodQ: "produtos!Q1:Q7000",
-  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:Q200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AL500", cadf: "cadastro_fotos!A1:F3000",
+  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AL500", cadf: "cadastro_fotos!A1:F3000",
   g4d: "ga4_diario!A1:I15000", g4l: "ga4_links!A1:I400",
-  itNum: "itens!A1:A9000", prodId: "produtos!L1:L7000", cprod: "comissao_produtos!A1:D300"
+  itNum: "itens!A1:A9000", prodId: "produtos!L1:L7000", cprod: "comissao_produtos!A1:D300", pman: "pedidos_manuais!A1:N500"
 };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -769,7 +770,7 @@ function barChart(host, o){
 /* ---------- estado ---------- */
 const D = {};
 function setErr(sec, msg){ const el = $("e-"+sec); if (!el) return; el.hidden = !msg; el.textContent = msg || ""; }
-const SEC_OF = { itNum:["com"], prodId:["com"], cprod:["com"], g4d:["res"], g4l:["res"], rcamp:["rasp"], rjog:["rasp","res"], rev:["rasp"], rlem:["rasp"], reguaLog:["res"], cad:["cad"], cadf:["cad"], pedMail:["res"], itens:["res"], prodA:["res"], prodM:["res"], prodQ:["res"], acd:["ads"], ahoje:["ads"], aads:["ads"], asem:["ads"], aalert:["ads"], ares:["ads"], anotas:["ads"], adir:["ads"], atrib:["valeapena"], ped:["com"], pedNum:["com"], comis:["com"], fila:["fila"], rodada:["fila"], atual:["objetivo","novos","custos"], mensal:["objetivo"], coortes:["novos"], regua:["regua"], reguaRes:["regua"], car:["carrinhos"], vale:["valeapena"], ind:["custos"], res:["carrinhos"] };
+const SEC_OF = { itNum:["com"], prodId:["com"], cprod:["com"], pman:["com"], g4d:["res"], g4l:["res"], rcamp:["rasp","res"], rjog:["rasp","res"], rev:["rasp"], rlem:["rasp"], reguaLog:["res"], cad:["cad"], cadf:["cad"], pedMail:["res"], itens:["res"], prodA:["res"], prodM:["res"], prodQ:["res"], acd:["ads"], ahoje:["ads"], aads:["ads"], asem:["ads"], aalert:["ads"], ares:["ads"], anotas:["ads"], adir:["ads"], atrib:["valeapena"], ped:["com"], pedNum:["com"], comis:["com"], fila:["fila"], rodada:["fila"], atual:["objetivo","novos","custos"], mensal:["objetivo"], coortes:["novos"], regua:["regua"], reguaRes:["regua"], car:["carrinhos"], vale:["valeapena"], ind:["custos"], res:["carrinhos"] };
 
 function renderAtual(){
   const a = rows(D.atual)[0]; if (!a) return;
@@ -827,7 +828,8 @@ const RS_ORIG_NOTA = {
   "Sem origem identificada": "orgânico, Instagram, anúncios do Meta, newsletter sem cupom e indicações não anotadas"};
 let RASP_CUPONS = {};
 function rsOrigens(PED){
-  RASP_CUPONS = {}; rows(D.rjog || []).forEach(j => { const c = String(j.cupom || "").trim().toUpperCase(); if (c && j.cupom_status === "criado") RASP_CUPONS[c] = j.canal === "email" ? "email" : j.canal === "instagram" ? "Instagram" : (j.canal || "outro"); });
+  const campMap = {}; rpCampanhas().forEach(cp => { campMap[cp.campanha] = cp; });
+  RASP_CUPONS = {}; rows(D.rjog || []).forEach(j => { const c = String(j.cupom || "").trim().toUpperCase(); if (c && j.cupom_status === "criado") { const cp = campMap[j.campanha]; RASP_CUPONS[c] = rpNomeCanal(rpCanalJogada(j, cp), cp); } });
   // Fila: email + janela do primeiro toque até 7 dias depois do último (mesma regra da D-065)
   const toques = {};
   rows(D.fila || []).forEach(r => { const em = String(r["Email"] || "").trim().toLowerCase(); if (!em) return;
@@ -841,7 +843,7 @@ function rsOrigens(PED){
   const atr = {}; rows(D.atrib || []).forEach(r => { const n = normNum(r.numero_pedido); if (n) atr[n] = r.origem; });
   const out = {};
   PED.forEach(o => { const d = o.data.slice(0,16);
-    const cu = String(o.cupom || "").trim().toUpperCase().split(/\s*,\s*/).find(k => RASP_CUPONS[k]); if (cu) return out[o.numero] = "Raspadinha (" + RASP_CUPONS[cu] + ")";
+    const cu = String(o.cupom || "").trim().toUpperCase().split(/\s*,\s*/).find(k => RASP_CUPONS[k]); if (cu) return out[o.numero] = "Raspadinha · " + RASP_CUPONS[cu];
     const f = (toques[o.email] || []).find(t => d >= t.ini.slice(0,16) && d <= t.ate); if (f) return out[o.numero] = f.ciclo;
     if ((emails[o.email] || []).some(t => d >= t.ini && d <= t.ate)) return out[o.numero] = "Email da régua (Brevo)";
     const a = atr[normNum(o.numero)]; if (a) return out[o.numero] = /^indica/i.test(a) ? a : "Atribuição manual: " + a;
@@ -1308,11 +1310,15 @@ function comCalc(m, st, cfg){
             gratis: !total_est && frete === 0 && !retirada(o.forma_entrega), estorno: total_est || parcial};
   }).sort((a,b) => String(a.o.data).localeCompare(String(b.o.data)));
   const sum = (arr, k) => arr.reduce((t,x) => t + x[k], 0);
-  const vendido = sum(ped,"total"), fretes = sum(ped,"frete");
+  const manL = pedidosManuaisRows().flatMap(pm => pmRateioNoMes(pm, m, cfg.cartao.v));
+  const manVendido = sum(manL, "vendido"), manFretes = sum(manL, "frete"), manTaxas = sum(manL, "taxa"), manBase = sum(manL, "base");
+  const vendidoSite = sum(ped,"total"), fretesSite = sum(ped,"frete");
+  const vendido = vendidoSite + manVendido, fretes = fretesSite + manFretes;
   const estornos = sum(ped.filter(p => !p.fora), "estornoV"), estL = ped.filter(p => p.estorno && !p.fora);
   const faltaEst = ped.filter(p => p.estFonte === "falta" && !p.fora).length;
-  let taxas = sum(ped,"taxa"), taxasOrigem = ped.some(p => p.est) ? "estimadas" : "reais";
-  const tr = num(st.taxasReais); if (tr != null){ taxas = tr; taxasOrigem = "informadas"; }
+  let taxasSite = sum(ped,"taxa"), taxasOrigem = (ped.some(p => p.est) || manL.some(x => x.taxaEst)) ? "estimadas" : "reais";
+  const tr = num(st.taxasReais); if (tr != null){ taxasSite = tr; taxasOrigem = "informadas"; }
+  const taxas = taxasSite + manTaxas;
   const foraL = ped.filter(p => p.fora), valorFora = sum(foraL, "liq");
   const fl = freteLoja(m); const freteDesc = st.frete ? (num(st.freteValor) ?? fl.v ?? 0) : 0;
   // produtos sem comissão (ações da loja): sai só a parte do pedido que é desses produtos, já sem frete, taxa e estorno
@@ -1324,12 +1330,14 @@ function comCalc(m, st, cfg){
     p.semComItens = exc; p.semCom = exc.reduce((t,x) => t + x.v, 0) / tot * p.liq; });
   const semComL = ped.filter(p => p.semCom > 0), semComV = sum(semComL, "semCom");
   const base = vendido - estornos - fretes - taxas - valorFora - freteDesc - semComV;
-  return {semComL, semComV, semComCarregando: FORA.size > 0 && !IT, ped, estornos, estL, faltaEst, vendido, fretes, taxas, taxasOrigem, foraL, valorFora, freteDesc, fl, base, pct: cfg.pct.v, comissao: base * cfg.pct.v / 100, temOutros,
+  return {manL, manVendido, manFretes, manTaxas, manBase, vendidoSite, fretesSite, taxasSite, semComL, semComV, semComCarregando: FORA.size > 0 && !IT, ped, estornos, estL, faltaEst, vendido, fretes, taxas, taxasOrigem, foraL, valorFora, freteDesc, fl, base, pct: cfg.pct.v, comissao: base * cfg.pct.v / 100, temOutros,
           gratis: ped.filter(p => p.gratis && !p.fora).length};
 }
 function comMeses(){
-  const s = new Set(pedidosRows().map(o => String(o.data).slice(0,7)).filter(m => /^\d{4}-\d{2}$/.test(m)));
-  return [...s].sort().reverse().slice(0, 18);
+  const s = new Set(pedidosRows().map(o => String(o.data).slice(0,7)).filter(m => /^\d{4}-\d{2}$/.test(m)).sort().reverse().slice(0, 18));
+  pedidosManuaisRows().filter(p => p.situacao === "ativo").forEach(p => pmLerCronograma(p).forEach(it => { if (/^\d{4}-\d{2}$/.test(it.mes)) s.add(it.mes); }));
+  return [...s].sort().reverse();
+
 }
 function renderCom(){
   if (VIEW !== "com" && $("view-com").hidden) { /* desenha mesmo assim quando os dados chegam */ }
@@ -1341,17 +1349,19 @@ function renderCom(){
     COM_MES = meses.includes(pm) ? pm : meses[0];
   }
   const sel = $("cm-mes");
-  sel.innerHTML = meses.map(m => `<option value="${m}"${m===COM_MES?" selected":""}>${esc(mesLabel(m))}${m === meses[0] ? " (em andamento)" : ""}</option>`).join("");
+  const mesAt = hojeSP().slice(0, 7);
+  sel.innerHTML = meses.map(m => `<option value="${m}"${m===COM_MES?" selected":""}>${esc(mesLabel(m))}${m === mesAt ? " (em andamento)" : (m > mesAt ? " (parcelas futuras)" : "")}</option>`).join("");
   sel.onchange = () => { COM_MES = sel.value; renderCom(); };
   const cfg = comCfg(), st = comState(COM_MES), r = comCalc(COM_MES, st, cfg);
   const reg = rows(D.comis || []).find(x => x.mes === COM_MES);
-  $("cm-info").textContent = `${r.ped.length} pedidos pagos no site` + (r.estL.length ? `, ${r.estL.length} com estorno` : "") + (reg ? ` · registrado em ${reg.registrado_em}: ${brl2(num(reg.comissao))}` : "");
+  $("cm-info").textContent = `${r.ped.length} pedidos pagos no site` + (r.manL.length ? ` + ${r.manL.length} fora da Nuvemshop` : "") + (r.estL.length ? `, ${r.estL.length} com estorno` : "") + (reg ? ` · registrado em ${reg.registrado_em}: ${brl2(num(reg.comissao))}` : "");
   $("cm-big").innerHTML = `
     <div class="card"><div class="k">Sua comissão</div><div class="v">${brl2(r.comissao)}</div><div class="s">${nf1.format(r.pct)}% da base</div></div>
     <div class="card"><div class="k">Base da comissão</div><div class="v">${brl2(r.base)}</div><div class="s">vendido menos estornos, fretes, taxas e ajustes</div></div>
-    <div class="card"><div class="k">Vendido no site</div><div class="v">${brl2(r.vendido)}</div><div class="s">${r.ped.length} pedidos pagos</div></div>`;
+    <div class="card"><div class="k">Vendido</div><div class="v">${brl2(r.vendido)}</div><div class="s">${r.ped.length} no site${r.manL.length ? ` + ${r.manL.length} fora da Nuvemshop` : " pagos"}</div></div>`;
   $("cm-wf").innerHTML = `<table><tbody>
-    <tr><td>Vendido no site (pedidos pagos, inclusive os estornados)</td><td class="n">${brl2(r.vendido)}</td></tr>
+    <tr><td>Vendido no site (pedidos pagos, inclusive os estornados)</td><td class="n">${brl2(r.vendidoSite)}</td></tr>
+    ${r.manL.length ? `<tr><td>Pedidos fora da Nuvemshop (${r.manL.length} ${r.manL.length>1?"lançamentos":"lançamento"})<div class="s" style="color:var(--muted)">base líquida no mês: ${brl2(r.manBase)}</div></td><td class="n">${brl2(r.manVendido)}</td></tr>` : ""}
     ${r.estL.length ? `<tr class="minus"><td>Estornos (${r.estL.length} ${r.estL.length>1?"pedidos":"pedido"})${r.faltaEst ? ` <span class="pill p-wait">${r.faltaEst} sem valor</span>` : ""}</td><td class="n">${brl2(r.estornos)}</td></tr>` : ""}
     <tr class="minus"><td>Fretes cobrados dos clientes</td><td class="n">${brl2(r.fretes)}</td></tr>
     <tr class="minus"><td>Taxas de pagamento <span class="s" style="color:var(--muted)">(${r.taxasOrigem})</span></td><td class="n">${brl2(r.taxas)}</td></tr>
@@ -1383,11 +1393,12 @@ function renderCom(){
   $("cm-taxa-v").onchange = e => upd(s2 => s2.taxasReais = e.target.value.trim());
   if ($("cm-outros")) $("cm-outros").onchange = e => upd(s2 => s2.outros = e.target.checked);
   // pedidos
-  $("cm-ped").innerHTML = r.ped.length ? `<table><thead><tr><th>Base</th><th>Pedido</th><th>Data</th><th>Pagamento</th><th>Total</th><th>Frete</th><th>Taxa</th><th>Cupom</th><th>Líquido</th></tr></thead><tbody>${
+  const manRowsHtml = r.manL.map(m => `<tr><td><input type="checkbox" checked disabled aria-label="Pedido ${esc(m.id)} fora da Nuvemshop"></td><td><b>${esc(m.id)}</b> <span class="pill p-info">fora da Nuvemshop</span> <span class="s" style="font-size:12px;color:var(--muted)">${esc(m.rotuloParcela)}</span>${m.descricao ? `<div class="s" style="font-size:12px;color:var(--muted)">${esc(m.descricao)}</div>` : ""}</td><td>${esc(diaLabel(String(m.data).slice(0,10)))}</td><td>${esc(m.forma_pagamento)}</td><td class="n">${brl2(m.vendido)}</td><td class="n">${m.frete ? brl2(m.frete) : "–"}</td><td class="n">${brl2(m.taxa)}${m.taxaEst?"*":""}</td><td></td><td class="n">${brl2(m.liq)}</td></tr>`).join("");
+  $("cm-ped").innerHTML = (r.ped.length || r.manL.length) ? `<table><thead><tr><th>Base</th><th>Pedido</th><th>Data</th><th>Pagamento</th><th>Total</th><th>Frete</th><th>Taxa</th><th>Cupom</th><th>Líquido</th></tr></thead><tbody>${
     r.ped.map(p => `<tr class="${p.fora?"fora":""}"${p.total_est?' style="background:var(--accent-soft)"':""}><td>${p.total_est ? "" : `<input type="checkbox" data-ped="${esc(p.o.numero)}" aria-label="Pedido ${esc(p.o.numero)} entra na base"${p.fora?"":" checked"}${p.cup && st.cupons.map(z=>z.toUpperCase()).includes(p.cup)?" disabled":""}>`}</td>
       <td>${esc(p.o.numero)}${p.semCom > 0 ? `<div class="s" style="font-size:12px;color:var(--muted)">sem comissão: ${brl2(p.semCom)}</div>` : ""}${p.total_est?' <span class="pill p-bad">estornado</span>':(p.parcial?' <span class="pill p-wait">estorno parcial</span>':"")}${p.parcial ? (p.estFonte === "api" ? `<div class="s" style="font-size:12px;color:var(--muted)">estornado: ${brl2(p.estornoV)}</div>` : `<div class="cm-inline" style="margin:4px 0 0">estornado: <input data-est="${esc(p.o.numero)}" inputmode="decimal" value="${esc((st.est||{})[p.o.numero] ?? "")}" placeholder="R$" style="width:90px"></div>`) : ""}</td><td>${esc(diaLabel(String(p.o.data).slice(0,10)))}</td><td>${MEIO_NOME[p.meio]}</td>
       <td class="n">${brl2(p.total)}</td><td class="n">${p.frete ? brl2(p.frete) : (p.gratis ? '<span class="s" style="color:var(--muted)">grátis</span>' : "–")}</td>
-      <td class="n">${brl2(p.taxa)}${p.est?"*":""}</td><td>${p.cup?`<code>${esc(p.cup)}</code>`:""}</td><td class="n">${p.total_est ? '<span class="s" style="color:var(--muted)">devolvido</span>' : brl2(p.liq)}</td></tr>`).join("")}</tbody></table>`
+      <td class="n">${brl2(p.taxa)}${p.est?"*":""}</td><td>${p.cup?`<code>${esc(p.cup)}</code>`:""}</td><td class="n">${p.total_est ? '<span class="s" style="color:var(--muted)">devolvido</span>' : brl2(p.liq)}</td></tr>`).join("")}${manRowsHtml}</tbody></table>`
     : '<div class="empty">Nenhum pedido pago neste mês.</div>';
   $("cm-ped").querySelectorAll("[data-ped]").forEach(el => el.onchange = () => upd(s2 => { const n = el.dataset.ped; s2.excl = s2.excl.filter(x => x !== n); if (!el.checked) s2.excl.push(n); }));
   $("cm-ped").querySelectorAll("[data-est]").forEach(el => el.onchange = () => upd(s2 => { s2.est = s2.est || {}; const v = el.value.trim(); if (v) s2.est[el.dataset.est] = v; else delete s2.est[el.dataset.est]; }));
@@ -1412,7 +1423,228 @@ function renderCom(){
     } catch(e){ stt.className = "status err"; stt.textContent = writeErr(e); }
     cs.disabled = false; };
   $("cm-save").onclick = () => comRegistrar(r, st);
+  renderPedidosManuais();
   renderSemCom();
+}
+/* ---------- Pedidos fora da Nuvemshop (aba pedidos_manuais, D-080) ---------- */
+const PM_CAB = ["id","data_venda","descricao","forma_pagamento","valor_total","frete","taxa","parcelas","modo","mes_unico","cronograma","situacao","incluido_em","atualizado_em"];
+function pmAddMes(ym, n){
+  const m = String(ym || "").trim().match(/^(\d{4})-(\d{2})$/);
+  if (!m) return "";
+  const tot = (+m[1]) * 12 + (+m[2] - 1) + (+n || 0);
+  return `${Math.floor(tot / 12)}-${String((tot % 12) + 1).padStart(2, "0")}`;
+}
+function pmDividirParcelas(valorTotal, nParcelas, mesInicial){
+  const tot = Math.round((num(valorTotal) || 0) * 100), n = Math.max(1, Math.floor(num(nParcelas) || 1));
+  const base = Math.floor(tot / n), resto = tot - base * n, ym = String(mesInicial || "").slice(0, 7);
+  return Array.from({length: n}, (_, i) => ({mes: ym ? pmAddMes(ym, i) : "", valor: (i === 0 ? base + resto : base) / 100}));
+}
+function pmValidarCronograma(valorTotal, modo, mesUnico, cronograma){
+  const tot = Math.round((num(valorTotal) || 0) * 100) / 100;
+  if (!(tot > 0)) return {ok: false, erro: "Informe um valor total maior que zero."};
+  if (modo === "mes"){
+    const mu = String(mesUnico || "").trim();
+    if (!/^\d{4}-\d{2}$/.test(mu)) return {ok: false, erro: "Escolha o mês em que o pedido entra na comissão."};
+    return {ok: true, cronograma: [{mes: mu, valor: tot}]};
+  }
+  if (!Array.isArray(cronograma) || !cronograma.length) return {ok: false, erro: "Informe as parcelas do pedido."};
+  const lista = cronograma.map(x => ({mes: String((x && x.mes) || "").trim(), valor: Math.round((num(x && x.valor) || 0) * 100) / 100}));
+  if (lista.some(x => !/^\d{4}-\d{2}$/.test(x.mes) || !(x.valor > 0))) return {ok: false, erro: "Preencha o mês e um valor maior que zero em cada parcela."};
+  const soma = Math.round(lista.reduce((s, x) => s + x.valor, 0) * 100) / 100;
+  if (Math.abs(soma - tot) >= 0.005) return {ok: false, erro: `A soma das parcelas (${brl2(soma)}) precisa bater com o valor total (${brl2(tot)}).`};
+  return {ok: true, cronograma: lista};
+}
+function pmLerCronograma(p){
+  if (!p) return [];
+  if (String(p.modo || "").trim() === "mes" && /^\d{4}-\d{2}$/.test(String(p.mes_unico || "").trim())){
+    return [{mes: String(p.mes_unico).trim(), valor: num(p.valor_total) || 0}];
+  }
+  try {
+    const a = Array.isArray(p.cronograma) ? p.cronograma : JSON.parse(String(p.cronograma || "[]"));
+    if (Array.isArray(a)) return a.map(x => ({mes: String((x && x.mes) || "").trim(), valor: num(x && x.valor) || 0})).filter(x => /^\d{4}-\d{2}$/.test(x.mes) && x.valor > 0);
+  } catch(e){}
+  return [];
+}
+function pmRateioNoMes(p, mes, taxaCartaoPct){
+  if (!p || String(p.situacao || "ativo").trim().toLowerCase() !== "ativo") return [];
+  const total = num(p.valor_total) || 0; if (!(total > 0)) return [];
+  const freteTotal = num(p.frete) || 0, txRaw = String(p.taxa ?? "").trim(), taxaEst = txRaw === "";
+  const taxaTotal = taxaEst ? total * ((num(taxaCartaoPct) ?? 3.65) / 100) : (txRaw.endsWith("%") ? total * ((num(txRaw) || 0) / 100) : (num(txRaw) || 0));
+  const cron = pmLerCronograma(p), nParc = Math.max(cron.length, Math.floor(num(p.parcelas) || 1));
+  const out = [];
+  cron.forEach((it, i) => {
+    if (it.mes !== mes) return;
+    const v = num(it.valor) || 0; if (!(v > 0)) return;
+    const f = v / total, frete = freteTotal * f, taxa = taxaTotal * f, base = (total - freteTotal - taxaTotal) * f;
+    const rotuloParcela = String(p.modo || "") === "mes" ? (nParc > 1 ? `mês único (${nParc}x)` : "mês único") : `parcela ${i + 1} de ${nParc}`;
+    out.push({id: String(p.id || ""), data: String(p.data_venda || ""), descricao: String(p.descricao || ""), forma_pagamento: String(p.forma_pagamento || "Outro"),
+      modo: String(p.modo || "parcelas"), parcelaIdx: i + 1, parcelas: nParc, rotuloParcela, f, vendido: v, frete, taxa, taxaEst, liq: base, base});
+  });
+  return out;
+}
+function pmGerarId(dataVenda){
+  const d = String(dataVenda || hojeSP()).replace(/\D/g, "").slice(0, 8) || hojeSP().replace(/\D/g, "");
+  const letras = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  let s = "M" + d;
+  for (let i = 0; i < 3; i++) s += letras[Math.floor(Math.random() * letras.length)];
+  return s;
+}
+function pedidosManuaisRows(){
+  const v = D.pman || []; if (v.length < 2) return [];
+  const h = v[0];
+  return v.slice(1).map((r, i) => { const o = {_row: i + 2}; h.forEach((k, j) => o[k] = r && r[j] != null ? String(r[j]) : ""); return o; })
+    .filter(o => String(o.id || "").trim())
+    .map(o => Object.assign(o, {situacao: String(o.situacao || "ativo").trim().toLowerCase() || "ativo"}));
+}
+let COM_PM_FORM = null;
+function renderPedidosManuais(){
+  const el = $("cm-man"); if (!el) return;
+  if (el.contains(document.activeElement) && ["INPUT","SELECT"].includes(document.activeElement.tagName)) return;
+  const lista = pedidosManuaisRows().slice().reverse(), cfg = comCfg();
+  const f = COM_PM_FORM;
+  const formHtml = !f ? "" : `<div class="fcard" style="margin:10px 0 12px">
+    <div class="fcard-h"><b>${f.id ? "Editar pedido " + esc(f.id) : "Lançar pedido de fora"}</b></div>
+    <div class="cost-form" style="margin-top:8px">
+      <label>Data da venda<input type="date" id="pm-data" value="${esc(f.data_venda)}"></label>
+      <label style="grid-column:span 2">Descrição livre <span class="s" style="font-weight:400;color:var(--muted)">(Não precisa pôr nome completo nem telefone)</span><input id="pm-desc" value="${esc(f.descricao)}" placeholder="Ex.: 3 LPs rock · cliente de SP"></label>
+      <label>Forma de pagamento<select id="pm-fp">${["PagBank","Pix","Dinheiro","Outro"].map(x => `<option${f.forma_pagamento===x?" selected":""}>${x}</option>`).join("")}</select></label>
+      <label>Valor total (R$)<input id="pm-total" inputmode="decimal" value="${esc(f.valor_total)}" placeholder="600,00"></label>
+      <label>Frete (R$)<input id="pm-frete" inputmode="decimal" value="${esc(f.frete)}"></label>
+      <label>Taxa (R$ ou % · vazio usa ${nf2p(cfg.cartao.v)}%)<input id="pm-taxa" inputmode="decimal" value="${esc(f.taxa)}" placeholder="Ex.: 25,00 ou 4,5%"></label>
+      <label>Número de parcelas<input id="pm-parc" type="number" min="1" max="24" value="${esc(f.parcelas)}"></label>
+      <label>Como entra na comissão<select id="pm-modo"><option value="parcelas"${f.modo!=="mes"?" selected":""}>Por parcela</option><option value="mes"${f.modo==="mes"?" selected":""}>Mês único</option></select></label>
+      <label id="pm-box-d1"${f.modo==="mes"?' style="display:none"':""}>Data da 1ª parcela<input type="date" id="pm-data1" value="${esc(f.data_primeira)}"></label>
+      <label id="pm-box-mu"${f.modo!=="mes"?' style="display:none"':""}>Mês da comissão<input type="month" id="pm-mes-unico" value="${esc(f.mes_unico)}"></label>
+    </div>
+    <div id="pm-box-cron" style="margin-top:10px${f.modo==="mes"?";display:none":""}">
+      <div class="k" style="margin-bottom:4px">Parcelas na comissão <button type="button" id="pm-recalc" style="margin-left:8px;padding:2px 8px;font-size:12px">Dividir igual (resto na 1ª)</button></div>
+      <div id="pm-cron-rows"></div>
+      <div class="s" id="pm-soma-msg" style="margin-top:4px;font-size:13px"></div>
+    </div>
+    <div class="savebar"><button class="primary" type="button" id="pm-salvar">Salvar pedido</button><button type="button" id="pm-fechar">Fechar</button><span class="status" id="pm-st"></span></div>
+  </div>`;
+  const tabHtml = lista.length ? `<table style="margin-top:10px"><thead><tr><th>Data</th><th>Descrição</th><th class="n">Total</th><th>Como entra / Meses</th><th></th></tr></thead><tbody>${lista.map(p => {
+    const cron = pmLerCronograma(p), canc = p.situacao === "cancelado";
+    const mesesTxt = cron.map(x => `${mesLabel(x.mes)} (${brl2(x.valor)})`).join(" · ");
+    const modoTxt = p.modo === "mes" ? `Mês único (${mesLabel(p.mes_unico || (cron[0]||{}).mes || "")})` : `Por parcela (${cron.length || p.parcelas || 1}x)`;
+    return `<tr class="${canc?"fora":""}"><td><b>${esc(p.id)}</b><div class="s">${esc(brDia(p.data_venda) || p.data_venda)}</div></td>
+      <td>${esc(p.descricao || "Sem descrição")}<div class="s">${esc(p.forma_pagamento || "Outro")}${num(p.frete) ? " · frete " + brl2(num(p.frete)) : ""}${p.taxa ? " · taxa " + (String(p.taxa).endsWith("%") ? esc(p.taxa) : brl2(num(p.taxa))) : " · taxa estimada"}</div></td>
+      <td class="n">${brl2(num(p.valor_total))}</td>
+      <td>${canc ? '<span class="pill p-bad">cancelado</span> ' : ""}${esc(modoTxt)}<div class="s">${esc(mesesTxt)}</div></td>
+      <td class="n">${canc ? "" : `<button type="button" data-pmedit="${esc(p.id)}">Editar</button> <button type="button" data-pmcanc="${esc(p.id)}">Cancelar</button>`}</td></tr>`;
+  }).join("")}</tbody></table>` : '<div class="s" style="font-size:13px;color:var(--muted);margin-top:6px">Nenhum pedido fora da Nuvemshop lançado ainda.</div>';
+  el.innerHTML = `<div class="fcard-h" style="justify-content:space-between"><div><h3 style="margin:0">Pedidos fora da Nuvemshop</h3>
+    <p class="sub" style="margin:2px 0 0">Vendas fechadas no WhatsApp e cobradas fora da loja (link do PagBank, Pix, dinheiro). Entram na base da comissão pelo líquido combinado, por parcela ou em mês único.</p></div>
+    ${!f ? `<button type="button" class="primary" id="pm-novo">Lançar pedido de fora</button>` : ""}</div>${formHtml}${tabHtml}<span class="status" id="pm-list-st"></span>`;
+  const btnNovo = $("pm-novo");
+  if (btnNovo) btnNovo.onclick = () => {
+    const hj = hojeSP();
+    COM_PM_FORM = {id:"", _row:0, incluido_em:"", data_venda:hj, descricao:"", forma_pagamento:"PagBank", valor_total:"", frete:"0", taxa:"", parcelas:"1", modo:"parcelas", data_primeira:hj, mes_unico:COM_MES || hj.slice(0,7), cronograma:[{mes:hj.slice(0,7), valor:0}], editado:false};
+    renderPedidosManuais();
+  };
+  el.querySelectorAll("[data-pmedit]").forEach(b => b.onclick = () => {
+    const p = pedidosManuaisRows().find(x => x.id === b.dataset.pmedit); if (!p) return;
+    const cron = pmLerCronograma(p), m0 = (cron[0] && cron[0].mes) || String(p.data_venda || hojeSP()).slice(0,7);
+    COM_PM_FORM = {id:p.id, _row:p._row, incluido_em:p.incluido_em || "", data_venda:p.data_venda || hojeSP(), descricao:p.descricao || "", forma_pagamento:p.forma_pagamento || "PagBank",
+      valor_total:String(p.valor_total || "").replace(".",","), frete:String(p.frete || "0").replace(".",","), taxa:String(p.taxa || "").replace(".",","),
+      parcelas:String(p.parcelas || cron.length || 1), modo:p.modo === "mes" ? "mes" : "parcelas", data_primeira:m0 + "-01", mes_unico:p.mes_unico || m0, cronograma:cron.length ? cron : [{mes:m0, valor:num(p.valor_total)||0}], editado:true};
+    renderPedidosManuais();
+  });
+  el.querySelectorAll("[data-pmcanc]").forEach(b => b.onclick = () => cancelarPedidoManual(b.dataset.pmcanc));
+  if (!f) return;
+  const desenharCron = () => {
+    const box = $("pm-cron-rows"); if (!box) return;
+    box.innerHTML = f.cronograma.map((it, i) => `<div class="cm-inline" style="margin:4px 0"><span style="min-width:78px;font-size:13px">${i+1}ª parcela:</span><input type="month" data-pm-cmes="${i}" value="${esc(it.mes)}" style="width:145px"><input inputmode="decimal" data-pm-cval="${i}" value="${esc(it.valor ? Number(it.valor).toFixed(2).replace(".",",") : "")}" placeholder="R$" style="width:110px"></div>`).join("");
+    const atualizarSoma = () => {
+      const v = pmValidarCronograma(f.valor_total, "parcelas", "", f.cronograma);
+      const msg = $("pm-soma-msg"), btn = $("pm-salvar");
+      const soma = Math.round(f.cronograma.reduce((s, x) => s + (num(x.valor) || 0), 0) * 100) / 100;
+      const tot = Math.round((num(f.valor_total) || 0) * 100) / 100;
+      if (tot > 0 && Math.abs(soma - tot) >= 0.005){
+        msg.style.color = "var(--accent)"; msg.textContent = `Soma das parcelas: ${brl2(soma)} · precisa bater com o total (${brl2(tot)}).`;
+        if (btn && f.modo !== "mes") btn.disabled = true;
+      } else {
+        msg.style.color = "var(--muted)"; msg.textContent = tot > 0 ? `Soma das parcelas: ${brl2(soma)} (confere com o total).` : "";
+        if (btn) btn.disabled = false;
+      }
+    };
+    box.querySelectorAll("[data-pm-cmes]").forEach(inp => inp.oninput = () => { f.cronograma[+inp.dataset.pmCmes].mes = inp.value; f.editado = true; atualizarSoma(); });
+    box.querySelectorAll("[data-pm-cval]").forEach(inp => inp.oninput = () => { f.cronograma[+inp.dataset.pmCval].valor = num(inp.value) || 0; f.editado = true; atualizarSoma(); });
+    atualizarSoma();
+  };
+  const recalcAuto = forcar => {
+    if (f.editado && !forcar) return;
+    const ym = String(f.data_primeira || f.data_venda || hojeSP()).slice(0, 7);
+    f.cronograma = pmDividirParcelas(f.valor_total, f.parcelas, ym);
+    f.editado = false;
+    desenharCron();
+  };
+  $("pm-data").oninput = e => { f.data_venda = e.target.value; if (!f.editado && e.target.value){ f.data_primeira = e.target.value; $("pm-data1").value = e.target.value; recalcAuto(false); } };
+  $("pm-desc").oninput = e => f.descricao = e.target.value;
+  $("pm-fp").onchange = e => f.forma_pagamento = e.target.value;
+  $("pm-total").oninput = e => { f.valor_total = e.target.value; recalcAuto(false); if (f.editado) desenharCron(); };
+  $("pm-frete").oninput = e => f.frete = e.target.value;
+  $("pm-taxa").oninput = e => f.taxa = e.target.value;
+  $("pm-parc").oninput = e => { f.parcelas = e.target.value; recalcAuto(true); };
+  $("pm-data1").oninput = e => { f.data_primeira = e.target.value; recalcAuto(true); };
+  $("pm-mes-unico").oninput = e => f.mes_unico = e.target.value;
+  $("pm-modo").onchange = e => {
+    f.modo = e.target.value;
+    $("pm-box-d1").style.display = f.modo === "mes" ? "none" : "";
+    $("pm-box-cron").style.display = f.modo === "mes" ? "none" : "";
+    $("pm-box-mu").style.display = f.modo === "mes" ? "" : "none";
+    if (f.modo === "mes") $("pm-salvar").disabled = false; else desenharCron();
+  };
+  $("pm-recalc").onclick = () => recalcAuto(true);
+  $("pm-fechar").onclick = () => { COM_PM_FORM = null; renderPedidosManuais(); };
+  $("pm-salvar").onclick = () => salvarPedidoManual();
+  desenharCron();
+}
+async function salvarPedidoManual(){
+  const f = COM_PM_FORM, st = $("pm-st"), btn = $("pm-salvar"); if (!f || !st) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(f.data_venda || "").trim())){ st.className = "status err"; st.textContent = "Informe a data da venda."; return; }
+  const val = pmValidarCronograma(f.valor_total, f.modo, f.mes_unico, f.cronograma);
+  if (!val.ok){ st.className = "status err"; st.textContent = val.erro; return; }
+  const tot = Math.round((num(f.valor_total) || 0) * 100) / 100;
+  const frete = Math.round((num(f.frete) || 0) * 100) / 100;
+  const txRaw = String(f.taxa || "").trim();
+  let taxaStr = "";
+  if (txRaw !== ""){
+    const txN = num(txRaw);
+    if (txN == null || txN < 0){ st.className = "status err"; st.textContent = "Taxa inválida."; return; }
+    const txReais = txRaw.endsWith("%") ? (tot * txN / 100) : txN;
+    taxaStr = txReais.toFixed(2);
+  }
+  const agora = hojeSP() + " " + hhmm();
+  const id = f.id || pmGerarId(f.data_venda);
+  const nParc = f.modo === "mes" ? Math.max(1, Math.floor(num(f.parcelas) || 1)) : val.cronograma.length;
+  const mesUnico = f.modo === "mes" ? val.cronograma[0].mes : "";
+  const cronJson = JSON.stringify(val.cronograma.map(x => ({mes: x.mes, valor: Math.round(x.valor * 100) / 100})));
+  const linha = [id, f.data_venda, String(f.descricao || "").trim(), f.forma_pagamento || "PagBank", tot.toFixed(2), frete.toFixed(2), taxaStr, String(nParc), f.modo, mesUnico, cronJson, "ativo", f.incluido_em || agora, agora];
+  const atual = D.pman && D.pman.length ? D.pman.slice() : [PM_CAB];
+  const row = f._row || (atual.length + 1);
+  btn.disabled = true; st.className = "status"; st.textContent = "Salvando…";
+  try {
+    if (!D.pman || !D.pman.length) await write("pedidos_manuais!A1:N1", [PM_CAB]);
+    await write(`pedidos_manuais!A${row}:N${row}`, [linha]);
+    atual[row - 1] = linha; D.pman = atual;
+    COM_PM_FORM = null; renderCom();
+    const s2 = $("pm-list-st"); if (s2){ s2.className = "status ok"; s2.textContent = `Pedido ${id} salvo.`; }
+    await afterSave();
+  } catch(e){ st.className = "status err"; st.textContent = writeErr(e); btn.disabled = false; }
+}
+async function cancelarPedidoManual(id){
+  const p = pedidosManuaisRows().find(x => x.id === id); if (!p) return;
+  const st = $("pm-list-st"); if (st){ st.className = "status"; st.textContent = "Cancelando…"; }
+  const agora = hojeSP() + " " + hhmm();
+  const linha = [p.id, p.data_venda, p.descricao, p.forma_pagamento, Number(num(p.valor_total)||0).toFixed(2), Number(num(p.frete)||0).toFixed(2), p.taxa === "" ? "" : Number(num(p.taxa)||0).toFixed(2), p.parcelas, p.modo, p.mes_unico, p.cronograma, "cancelado", p.incluido_em, agora];
+  try {
+    await write(`pedidos_manuais!A${p._row}:N${p._row}`, [linha]);
+    if (D.pman && D.pman[p._row - 1]) D.pman[p._row - 1] = linha;
+    renderCom();
+    const s2 = $("pm-list-st"); if (s2){ s2.className = "status ok"; s2.textContent = `Pedido ${id} marcado como cancelado.`; }
+    await afterSave();
+  } catch(e){ if (st){ st.className = "status err"; st.textContent = writeErr(e); } }
 }
 /* ---------- Produtos sem comissão (aba comissao_produtos): ações da loja, valem para todos os meses ---------- */
 function comForaMap(){ return new Map(rows(D.cprod || []).filter(x => normNum(x.produto_id)).map(x => [normNum(x.produto_id), x])); }
@@ -1464,6 +1696,7 @@ async function comRegistrar(r, st){
   if (r.estL.length) crit.push("estornos: " + r.estL.map(p => p.o.numero + " " + brl2(p.estornoV) + (p.total_est ? " (total)" : "")).join(", ") + (r.faltaEst ? " [" + r.faltaEst + " sem valor]" : ""));
   if (r.foraL.length) crit.push("fora: " + r.foraL.map(p => p.o.numero + (p.cup ? " (" + p.cup + ")" : "")).join(", "));
   if (r.semComL.length) crit.push("produtos sem comissão: " + r.semComL.map(p => p.o.numero + " " + brl2(p.semCom)).join(", "));
+  if (r.manL && r.manL.length) crit.push("fora da Nuvemshop: " + r.manL.map(m => m.id + " (" + m.rotuloParcela + " " + brl2(m.liq) + ")").join(", "));
   if (r.freteDesc) crit.push("frete grátis descontado");
   crit.push("taxas " + r.taxasOrigem);
   if (st.outros) crit.push("inclui pedidos manuais");
@@ -1471,7 +1704,7 @@ async function comRegistrar(r, st){
   const row = idx > 0 ? idx + 1 : Math.max(2, hist.length + 1);
   const agora = new Date().toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
   const r2 = v => Math.round(v * 100) / 100;
-  const vals = [COM_MES, r.ped.length, r2(r.vendido), r2(r.fretes), r2(r.taxas), r.taxasOrigem, r.foraL.length, r2(r.valorFora), r2(r.freteDesc), r2(r.base), r.pct, r2(r.comissao), crit.join("; "), agora, r2(r.estornos)];
+  const vals = [COM_MES, r.ped.length + (r.manL ? r.manL.length : 0), r2(r.vendido), r2(r.fretes), r2(r.taxas), r.taxasOrigem, r.foraL.length, r2(r.valorFora), r2(r.freteDesc), r2(r.base), r.pct, r2(r.comissao), crit.join("; "), agora, r2(r.estornos)];
   btn.disabled = true; sts.className = "status"; sts.textContent = "Registrando…";
   try { await write(`comissao!A${row}:O${row}`, [vals]); sts.className = "status ok"; sts.textContent = `Registrado: ${brl2(r.comissao)} em ${mesLabel(COM_MES)}.`; await afterSave(); }
   catch(e){ sts.className = "status err"; sts.textContent = writeErr(e); }
@@ -1910,6 +2143,7 @@ function rsProdutos(){
 }
 function rsCupomTipo(c){
   c = String(c || "").trim(); if (!c) return null;
+  if (RASP_CUPONS[c.toUpperCase()]) return "Raspadinha · " + RASP_CUPONS[c.toUpperCase()];
   for (const it of CFG){ if (!/cupom/i.test(it.label) || !it.value) continue;
     const re = new RegExp("^" + String(it.value).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/<M[ÊE]S>/i, "[A-Z]{3}") + "$", "i");
     if (re.test(c)) return /^volta/i.test(c) ? "Cupom VOLTA (régua de email ou carrinho)" : it.label.replace(/^cupom/i, "Cupom"); }
@@ -2110,22 +2344,52 @@ const rsR = () => { if (VIEW === "res") { try { renderRes(); } catch(e){ setErr(
 
 /* ---------- raspadinha: campanhas com sorteio na hora (D-070) ---------- */
 let RP_SEL = null, RP_NOVA = false, RP_FILTRO = null, RP_MODELO = null, RP_CONF = null, RP_CF = "todos", RP_BUSCA = "";
-const RP_CAB = ["campanha","nome","status","inicio","fim","canais","validade_dias","pedido_minimo","cumulativo","so_clientes","permitir_sem_premio","texto_sem_premio","prefixo","titulo","texto","premios","atualizado_em"];
+const RP_CAB = ["campanha","nome","status","inicio","fim","canais","validade_dias","pedido_minimo","cumulativo","so_clientes","permitir_sem_premio","texto_sem_premio","prefixo","titulo","texto","premios","atualizado_em","origens"];
 const RP_TIPOS = ["Porcentagem","Valor em R$","Frete grátis","Sem prêmio"];
 const RP_STATUS = [["rascunho","Rascunho (não abre)"],["teste","Teste (cupom de mentira)"],["ativa","Ativa"],["pausada","Pausada"],["encerrada","Encerrada"]];
 const RP_PILL = {rascunho:"p-info", teste:"p-wait", ativa:"p-ok", pausada:"p-wait", encerrada:"p-info"};
 const rpSim = v => /^(sim|s|true|1)$/i.test(String(v || "").trim());
 const rpDia = v => { v = String(v || "").trim(); const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : v.slice(0,10); };
-const RP_PADRAO = () => ({campanha:"", nome:"", status:"rascunho", inicio:hojeSP(), fim:"", canais:"email, instagram", validade_dias:"7", pedido_minimo:"0", cumulativo:"Não",
+const rpCodigoOrigem = nome => {
+  const limpo = String(nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const semPrep = limpo.replace(/\b(de|da|do|das|dos|e|a|o|as|os|em|no|na|nos|nas)\b/g, " ").replace(/\s+/g, " ").trim();
+  return (semPrep || limpo).replace(/\s+/g, "-").slice(0, 40);
+};
+function rpOrigensLista(raw){
+  if (Array.isArray(raw)) return raw.filter(x => x && x.codigo).map(x => ({codigo: String(x.codigo).trim().toLowerCase(), nome: String(x.nome || x.codigo).trim()}));
+  try { const a = JSON.parse(raw || "[]"); return Array.isArray(a) ? a.filter(x => x && x.codigo).map(x => ({codigo: String(x.codigo).trim().toLowerCase(), nome: String(x.nome || x.codigo).trim()})) : []; } catch(e){ return []; }
+}
+function rpCanalDe(utmSource, origens){
+  const s = String(utmSource || "").trim().toLowerCase();
+  if (!s) return "direto";
+  const lista = rpOrigensLista(origens);
+  for (let i = 0; i < lista.length; i++){ if (lista[i].codigo === s) return lista[i].codigo; }
+  if (/brevo|email|newsletter/.test(s)) return "email";
+  if (/insta|ig|facebook|meta/.test(s)) return "instagram";
+  if (/whats|wpp|zap/.test(s)) return "whatsapp";
+  return "outro";
+}
+function rpCanalJogada(j, c){
+  const ch = String((j && j.canal) || "").trim();
+  if (ch === "outro"){ const s = String((j && j.utm_source) || "").trim(); return s ? rpCanalDe(s, c && c.origens) : "outro"; }
+  return ch || "direto";
+}
+function rpNomeCanal(k, c){
+  const fixos = {email:"Email (Brevo)", instagram:"Instagram", whatsapp:"WhatsApp", direto:"Sem origem", outro:"Outra origem"};
+  if (fixos[k]) return fixos[k];
+  const orig = rpOrigensLista(c && c.origens).find(o => o.codigo === String(k || "").trim().toLowerCase());
+  return (orig && orig.nome) || k;
+}
+const RP_PADRAO = () => ({campanha:"", nome:"", status:"rascunho", inicio:hojeSP(), fim:"", canais:"email, instagram, whatsapp", validade_dias:"7", pedido_minimo:"0", cumulativo:"Não",
   so_clientes:"Não", permitir_sem_premio:"Não", texto_sem_premio:"Não foi dessa vez, mas fica de olho: logo tem mais.", prefixo:"RASPA",
   titulo:"Raspe e ganhe na Loja Monstro", texto:"Raspe o selo do disco e descubra seu desconto.",
   premios:[{rotulo:"10%",tipo:"Porcentagem",valor:10,chance:60,maximo:"",reserva:"Sim"},{rotulo:"15%",tipo:"Porcentagem",valor:15,chance:25,maximo:200,reserva:""},
-           {rotulo:"20%",tipo:"Porcentagem",valor:20,chance:10,maximo:50,reserva:""},{rotulo:"50%",tipo:"Porcentagem",valor:50,chance:5,maximo:10,reserva:""}]});
+           {rotulo:"20%",tipo:"Porcentagem",valor:20,chance:10,maximo:50,reserva:""},{rotulo:"50%",tipo:"Porcentagem",valor:50,chance:5,maximo:10,reserva:""}], origens:[]});
 function rpCampanhas(){
   const v = D.rcamp || []; if (v.length < 1) return [];
   const h = v[0];
   return v.slice(1).map((r,i) => { const o = {_row: i + 2}; h.forEach((k,j) => o[k] = r && r[j] != null ? String(r[j]) : "");
-    try { o.premios = JSON.parse(o.premios || "[]"); } catch(e){ o.premios = []; } return o; }).filter(o => o.campanha);
+    try { o.premios = JSON.parse(o.premios || "[]"); } catch(e){ o.premios = []; } o.origens = rpOrigensLista(o.origens); return o; }).filter(o => o.campanha);
 }
 function rpSituacao(c){
   const st = String(c.status || "").toLowerCase(), h = hojeSP();
@@ -2179,9 +2443,9 @@ function rpStats(c, ped){
           valendo: J.filter(j => rpEstado(j, ped).k === "valendo")};
 }
 async function rpSalvarCamp(c, mud){
-  const o = Object.assign({}, c, mud, {premios: JSON.stringify(c.premios),
+  const o = Object.assign({}, c, mud, {premios: JSON.stringify(c.premios), origens: JSON.stringify(rpOrigensLista(c.origens)),
     atualizado_em: new Date().toLocaleString("sv-SE",{timeZone:"America/Sao_Paulo"}).slice(0,16)});
-  await write(`rasp_campanhas!A${c._row}:Q${c._row}`, [RP_CAB.map(k => o[k] == null ? "" : String(o[k]))]);
+  await write(`rasp_campanhas!A${c._row}:R${c._row}`, [RP_CAB.map(k => o[k] == null ? "" : String(o[k]))]);
 }
 async function rpCancelar(linhas){
   const iSt = ((D.rjog || [])[0] || []).indexOf("cupom_status");
@@ -2248,7 +2512,7 @@ function rpAcoes(c, ped){
     if (a === "pausar") return fazer(() => rpSalvarCamp(c, {status:"pausada"}), "Pausada: a página mostra que a raspadinha está pausada.");
     if (a === "retomar") return fazer(() => rpSalvarCamp(c, {status:"ativa"}), "Retomada.");
     if (a === "testar") return fazer(() => rpSalvarCamp(c, {status:"teste"}), "Em teste: cupons de mentira.");
-    if (a === "duplicar"){ RP_NOVA = true; RP_CONF = null; RP_MODELO = Object.assign({}, c, {campanha:"", nome:(c.nome || c.campanha) + " (cópia)", status:"rascunho", inicio:hojeSP(), fim:"", premios:c.premios.map(p => Object.assign({}, p))});
+    if (a === "duplicar"){ RP_NOVA = true; RP_CONF = null; RP_MODELO = Object.assign({}, c, {campanha:"", nome:(c.nome || c.campanha) + " (cópia)", status:"rascunho", inicio:hojeSP(), fim:"", premios:c.premios.map(p => Object.assign({}, p)), origens:rpOrigensLista(c.origens).map(o => Object.assign({}, o))});
       const ch = document.querySelector("#rp-form .changed"); if (ch) ch.classList.remove("changed"); renderRasp(); $("rp-form").scrollIntoView({behavior:"smooth"}); return; }
     RP_CONF = {c: c.campanha, a}; renderRasp();
   });
@@ -2258,7 +2522,7 @@ function rpAcoes(c, ped){
     if (a === "encerrar_ir"){ RP_CONF = {c: c.campanha, a: "encerrar"}; return renderRasp(); }
     if (a === "ativar") return fazer(() => rpSalvarCamp(c, {status:"ativa", fim: rpDia(c.fim) && hoje > rpDia(c.fim) ? "" : c.fim}), "Ativa: cupons de verdade a partir de agora.");
     if (a === "reabrir") return fazer(() => rpSalvarCamp(c, {status:"ativa", fim: rpDia(c.fim) && hoje > rpDia(c.fim) ? "" : c.fim}), "Reaberta.");
-    if (a === "excluir") return fazer(async () => { await write(`rasp_campanhas!A${c._row}:Q${c._row}`, [RP_CAB.map(() => "")]); RP_SEL = null; }, "Excluída.");
+    if (a === "excluir") return fazer(async () => { await write(`rasp_campanhas!A${c._row}:R${c._row}`, [RP_CAB.map(() => "")]); RP_SEL = null; }, "Excluída.");
     if (a === "encerrar"){ const tudo = $("rp-canc-tudo") && $("rp-canc-tudo").checked;
       return fazer(async () => { await rpSalvarCamp(c, {status:"encerrada", fim: rpDia(c.fim) && rpDia(c.fim) < hoje ? c.fim : hoje}); if (tudo) await rpCancelar(x.valendo.map(j => j._row)); },
         tudo ? "Encerrada. Os cupons não usados deixam de valer em até 5 minutos." : "Encerrada."); }
@@ -2284,7 +2548,7 @@ function rpCupons(c, ped){
       .sort((a,z) => String(z.quando).localeCompare(String(a.quando)));
     const M = V.slice(0, 100);
     $("rp-cup-t").innerHTML = V.length ? `<table><thead><tr><th>Cupom</th><th class="hm">Prêmio</th><th>Email</th><th class="hm">Canal</th><th class="hm">Raspou</th><th>Situação</th><th></th></tr></thead><tbody>${
-      M.map(j => `<tr><td><code>${esc(j.cupom)}</code><div class="s sm-only">${esc(j.premio)}</div></td><td class="hm">${esc(j.premio)}</td><td style="overflow-wrap:anywhere">${esc(j.email)}</td><td class="hm">${esc(j.canal)}</td><td class="hm">${esc(brDiaC(rpDia(j.quando)))}</td><td><span class="pill ${j._e.c}">${esc(j._e.t)}</span></td><td>${
+      M.map(j => `<tr><td><code>${esc(j.cupom)}</code><div class="s sm-only">${esc(j.premio)}</div></td><td class="hm">${esc(j.premio)}</td><td style="overflow-wrap:anywhere">${esc(j.email)}</td><td class="hm">${esc(rpNomeCanal(rpCanalJogada(j, c), c))}</td><td class="hm">${esc(brDiaC(rpDia(j.quando)))}</td><td><span class="pill ${j._e.c}">${esc(j._e.t)}</span></td><td>${
         j._e.k === "valendo" ? `<button type="button" data-r="${j._row}">Cancelar</button>` : j._e.k === "erro_canc" ? `<button type="button" data-r="${j._row}">Tentar de novo</button>` : ""}</td></tr>`).join("")}</tbody></table>${
       V.length > 100 ? `<p class="fl-note" style="padding:0 12px">Mostrando 100 de ${int(V.length)}. Use a busca para achar um cupom.</p>` : ""}` : '<div class="empty">Nenhum cupom neste filtro.</div>';
     $("rp-cup-t").querySelectorAll("[data-r]").forEach(bt => bt.onclick = async () => {
@@ -2325,7 +2589,7 @@ function renderRasp(){
 function rpResultados(c){
   if (!c){ $("rp-nota").textContent = "Preencha a campanha nova abaixo e salve."; $("rp-kpi").innerHTML = ""; $("rp-canal").innerHTML = ""; $("rp-premio").innerHTML = ""; return; }
   const [sit, cls] = rpSituacao(c);
-  $("rp-nota").innerHTML = `<span class="pill ${cls}">${esc(sit)}</span> ${rpDia(c.inicio) ? brDiaC(rpDia(c.inicio)) : "sem início"} a ${rpDia(c.fim) ? brDiaC(rpDia(c.fim)) : "sem fim"} · canais: ${esc(c.canais || "–")} · cupom vale ${esc(c.validade_dias || "7")} dias${num(c.pedido_minimo) ? " · mínimo " + brl(num(c.pedido_minimo)) : ""}`;
+  $("rp-nota").innerHTML = `<span class="pill ${cls}">${esc(sit)}</span> ${rpDia(c.inicio) ? brDiaC(rpDia(c.inicio)) : "sem início"} a ${rpDia(c.fim) ? brDiaC(rpDia(c.fim)) : "sem fim"} · canais: ${esc([c.canais, ...rpOrigensLista(c.origens).map(o => o.nome || o.codigo)].filter(Boolean).join(", ") || "–")} · cupom vale ${esc(c.validade_dias || "7")} dias${num(c.pedido_minimo) ? " · mínimo " + brl(num(c.pedido_minimo)) : ""}`;
   const J = rows(D.rjog || []).filter(j => j.campanha === c.campanha), E = rows(D.rev || []).filter(e => e.campanha === c.campanha && e.evento === "abriu");
   const validas = J.filter(j => !/^erro($|:)/.test(j.cupom_status));
   const ped = {}; rsPedidos().forEach(o => { String(o.cupom || "").toUpperCase().split(/\s*,\s*/).forEach(k => { if (k) ped[k] = o; }); });
@@ -2344,8 +2608,8 @@ function rpResultados(c){
     + (erros ? tile("Erros", `<span class="pill p-bad">${int(erros)}</span>`, "cupom não foi criado; a pessoa pode tentar de novo") : "");
   const canais = {}; const add = (k, f) => { canais[k] = canais[k] || {a:0, r:0, u:0, v:0}; f(canais[k]); };
   E.forEach(e => add(e.canal || "direto", x => x.a++));
-  validas.forEach(j => add(j.canal || "direto", x => { x.r++; if (uso(j)){ x.u++; x.v += uso(j).total; } }));
-  const nomeCanal = k => ({email:"Email (Brevo)", instagram:"Instagram", direto:"Sem origem", outro:"Outra origem"}[k] || k);
+  validas.forEach(j => add(rpCanalJogada(j, c), x => { x.r++; if (uso(j)){ x.u++; x.v += uso(j).total; } }));
+  const nomeCanal = k => rpNomeCanal(k, c);
   const ck = Object.keys(canais);
   $("rp-canal").innerHTML = ck.length ? `<table><thead><tr><th>Canal</th><th class="n">Abriram</th><th class="n">Rasparam</th><th class="n">Usaram</th><th class="n">Vendas</th></tr></thead><tbody>${
     ck.map(k => { const x = canais[k]; return `<tr><td>${esc(nomeCanal(k))}</td><td class="n">${int(x.a)}</td><td class="n">${int(x.r)}</td><td class="n">${int(x.u)}</td><td class="n">${brl(x.v)}</td></tr>`; }).join("")}</tbody></table>` : '<div class="empty">Ninguém abriu ainda.</div>';
@@ -2362,7 +2626,9 @@ function rpLinks(c){
   const L = [["Botão do email (Brevo)", base + "&utm_source=brevo&utm_medium=email&e={{ contact.EMAIL }}", /email/i.test(c.canais)],
              ["Instagram: bio", base + "&utm_source=instagram&utm_medium=bio", /instagram/i.test(c.canais)],
              ["Instagram: stories", base + "&utm_source=instagram&utm_medium=stories", /instagram/i.test(c.canais)],
-             ["Instagram: post e direct", base + "&utm_source=instagram&utm_medium=post", /instagram/i.test(c.canais)]].filter(x => x[2]);
+             ["Instagram: post e direct", base + "&utm_source=instagram&utm_medium=post", /instagram/i.test(c.canais)],
+             ["WhatsApp", base + "&utm_source=whatsapp&utm_medium=mensagem", /whats/i.test(c.canais)],
+             ...rpOrigensLista(c.origens).map(o => [o.nome || o.codigo, base + "&utm_source=" + encodeURIComponent(o.codigo) + "&utm_medium=" + encodeURIComponent(o.codigo), true])].filter(x => x[2]);
   $("rp-links").innerHTML = L.map(([t, u]) => `<div class="k" style="margin-top:12px">${esc(t)}</div><div class="rp-link"><code>${esc(u)}</code><button type="button" data-copia="${esc(u)}">Copiar</button></div>`).join("")
     + `<p class="fl-note">No link do email, o Brevo troca <code>{{ contact.EMAIL }}</code> pelo email de cada pessoa, que já vem preenchido na página.</p>`;
   $("rp-links").querySelectorAll("[data-copia]").forEach(b => b.onclick = () => { try { navigator.clipboard.writeText(b.dataset.copia).then(() => { b.textContent = "Copiado"; setTimeout(() => b.textContent = "Copiar", 1500); }); } catch(e){} });
@@ -2380,7 +2646,7 @@ function rpForm(c){
       <label>Situação${sel("status", RP_STATUS, c.status)}</label>
       <label>Começa em${inp("inicio", rpDia(c.inicio), 'type="date"')}</label>
       <label>Termina em${inp("fim", rpDia(c.fim), 'type="date"')}<span class="s" style="font-weight:400">vazio = até você encerrar</span></label>
-      <div><div class="k">Canais</div><label class="s" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="c_email" style="width:auto"${/email/.test(canais) ? " checked" : ""}> Email</label><label class="s" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="c_insta" style="width:auto"${/instagram/.test(canais) ? " checked" : ""}> Instagram</label></div>
+      <div><div class="k">Canais</div><label class="s" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="c_email" style="width:auto"${/email/.test(canais) ? " checked" : ""}> Email</label><label class="s" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="c_insta" style="width:auto"${/instagram/.test(canais) ? " checked" : ""}> Instagram</label><label class="s" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="c_whats" style="width:auto"${/whats/.test(canais) ? " checked" : ""}> WhatsApp</label></div>
       <label>Cupom vale (dias)${inp("validade_dias", c.validade_dias, 'inputmode="numeric"')}</label>
       <label>Pedido mínimo (R$)${inp("pedido_minimo", c.pedido_minimo, 'inputmode="decimal"')}<span class="s" style="font-weight:400">0 = sem mínimo</span></label>
       <label>Junta com outros descontos?${sel("cumulativo", ["Não","Sim"], c.cumulativo || "Não")}</label>
@@ -2393,6 +2659,10 @@ function rpForm(c){
       <label>Texto da página${inp("texto", c.texto)}</label>
       <label>Mensagem de "sem prêmio"${inp("texto_sem_premio", c.texto_sem_premio)}</label>
     </div>
+    <h3 style="margin-top:14px">Outras origens desta campanha</h3>
+    <p class="s" style="margin:0 0 6px">Para lista de transmissão, grupo da loja, feira ou parceria. Cada origem ganha um link próprio e aparece separada nos resultados.</p>
+    <div id="rp-orig-b" style="display:grid;gap:8px"></div>
+    <div class="savebar" style="margin-top:8px"><button type="button" data-a="add-orig">Adicionar origem</button></div>
     <h3 style="margin-top:14px">Prêmios</h3>
     <p class="s" style="margin:0 0 6px">As chances precisam somar 100%. Máximo vazio = sem limite. A <b>reserva</b> recebe a chance dos prêmios que acabarem.${jogadas ? ` <b>Esta campanha já tem ${int(jogadas)} jogadas:</b> não troque o nome de um prêmio, senão a contagem do máximo recomeça.` : ""}</p>
     <div style="overflow-x:auto"><table class="rp-prem"><thead><tr><th>Nome no selo</th><th>Tipo</th><th>Valor</th><th>Chance (%)</th><th>Máximo</th><th>Reserva</th><th></th></tr></thead><tbody id="rp-prem-b"></tbody></table></div>
@@ -2419,6 +2689,22 @@ function rpForm(c){
   ligar(); soma();
   box.querySelectorAll("[data-f]").forEach(el => el.addEventListener("input", () => box.classList.add("changed")));
   box.querySelector('[data-a="add"]').onclick = () => { corpo.insertAdjacentHTML("beforeend", linha({rotulo:"", tipo:"Porcentagem", valor:"", chance:"", maximo:"", reserva:""})); ligar(); box.classList.add("changed"); };
+  const origCorpo = $("rp-orig-b");
+  const linhaOrig = (o, manual) => `<div data-orig-row style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:8px;align-items:end">
+    <label class="s" style="font-weight:600;display:grid;gap:4px">Nome<input data-o="nome" value="${esc(o.nome || "")}" placeholder="ex.: Lista de transmissão"></label>
+    <label class="s" style="font-weight:600;display:grid;gap:4px">Código<input data-o="codigo" value="${esc(o.codigo || "")}" data-manual="${manual ? "1" : ""}" placeholder="ex.: lista-transmissao"></label>
+    <button type="button" data-rm-orig>Tirar</button></div>`;
+  origCorpo.innerHTML = rpOrigensLista(c.origens).map(o => linhaOrig(o, true)).join("");
+  const ligarOrig = () => {
+    origCorpo.querySelectorAll("[data-rm-orig]").forEach(b => b.onclick = () => { b.closest("[data-orig-row]").remove(); box.classList.add("changed"); });
+    origCorpo.querySelectorAll("[data-orig-row]").forEach(row => {
+      const nEl = row.querySelector('[data-o="nome"]'), cEl = row.querySelector('[data-o="codigo"]');
+      nEl.oninput = () => { if (!cEl.dataset.manual) cEl.value = rpCodigoOrigem(nEl.value); box.classList.add("changed"); };
+      cEl.oninput = () => { cEl.dataset.manual = cEl.value.trim() ? "1" : ""; box.classList.add("changed"); };
+    });
+  };
+  ligarOrig();
+  box.querySelector('[data-a="add-orig"]').onclick = () => { origCorpo.insertAdjacentHTML("beforeend", linhaOrig({nome:"", codigo:""}, false)); ligarOrig(); box.classList.add("changed"); };
   const st = box.querySelector(".status"), q = f => box.querySelector(`[data-f="${f}"]`);
   box.querySelector('[data-a="salvar"]').onclick = async () => {
     st.className = "status";
@@ -2426,8 +2712,19 @@ function rpForm(c){
       const id = (c._nova ? q("campanha").value : c.campanha).trim().toLowerCase();
       if (!/^[a-z0-9][a-z0-9-]{2,40}$/.test(id)) throw new Error("código da campanha: use de 3 a 40 letras, números ou hífen, sem espaço");
       if (c._nova && rpCampanhas().some(x => x.campanha === id)) throw new Error("já existe uma campanha com esse código");
-      const can = [q("c_email").checked ? "email" : "", q("c_insta").checked ? "instagram" : ""].filter(Boolean).join(", ");
-      if (!can) throw new Error("escolha pelo menos um canal");
+      const O = [...origCorpo.querySelectorAll("[data-orig-row]")].map(row => {
+        const nome = row.querySelector('[data-o="nome"]').value.trim();
+        const codRaw = row.querySelector('[data-o="codigo"]').value.trim();
+        if (!nome && !codRaw) return null;
+        if (!nome) throw new Error("dê um nome para cada origem adicionada");
+        const codigo = codRaw ? codRaw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") : rpCodigoOrigem(nome);
+        if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(codigo)) throw new Error(`origem "${nome}": código inválido (use letras minúsculas, números e hífen)`);
+        if (["email","instagram","whatsapp","direto","outro"].includes(codigo)) throw new Error(`origem "${nome}": o código "${codigo}" já é de um canal pronto`);
+        return {codigo, nome};
+      }).filter(Boolean);
+      if (new Set(O.map(x => x.codigo)).size !== O.length) throw new Error("duas origens com o mesmo código");
+      const can = [q("c_email").checked ? "email" : "", q("c_insta").checked ? "instagram" : "", q("c_whats").checked ? "whatsapp" : ""].filter(Boolean).join(", ");
+      if (!can && !O.length) throw new Error("escolha pelo menos um canal");
       const ini = q("inicio").value, fim = q("fim").value;
       if (ini && fim && fim < ini) throw new Error("a data de fim é antes do início");
       const val = num(q("validade_dias").value); if (!val || val < 1 || val > 90) throw new Error("validade do cupom: de 1 a 90 dias");
@@ -2456,10 +2753,10 @@ function rpForm(c){
       const o = {campanha:id, nome:q("nome").value.trim() || id, status:q("status").value, inicio:ini, fim:fim, canais:can, validade_dias:String(val),
         pedido_minimo:String(min), cumulativo:q("cumulativo").value, so_clientes:q("so_clientes").value, permitir_sem_premio:q("permitir_sem_premio").value,
         texto_sem_premio:q("texto_sem_premio").value.trim(), prefixo:pref, titulo:q("titulo").value.trim(), texto:q("texto").value.trim(),
-        premios:JSON.stringify(P), atualizado_em:new Date().toLocaleString("sv-SE",{timeZone:"America/Sao_Paulo"}).slice(0,16)};
+        premios:JSON.stringify(P), atualizado_em:new Date().toLocaleString("sv-SE",{timeZone:"America/Sao_Paulo"}).slice(0,16), origens:JSON.stringify(O)};
       st.textContent = "Salvando…";
       const row = c._row || (D.rcamp || []).length + 1;
-      await write(`rasp_campanhas!A${row}:Q${row}`, [RP_CAB.map(k => o[k])]);
+      await write(`rasp_campanhas!A${row}:R${row}`, [RP_CAB.map(k => o[k] == null ? "" : String(o[k]))]);
       st.className = "status ok"; st.textContent = o.status === "ativa" ? "Salvo. A campanha está valendo: cupons de verdade." : "Salvo.";
       box.classList.remove("changed"); RP_NOVA = false; RP_MODELO = null; RP_SEL = id; RP_FILTRO = rpGrupo(o); await afterSave();
     } catch(e){ st.className = "status err"; st.textContent = e && e.message && !e.code ? e.message.charAt(0).toUpperCase() + e.message.slice(1) + "." : writeErr(e); }
@@ -2633,10 +2930,10 @@ function cdIguais(o){
 const cdR = () => { if (D.cad) { try { renderCad(); } catch(e){ setErr("cad", "Não consegui desenhar o cadastro: o formato da aba mudou."); } } };
 
 const adR = () => { if (D.acd) renderAds(); };
-const RENDER = { itNum:renderCom, prodId:renderCom, cprod:renderCom, itens:renderCom, prodA:renderCom, g4d:()=>{}, g4l:()=>{}, rcamp:()=>rpR(), rjog:()=>rpR(), rev:()=>rpR(), rlem:()=>rpR(), prodUrl:cdR, cad:cdR, cadf:cdR, acd:adR, ahoje:adR, aads:adR, asem:adR, aalert:adR, ares:adR, anotas:adR, adir:adR, atrib:renderAtrib, ped:()=>{renderCom(); renderAtrib();}, pedNum:()=>{renderCom(); renderAtrib();}, cauto:renderCom, comis:renderCom, fila:renderFila, rodada:renderFila, regcfg:renderRegCfg, bplano:renderBrevo, atual:()=>{renderAtual(); if (D.mensal) renderMensal();}, mensal:renderMensal, coortes:renderCoortes, regua:renderRegua, reguaRes:renderReguaRes, car:renderCar, vale:renderVale, ind:()=>{}, res:renderCarRes,
+const RENDER = { itNum:renderCom, prodId:renderCom, cprod:renderCom, pman:renderCom, itens:renderCom, prodA:renderCom, g4d:()=>{}, g4l:()=>{}, rcamp:()=>rpR(), rjog:()=>rpR(), rev:()=>rpR(), rlem:()=>rpR(), prodUrl:cdR, cad:cdR, cadf:cdR, acd:adR, ahoje:adR, aads:adR, asem:adR, aalert:adR, ares:adR, anotas:adR, adir:adR, atrib:renderAtrib, ped:()=>{renderCom(); renderAtrib();}, pedNum:()=>{renderCom(); renderAtrib();}, cauto:renderCom, comis:renderCom, fila:renderFila, rodada:renderFila, regcfg:renderRegCfg, bplano:renderBrevo, atual:()=>{renderAtual(); if (D.mensal) renderMensal();}, mensal:renderMensal, coortes:renderCoortes, regua:renderRegua, reguaRes:renderReguaRes, car:renderCar, vale:renderVale, ind:()=>{}, res:renderCarRes,
   cfg:()=>{renderCfg(); renderBrevoPill(); if (D.msgs) renderMsgs(); renderCom(); adR();}, msgs:renderMsgs, custos:()=>{renderCustos(); renderCom();} };
 
-["g4d","g4l","ped","pedNum","pedMail","itens","prodA","prodM","prodQ","cauto","custos","atrib","acd","cfg","fila","reguaLog","rjog"].forEach(k => { const o = RENDER[k]; RENDER[k] = () => { if (o) o(); rsR(); }; });
+["g4d","g4l","ped","pedNum","pedMail","itens","prodA","prodM","prodQ","cauto","custos","atrib","acd","cfg","fila","reguaLog","rjog","rcamp"].forEach(k => { const o = RENDER[k]; RENDER[k] = () => { if (o) o(); rsR(); }; });
 let VIEW = "painel";
 function showView(v){
   if (!["painel","res","fila","ads","cad","rasp","com","config"].includes(v)) v = "painel";

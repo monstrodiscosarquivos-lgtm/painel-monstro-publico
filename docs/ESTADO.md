@@ -2,7 +2,12 @@
 
 Atualize este arquivo ao fim de toda sessão. Ele responde a uma pergunta: onde o projeto está agora?
 
-**Última atualização:** 26/10/2026, Codex: D-079, preparação da migração pública em fechamento. Base inicial: 658 testes verdes. Nenhum push, publicação ou alteração de configuração externa.
+**Última atualização:** 27/10/2026: D-080 (pedidos fora da Nuvemshop na comissão) e D-081 (origens personalizadas e WhatsApp na raspadinha) implementadas, `Painel.html` regerado e testes passando (708 em pytest + 40 em `apps-script/teste_local.js`). Nenhum push ou alteração em serviços externos.
+
+## D-080 e D-081 · pedidos fora da Nuvemshop e origens da raspadinha (27/10/2026)
+
+- **D-081 (Parte 2 · origens da raspadinha):** coluna `origens` (R) adicionada em `rasp_campanhas` (`Sorteio.gs` e `painel-monstro.html`). `canal_(c, cp)` reconhece origens personalizadas da campanha (comparação exata `s === cod`), `email`, `instagram`, `whatsapp` (`whats|wpp|zap`), `direto` (vazio) e `outro` ("Outra origem"). `jogar_` bloqueia `whatsapp` quando fora de `canais` e nunca bloqueia origem personalizada cadastrada. O Painel adiciona a caixa WhatsApp em Canais, a seção "Outras origens desta campanha" com gerador de código, os links prontos para divulgar com botão Copiar e a reclassificação imediata das jogadas antigas gravadas como `outro`.
+- **D-080 (Parte 1 · pedidos fora da Nuvemshop na comissão):** aba `pedidos_manuais` (`id, data_venda, descricao, forma_pagamento, valor_total, frete, taxa, parcelas, modo, mes_unico, cronograma, situacao, incluido_em, atualizado_em`) protegida em `SO_ESPECIAL` (`Cofre.gs`) e criada na primeira gravação. Na seção Comissão do Painel, o bloco "Pedidos fora da Nuvemshop" permite lançar, editar e cancelar (mudando `situacao` para `cancelado`) vendas feitas fora da loja, escolhendo **Por parcela** (divisão automática com resto de centavos na 1ª parcela e cronograma editável validado contra o total) ou **Mês único**. Entra em `comCalc` com rateio proporcional de frete e taxa, aparece na lista de pedidos do mês com a marca "fora da Nuvemshop", na cascata ("Pedidos fora da Nuvemshop") e nos critérios registrados, e `comMeses()` inclui meses futuros dos cronogramas ativos.
 
 ## D-079 · migração pública, estado atual
 

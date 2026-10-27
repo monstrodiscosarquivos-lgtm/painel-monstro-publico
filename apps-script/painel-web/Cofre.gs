@@ -14,7 +14,7 @@
  */
 
 var PLANILHA = PropertiesService.getScriptProperties().getProperty('PLANILHA_ID') || ''; // configurar no Apps Script, nunca no git
-var SO_ESPECIAL = ['comissao', 'comissao_produtos', 'acessos', 'acessos_log'];  // abas que o nível comum não lê
+var SO_ESPECIAL = ['comissao', 'comissao_produtos', 'pedidos_manuais', 'acessos', 'acessos_log'];  // abas que o nível comum não lê
 
 function prepararCofre() {
   var ss = SpreadsheetApp.openById(PLANILHA);
@@ -46,7 +46,7 @@ function doPost(e) {
     if (c.acao === 'ler') return json_({ ok: true, dados: ler_(u, c.ranges || []) });
     if (c.acao === 'gravar') {
       if (!podeGravar_(u, c.range)) return json_({ ok: false, erro: 'sem_permissao' });
-      Sheets.Spreadsheets.Values.update({ values: c.values }, PLANILHA, c.range, { valueInputOption: 'USER_ENTERED' });
+      try { Sheets.Spreadsheets.Values.update({ values: c.values }, PLANILHA, c.range, { valueInputOption: 'USER_ENTERED' }); } catch (e1) { var na = String(c.range).split('!')[0].replace(/^'|'$/g, '').trim(), ss = SpreadsheetApp.openById(PLANILHA); if (!ss.getSheetByName(na)) ss.insertSheet(na); Sheets.Spreadsheets.Values.update({ values: c.values }, PLANILHA, c.range, { valueInputOption: 'USER_ENTERED' }); }
       registrar_(u, c.range, c.values);
       return json_({ ok: true });
     }

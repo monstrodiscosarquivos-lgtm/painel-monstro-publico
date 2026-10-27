@@ -38,6 +38,13 @@ Prêmio: nome no selo, tipo (Porcentagem, Valor em R$, Frete grátis, Sem prêmi
 - **Cupons da campanha:** cada cupom com a situação (não usado, usado com o número do pedido, venceu, cancelado). Busca por email ou código. Cancelar um a um ou todos os não usados.
 - **Como o cancelamento acontece:** o Painel marca `cancelar` em `rasp_jogadas`; o Apps Script do sorteio confere a cada 5 minutos (`processarCancelamentos`), desativa o cupom na Nuvemshop e grava `cancelado`. Uma vez só: no projeto "Raspadinha · sorteio", colar o `Sorteio.gs` novo, salvar, rodar `instalarGatilhoCancelamentos` e implantar nova versão.
 
+### Origens personalizadas e WhatsApp (D-081, 27/10/2026)
+
+- **Canais fixos:** Email (`utm_source=brevo`), Instagram (`utm_source=instagram`) e WhatsApp (`utm_source=whatsapp`, `wpp` ou `zap`). Quando um canal fixo não está marcado na campanha, o sorteio bloqueia a jogada por ele.
+- **Outras origens da campanha:** na coluna `origens` (coluna R de `rasp_campanhas`, JSON `[{"codigo":"lista-transmissao","nome":"Lista de transmissão"}]`), o Túlio cadastra pelo Painel (**Outras origens desta campanha** > **Adicionar origem**) quantas origens quiser (ex.: Lista de transmissão, Grupo da loja). O código é gerado sozinho a partir do nome (minúsculas, sem acento, separado por hífen) e pode ser editado.
+- **Links prontos:** a seção **Links para divulgar** mostra um link com botão **Copiar** para Email, Instagram, WhatsApp e para cada origem cadastrada (`utm_source=<codigo>&utm_medium=<codigo>`).
+- **Ordem de leitura (`canal_`):** 1º origem personalizada cadastrada na campanha (`s === codigo`); 2º `email`; 3º `instagram`; 4º `whatsapp`; 5º `direto` (sem `utm_source`); 6º `outro` (exibido como "Outra origem"). Origens personalizadas cadastradas nunca são bloqueadas. Jogadas antigas gravadas como `outro` são reclassificadas na hora pelo Painel usando o `utm_source` já salvo em `rasp_jogadas`.
+
 ### Lembrete no Brevo (D-071, 16/10/2026)
 
 Quem raspou, ganhou cupom e ainda não usou recebe um email **2 dias antes de o cupom vencer** (linha `Raspadinha: lembrete no Brevo (dias antes de vencer)` em Configurações; 0 desliga).

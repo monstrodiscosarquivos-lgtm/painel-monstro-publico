@@ -296,3 +296,8 @@ def test_pagina_da_campanha_sorteia_no_servidor_e_guarda_o_resultado():
     gs = open(os.path.join(RAIZ_PROJETO, 'apps-script', 'raspadinha', 'Sorteio.gs'), encoding='utf-8').read()
     assert "max_uses: 1" in gs and 'LockService' in gs and "getProperty('NUVEMSHOP_TOKEN')" in gs
     assert 'Logger.log(token' not in gs and 'Bearer ' + "'" not in gs.replace("'Bearer ' + token", '')
+    assert "'origens'" in gs and "function canal_(c, cp)" in gs
+    import subprocess
+    res = subprocess.run(['node', os.path.join(RAIZ_PROJETO, 'apps-script', 'teste_local.js')], capture_output=True, text=True, encoding='utf-8', check=True)
+    assert 'raspadinha canal_: reconhece brevo, instagram, wpp, origem personalizada, parecido como outro e vazio como direto' in res.stdout
+    assert 'raspadinha: gerador de código de origem e reclassificação no Painel' in res.stdout

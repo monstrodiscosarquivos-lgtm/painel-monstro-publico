@@ -25,7 +25,7 @@ var API_VERSAO = '2025-03';
 var ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';               // sem 0/O e 1/I/L
 var ABA_CAMP = 'rasp_campanhas', ABA_JOG = 'rasp_jogadas', ABA_EV = 'rasp_eventos';
 var CAB_CAMP = ['campanha', 'nome', 'status', 'inicio', 'fim', 'canais', 'validade_dias', 'pedido_minimo', 'cumulativo',
-  'so_clientes', 'permitir_sem_premio', 'texto_sem_premio', 'prefixo', 'titulo', 'texto', 'premios', 'atualizado_em'];
+  'so_clientes', 'permitir_sem_premio', 'texto_sem_premio', 'prefixo', 'titulo', 'texto', 'premios', 'atualizado_em', 'origens'];
 var CAB_JOG = ['quando', 'campanha', 'email', 'canal', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content',
   'premio', 'tipo', 'valor', 'cupom', 'valido_ate', 'cupom_status', 'consentiu', 'novo_contato', 'cupom_id'];
 var CAB_EV = ['quando', 'campanha', 'canal', 'evento', 'utm_medium', 'utm_content'];
@@ -50,9 +50,9 @@ function prepararRaspadinha() {
       { rotulo: '15%', tipo: 'Porcentagem', valor: 15, chance: 25, maximo: 200, reserva: '' },
       { rotulo: '20%', tipo: 'Porcentagem', valor: 20, chance: 10, maximo: 50, reserva: '' },
       { rotulo: '50%', tipo: 'Porcentagem', valor: 50, chance: 5, maximo: 10, reserva: '' }];
-    camp.appendRow(['teste-raspadinha', 'Raspadinha teste', 'teste', hoje, '', 'email, instagram', '7', '0', 'Não',
+    camp.appendRow(['teste-raspadinha', 'Raspadinha teste', 'teste', hoje, '', 'email, instagram, whatsapp', '7', '0', 'Não',
       'Não', 'Não', 'Não foi dessa vez, mas fica de olho: logo tem mais.', 'RASPA',
-      'Raspe e ganhe na Loja Monstro', 'Raspe o selo do disco e descubra seu desconto.', JSON.stringify(premios), hoje]);
+      'Raspe e ganhe na Loja Monstro', 'Raspe o selo do disco e descubra seu desconto.', JSON.stringify(premios), hoje, '[]']);
   }
   ['NUVEMSHOP_STORE_ID', 'NUVEMSHOP_TOKEN', 'NUVEMSHOP_USER_AGENT'].forEach(function (k) {
     if (!PropertiesService.getScriptProperties().getProperty(k)) Logger.log('Falta a propriedade ' + k);
@@ -85,6 +85,7 @@ function lerCampanha_(id) {
     if (String(v[i][cab.indexOf('campanha')]).trim().toLowerCase() === id) {
       var o = {}; cab.forEach(function (k, j) { o[k] = v[i][j]; });
       try { o.premios = JSON.parse(o.premios || '[]'); } catch (x) { o.premios = []; }
+      try { var or = JSON.parse(o.origens || '[]'); o.origens = Array.isArray(or) ? or : []; } catch (x) { o.origens = []; }
       return o;
     }
   }
@@ -108,10 +109,17 @@ function situacao_(cp) {
   if (dataISO_(cp.fim) && h > dataISO_(cp.fim)) return 'encerrada';
   return st === 'teste' ? 'teste' : 'aberta';
 }
-function canal_(c) {
-  var s = String(c.utm_source || '').toLowerCase();
+function canal_(c, cp) {
+  var s = String((c && c.utm_source) || '').trim().toLowerCase();
+  if (!s) return 'direto';
+  var origs = (cp && Array.isArray(cp.origens)) ? cp.origens : [];
+  for (var i = 0; i < origs.length; i++) {
+    var cod = String((origs[i] && origs[i].codigo) || '').trim().toLowerCase();
+    if (cod && s === cod) return cod;
+  }
   if (/brevo|email|newsletter/.test(s)) return 'email';
   if (/insta|ig|facebook|meta/.test(s)) return 'instagram';
+  if (/whats|wpp|zap/.test(s)) return 'whatsapp';
   return s ? 'outro' : 'direto';
 }
 function canaisPermitidos_(cp) { return String(cp.canais || '').toLowerCase(); }
@@ -126,7 +134,7 @@ function config_(c) {
 function abriu_(c) {
   var cp = lerCampanha_(c.campanha); if (!cp) return { ok: true };
   SpreadsheetApp.openById(PLANILHA).getSheetByName(ABA_EV)
-    .appendRow([agora_(), cp.campanha, canal_(c), 'abriu', limpa_(c.utm_medium), limpa_(c.utm_content)]);
+    .appendRow([agora_(), cp.campanha, canal_(c, cp), 'abriu', limpa_(c.utm_medium), limpa_(c.utm_content)]);
   return { ok: true };
 }
 
@@ -136,8 +144,8 @@ function jogar_(c) {
   if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email) || email.length > 120) return { ok: false, erro: 'email', detalhe: 'Confira o email digitado.' };
   var cp = lerCampanha_(c.campanha), sit = situacao_(cp);
   if (sit !== 'aberta' && sit !== 'teste') return { ok: false, erro: sit, detalhe: 'Essa raspadinha não está valendo agora.' };
-  var canal = canal_(c), permitidos = canaisPermitidos_(cp);
-  if ((canal === 'email' && permitidos.indexOf('email') < 0) || (canal === 'instagram' && permitidos.indexOf('instagram') < 0))
+  var canal = canal_(c, cp), permitidos = canaisPermitidos_(cp);
+  if ((canal === 'email' && permitidos.indexOf('email') < 0) || (canal === 'instagram' && permitidos.indexOf('instagram') < 0) || (canal === 'whatsapp' && permitidos.indexOf('whatsapp') < 0))
     return { ok: false, erro: 'canal', detalhe: 'Essa raspadinha não está valendo por aqui.' };
 
   var trava = LockService.getScriptLock();

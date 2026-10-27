@@ -13,6 +13,13 @@ Modelo:
 - Próximo passo:
 ```
 
+## 2026-10-27 · Antigravity · origens da raspadinha (D-081) e pedidos fora da Nuvemshop na comissão (D-080)
+- Feito: Parte 2 (D-081): coluna `origens` (R) em `rasp_campanhas`, reconhecimento de origens personalizadas e WhatsApp (`whats|wpp|zap`) em `Sorteio.gs` (`canal_`), bloqueio de `whatsapp` quando não permitido e liberação de origens personalizadas, seção "Outras origens desta campanha" no formulário da raspadinha no Painel, links prontos com botão Copiar e reclassificação imediata das jogadas antigas salvas como `outro`. Parte 1 (D-080): aba `pedidos_manuais` protegida em `SO_ESPECIAL` (`Cofre.gs`), bloco "Pedidos fora da Nuvemshop" na seção Comissão do Painel com formulário (Por parcela com divisão automática e resto na 1ª parcela, ou Mês único), rateio proporcional de valor, frete e taxa em `comCalc`, exibição na lista de pedidos do mês, na cascata e nos critérios registrados, e inclusão de meses futuros em `comMeses()`. `Painel.html` regerado com `montar_painel_web.py`.
+- Arquivos alterados: `apps-script/raspadinha/Sorteio.gs`, `apps-script/painel-web/Cofre.gs`, `apps-script/painel-web/painel-monstro.html`, `apps-script/painel-web/Painel.html`, `apps-script/teste_local.js`, `tests/test_raspadinha.py`, `docs/DECISOES.md`, `docs/ESTADO.md`, `docs/HISTORICO.md`, `docs/RASPADINHA.md`.
+- Como conferir: `node apps-script/teste_local.js` (40 testes passando) e `..\..\.venv\Scripts\python -m pytest -q` (708 testes passando).
+- Problemas conhecidos: nenhum.
+- Próximo passo: Túlio adicionar `origens` na célula `R1` de `rasp_campanhas` e atualizar as implantações do Sorteio, do Cofre e da Entrada no Apps Script conforme o passo a passo.
+
 ## 26/10/2026 · Codex · etapa 10, preparação da migração pública (D-079)
 
 - Feito: auditoria de todos os rastreados; XLSX fora do git, contatos reais anonimizados, IDs internos retirados de fonte, Cofre com exemplos, vigia por propriedades. Cache AES-256-GCM autenticado nos dois workflows, proteção de logs e testes de privacidade. Exportador gera cópia auditada, sem histórico/remote, com identidade institucional de exemplo.

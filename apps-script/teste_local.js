@@ -455,4 +455,187 @@ teste('newsletter: data convertida pela planilha em Date também é reconhecida'
   assert.strictEqual(newsletters(a).length, 1);
 });
 
+const codigoSorteio = fs.readFileSync(path.join(__dirname, 'raspadinha', 'Sorteio.gs'), 'utf8');
+const htmlPainel = fs.readFileSync(path.join(__dirname, 'painel-web', 'painel-monstro.html'), 'utf8');
+
+function carregarSorteio(abas = {}) {
+  const ctx = {
+    PropertiesService: { getScriptProperties: () => ({ getProperty: () => 'planilha-teste' }) },
+    SpreadsheetApp: {
+      openById: () => ({
+        getSheetByName: (nome) => {
+          const v = abas[nome];
+          if (!v) return null;
+          return {
+            getDataRange: () => ({ getDisplayValues: () => v.map((l) => l.map(String)) }),
+            appendRow: (l) => v.push(l),
+          };
+        },
+      }),
+    },
+    LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
+    CacheService: { getScriptCache: () => ({ get: () => '{}', put: () => {} }) },
+    Utilities: {
+      formatDate: () => '2026-10-27',
+      getUuid: () => 'uuid-fixo',
+      DigestAlgorithm: { SHA_256: 'SHA_256' },
+      computeDigest: () => [10, 20, 30, 40, 50, 60],
+    },
+    Math, Date, JSON, String, Number, Array, Object, RegExp, parseInt, console,
+  };
+  vm.createContext(ctx);
+  vm.runInContext(codigoSorteio, ctx);
+  return ctx;
+}
+
+function extrairFuncoesPainel() {
+  const trechoNum = htmlPainel.slice(
+    htmlPainel.indexOf('function num(x){'),
+    htmlPainel.indexOf('const nf0 =')
+  );
+  const trechoPm = htmlPainel.slice(
+    htmlPainel.indexOf('const PM_CAB ='),
+    htmlPainel.indexOf('let COM_PM_FORM =')
+  );
+  const trecho = htmlPainel.slice(
+    htmlPainel.indexOf('const rpCodigoOrigem ='),
+    htmlPainel.indexOf('const RP_PADRAO =')
+  );
+  const brl2 = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
+  const hojeSP = () => '2026-10-27';
+  const ctx = { String, Array, JSON, RegExp, Math, Number, Object, parseFloat, isFinite, brl2, hojeSP, D: {} };
+  vm.createContext(ctx);
+  vm.runInContext(trechoNum + '\n' + trechoPm + '\n' + trecho + '\nthis.exports = { num, pmAddMes, pmDividirParcelas, pmValidarCronograma, pmLerCronograma, pmRateioNoMes, rpCodigoOrigem, rpOrigensLista, rpCanalDe, rpCanalJogada, rpNomeCanal };', ctx);
+  return ctx.exports;
+}
+
+teste('raspadinha canal_: reconhece brevo, instagram, wpp, origem personalizada, parecido como outro e vazio como direto', () => {
+  const s = carregarSorteio();
+  const cp = { origens: [{ codigo: 'lista-transmissao', nome: 'Lista de transmissão' }] };
+  assert.strictEqual(s.canal_({ utm_source: 'brevo' }, cp), 'email');
+  assert.strictEqual(s.canal_({ utm_source: 'instagram' }, cp), 'instagram');
+  assert.strictEqual(s.canal_({ utm_source: 'wpp' }, cp), 'whatsapp');
+  assert.strictEqual(s.canal_({ utm_source: 'whatsapp' }, cp), 'whatsapp');
+  assert.strictEqual(s.canal_({ utm_source: 'zap' }, cp), 'whatsapp');
+  assert.strictEqual(s.canal_({ utm_source: 'lista-transmissao' }, cp), 'lista-transmissao');
+  assert.strictEqual(s.canal_({ utm_source: 'lista-transmissao-vip' }, cp), 'outro');
+  assert.strictEqual(s.canal_({ utm_source: 'lista-transmissa' }, cp), 'outro');
+  assert.strictEqual(s.canal_({ utm_source: '' }, cp), 'direto');
+  assert.strictEqual(s.canal_({}, cp), 'direto');
+});
+
+teste('raspadinha: gerador de código de origem e reclassificação no Painel', () => {
+  const p = extrairFuncoesPainel();
+  assert.strictEqual(p.rpCodigoOrigem('Lista de Transmissão'), 'lista-transmissao');
+  assert.strictEqual(p.rpCodigoOrigem('Grupo da loja'), 'grupo-loja');
+  const cp = { origens: [{ codigo: 'lista-transmissao', nome: 'Lista de transmissão' }] };
+  assert.strictEqual(p.rpNomeCanal('whatsapp', cp), 'WhatsApp');
+  assert.strictEqual(p.rpNomeCanal('lista-transmissao', cp), 'Lista de transmissão');
+  assert.strictEqual(p.rpNomeCanal('outro', cp), 'Outra origem');
+  assert.strictEqual(p.rpCanalJogada({ canal: 'outro', utm_source: 'wpp' }, cp), 'whatsapp');
+  assert.strictEqual(p.rpCanalJogada({ canal: 'outro', utm_source: 'lista-transmissao' }, cp), 'lista-transmissao');
+  assert.strictEqual(p.rpCanalJogada({ canal: 'outro', utm_source: 'desconhecido' }, cp), 'outro');
+});
+
+teste('raspadinha: bloqueio de whatsapp não permitido e liberação de origem personalizada', () => {
+  const premios = JSON.stringify([{ rotulo: '10%', tipo: 'Porcentagem', valor: 10, chance: 100, maximo: '', reserva: 'Sim' }]);
+  const origens = JSON.stringify([{ codigo: 'lista-transmissao', nome: 'Lista de transmissão' }]);
+  const abas = {
+    rasp_campanhas: [
+      ['campanha', 'nome', 'status', 'inicio', 'fim', 'canais', 'validade_dias', 'pedido_minimo', 'cumulativo', 'so_clientes', 'permitir_sem_premio', 'texto_sem_premio', 'prefixo', 'titulo', 'texto', 'premios', 'atualizado_em', 'origens'],
+      ['camp-1', 'Campanha 1', 'teste', '2026-10-01', '', 'email', '7', '0', 'Não', 'Não', 'Não', 'Sem prêmio', 'RASPA', 'Título', 'Texto', premios, '2026-10-27', origens],
+    ],
+    rasp_jogadas: [['quando', 'campanha', 'email', 'canal', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'premio', 'tipo', 'valor', 'cupom', 'valido_ate', 'cupom_status', 'consentiu', 'novo_contato', 'cupom_id']],
+  };
+  const s = carregarSorteio(abas);
+  const bloq = s.jogar_({ campanha: 'camp-1', email: 'cliente1@exemplo.com', utm_source: 'wpp' });
+  assert.strictEqual(bloq.ok, false);
+  assert.strictEqual(bloq.erro, 'canal');
+  const okPers = s.jogar_({ campanha: 'camp-1', email: 'cliente2@exemplo.com', utm_source: 'lista-transmissao' });
+  assert.strictEqual(okPers.ok, true);
+  assert.strictEqual(abas.rasp_jogadas[1][3], 'lista-transmissao');
+});
+
+teste('pedidos manuais (D-080): divisão de parcelas 600 em 3x e 100 em 3x, e recusa soma diferente', () => {
+  const p = extrairFuncoesPainel();
+  // 1. R$ 600 em 3x divide 200/200/200
+  const p600 = p.pmDividirParcelas(600, 3, '2026-10');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(p600)), [
+    { mes: '2026-10', valor: 200 },
+    { mes: '2026-11', valor: 200 },
+    { mes: '2026-12', valor: 200 },
+  ]);
+  // 2. R$ 100 em 3x divide 33,34/33,33/33,33
+  const p100 = p.pmDividirParcelas(100, 3, '2026-10');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(p100)), [
+    { mes: '2026-10', valor: 33.34 },
+    { mes: '2026-11', valor: 33.33 },
+    { mes: '2026-12', valor: 33.33 },
+  ]);
+  // 3. soma diferente do total é recusada
+  const invalido = p.pmValidarCronograma(600, 'parcelas', '', [
+    { mes: '2026-10', valor: 200 },
+    { mes: '2026-11', valor: 200 },
+    { mes: '2026-12', valor: 190 },
+  ]);
+  assert.strictEqual(invalido.ok, false);
+  const valido = p.pmValidarCronograma(100, 'parcelas', '', p100);
+  assert.strictEqual(valido.ok, true);
+});
+
+teste('pedidos manuais (D-080): modo mes cai inteiro no mês escolhido, cancelado não entra e rateio com frete e taxa proporcionais', () => {
+  const p = extrairFuncoesPainel();
+  // 4. modo mes cai inteiro no mês escolhido
+  const valMes = p.pmValidarCronograma(450, 'mes', '2026-11', []);
+  assert.strictEqual(valMes.ok, true);
+  const pedMes = {
+    id: 'M20261015ABC',
+    data_venda: '2026-10-15',
+    descricao: '2 LPs rock',
+    forma_pagamento: 'Pix',
+    valor_total: '450.00',
+    frete: '30.00',
+    taxa: '0.00',
+    parcelas: '1',
+    modo: 'mes',
+    mes_unico: '2026-11',
+    cronograma: JSON.stringify(valMes.cronograma),
+    situacao: 'ativo',
+  };
+  assert.strictEqual(p.pmRateioNoMes(pedMes, '2026-10', 3.65).length, 0);
+  const rMes = p.pmRateioNoMes(pedMes, '2026-11', 3.65);
+  assert.strictEqual(rMes.length, 1);
+  assert.strictEqual(rMes[0].vendido, 450);
+  assert.strictEqual(rMes[0].frete, 30);
+  assert.strictEqual(rMes[0].taxa, 0);
+  assert.strictEqual(rMes[0].base, 420);
+
+  // 5. pedido cancelado não entra na conta
+  const pedCancelado = Object.assign({}, pedMes, { situacao: 'cancelado' });
+  assert.strictEqual(p.pmRateioNoMes(pedCancelado, '2026-11', 3.65).length, 0);
+
+  // 6. base de uma parcela com frete e taxa proporcionais
+  const pedParc = {
+    id: 'M20261015KBA',
+    data_venda: '2026-10-15',
+    descricao: '3 LPs',
+    forma_pagamento: 'PagBank',
+    valor_total: '600.00',
+    frete: '30.00',
+    taxa: '18.00',
+    parcelas: '3',
+    modo: 'parcelas',
+    mes_unico: '',
+    cronograma: JSON.stringify(p.pmDividirParcelas(600, 3, '2026-10')),
+    situacao: 'ativo',
+  };
+  const rParc = p.pmRateioNoMes(pedParc, '2026-11', 3.65);
+  assert.strictEqual(rParc.length, 1);
+  assert.strictEqual(rParc[0].rotuloParcela, 'parcela 2 de 3');
+  assert.strictEqual(rParc[0].vendido, 200);
+  assert.strictEqual(rParc[0].frete, 10);
+  assert.strictEqual(rParc[0].taxa, 6);
+  assert.strictEqual(rParc[0].base, 184);
+});
+
 console.log(`\n${n} testes do script passaram.`);
