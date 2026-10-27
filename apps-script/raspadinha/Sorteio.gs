@@ -302,10 +302,11 @@ function processarCancelamentos() {
     if (iSt < 0) return;
     var feitos = 0, inicio = Date.now();
     for (var i = 1; i < v.length; i++) {
-      if (String(v[i][iSt]).trim() !== 'cancelar') continue;
+      var st = String(v[i][iSt]).trim();
+      if (st !== 'cancelar' && st !== 'apagar') continue;
       if (Date.now() - inicio > 240000) break;   // o resto fica para a próxima rodada
       var codigo = String(v[i][iCod]).trim(), id = iId >= 0 ? String(v[i][iId] || '').trim() : '';
-      var r = desativarCupom_(codigo, id);
+      var r = st === 'apagar' ? apagarCupom_(codigo, id) : desativarCupom_(codigo, id);
       jog.getRange(i + 1, iSt + 1).setValue(r.status);
       if (iId >= 0 && r.id && !id) jog.getRange(i + 1, iId + 1).setValue(String(r.id));
       feitos++;
@@ -363,6 +364,23 @@ function desativarCupom_(codigo, id) {
   var d = nuvem_('delete', '/coupons/' + id);
   if (d.getResponseCode() === 200 || d.getResponseCode() === 204 || d.getResponseCode() === 404) return { status: 'cancelado ' + hoje_() + ' (apagado)', id: id };
   return { status: 'erro ao cancelar: Nuvemshop respondeu ' + r.getResponseCode() + '/' + d.getResponseCode(), id: id };
+}
+
+/** Apaga da Nuvemshop o cupom já cancelado (D-083). Nunca apaga cupom ativo ou usado. Devolve {status, id}. */
+function apagarCupom_(codigo, id) {
+  var pr = PropertiesService.getScriptProperties();
+  if (!pr.getProperty('NUVEMSHOP_STORE_ID') || !pr.getProperty('NUVEMSHOP_TOKEN')) return { status: 'erro ao apagar: faltam as propriedades da Nuvemshop' };
+  if (!id) id = buscarCupomId_(codigo);
+  if (!id) return { status: 'apagado ' + hoje_() + ' (não existia)' };
+  var c = nuvem_('get', '/coupons/' + id);
+  if (c && c.getResponseCode() === 200) {
+    var info = null; try { info = JSON.parse(c.getContentText() || '{}'); } catch (x) {}
+    if (info && (info.valid === true || Number(info.used) > 0)) return { status: 'erro ao apagar: cupom ativo ou usado', id: id };
+  }
+  var d = nuvem_('delete', '/coupons/' + id);
+  var s = d.getResponseCode();
+  if (s === 200 || s === 204 || s === 404) return { status: 'apagado ' + hoje_(), id: id };
+  return { status: 'erro ao apagar: Nuvemshop respondeu ' + s, id: id };
 }
 
 /** Teste à mão: mostra 1.000 sorteios da campanha de teste sem criar nada. */

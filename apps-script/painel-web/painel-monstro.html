@@ -613,7 +613,7 @@ const RANGES = {
   acd: "anuncios_campanha_dia!A1:T3000", ahoje: "anuncios_hoje!A1:K400", aads: "anuncios_anuncios!A1:S300", asem: "anuncios_semana!A1:U600",
   aalert: "anuncios_alertas!A1:F100", ares: "anuncios_resumo!A1:B20", anotas: "anuncios_notas!A1:E400", adir: "anuncios_direcao!A1:C400",
   pedMail: "pedidos!B1:B8000", itens: "itens!C1:I9000", prodA: "produtos!B1:H7000", prodM: "produtos!M1:M7000", prodQ: "produtos!Q1:Q7000",
-  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AL500", cadf: "cadastro_fotos!A1:F3000",
+  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AM500", cadf: "cadastro_fotos!A1:F3000",
   g4d: "ga4_diario!A1:I15000", g4l: "ga4_links!A1:I400",
   itNum: "itens!A1:A9000", prodId: "produtos!L1:L7000", cprod: "comissao_produtos!A1:D300", pman: "pedidos_manuais!A1:N500"
 };
@@ -745,7 +745,7 @@ const RS_ORIG_NOTA = {
 let RASP_CUPONS = {};
 function rsOrigens(PED){
   const campMap = {}; rpCampanhas().forEach(cp => { campMap[cp.campanha] = cp; });
-  RASP_CUPONS = {}; rows(D.rjog || []).forEach(j => { const c = String(j.cupom || "").trim().toUpperCase(); if (c && j.cupom_status === "criado") { const cp = campMap[j.campanha]; RASP_CUPONS[c] = rpNomeCanal(rpCanalJogada(j, cp), cp); } });
+  RASP_CUPONS = {}; rows(D.rjog || []).forEach(j => { const c = String(j.cupom || "").trim().toUpperCase(); if (c && /^(criado|cancelar|cancelado|erro ao cancelar|apagar|apagado|erro ao apagar)/.test(String(j.cupom_status || ""))) { const cp = campMap[j.campanha]; RASP_CUPONS[c] = rpNomeCanal(rpCanalJogada(j, cp), cp); } });
   // Fila: email + janela do primeiro toque até 7 dias depois do último (mesma regra da D-065)
   const toques = {};
   rows(D.fila || []).forEach(r => { const em = String(r["Email"] || "").trim().toLowerCase(); if (!em) return;
@@ -2259,7 +2259,7 @@ const rsR = () => { if (VIEW === "res") { try { renderRes(); } catch(e){ setErr(
 
 
 /* ---------- raspadinha: campanhas com sorteio na hora (D-070) ---------- */
-let RP_SEL = null, RP_NOVA = false, RP_FILTRO = null, RP_MODELO = null, RP_CONF = null, RP_CF = "todos", RP_BUSCA = "";
+let RP_SEL = null, RP_NOVA = false, RP_FILTRO = null, RP_MODELO = null, RP_CONF = null, RP_CF = "todos", RP_BUSCA = "", RP_EXCL = false, RP_APAG_CONF = null;
 const RP_CAB = ["campanha","nome","status","inicio","fim","canais","validade_dias","pedido_minimo","cumulativo","so_clientes","permitir_sem_premio","texto_sem_premio","prefixo","titulo","texto","premios","atualizado_em","origens"];
 const RP_TIPOS = ["Porcentagem","Valor em R$","Frete grátis","Sem prêmio"];
 const RP_STATUS = [["rascunho","Rascunho (não abre)"],["teste","Teste (cupom de mentira)"],["ativa","Ativa"],["pausada","Pausada"],["encerrada","Encerrada"]];
@@ -2343,6 +2343,9 @@ function rpEstado(j, ped){
   if (st === "cancelar") return {k:"cancelando", t:"cancelando…", c:"p-wait"};
   if (/^erro ao cancelar/.test(st)) return {k:"erro_canc", t:"não consegui cancelar", c:"p-bad"};
   if (/^cancelado/.test(st)) return {k:"cancelado", t:"cancelado", c:"p-info"};
+  if (st === "apagar") return {k:"apagando", t:"excluindo…", c:"p-wait"};
+  if (/^erro ao apagar/.test(st)) return {k:"erro_apag", t:"não consegui excluir", c:"p-bad"};
+  if (/^apagado\b/.test(st)) return {k:"apagado", t:"excluído", c:"p-info"};
   if (/^erro/.test(st)) return {k:"erro", t:"não foi criado", c:"p-bad"};
   if (!cod || st === "sem prêmio") return {k:"sem", t:"sem prêmio", c:"p-info"};
   const o = ped[cod];
@@ -2355,13 +2358,30 @@ function rpStats(c, ped){
   const val = J.filter(j => !/^erro($|:)/.test(String(j.cupom_status || "")));
   const usados = val.map(j => rpEstado(j, ped)).filter(e => e.k === "usado");
   return {abriram: E.length, rasparam: val.length, usaram: usados.length, vendas: usados.reduce((s,e) => s + e.o.total, 0),
-          reais: J.filter(j => /^(criado|cancelar|cancelado|erro ao cancelar)/.test(String(j.cupom_status || ""))).length,
+          reais: J.filter(j => /^(criado|cancelar|cancelado|erro ao cancelar|apagar|apagado|erro ao apagar)/.test(String(j.cupom_status || ""))).length,
+          cancelados: J.filter(j => { const k = rpEstado(j, ped).k; return k === "cancelado" || k === "erro_apag"; }),
           valendo: J.filter(j => rpEstado(j, ped).k === "valendo")};
 }
 async function rpSalvarCamp(c, mud){
   const o = Object.assign({}, c, mud, {premios: JSON.stringify(c.premios), origens: JSON.stringify(rpOrigensLista(c.origens)),
     atualizado_em: new Date().toLocaleString("sv-SE",{timeZone:"America/Sao_Paulo"}).slice(0,16)});
   await write(`rasp_campanhas!A${c._row}:R${c._row}`, [RP_CAB.map(k => o[k] == null ? "" : String(o[k]))]);
+}
+const rpPodeApagarStatus = st => /^(cancelado\b|erro ao apagar)/i.test(String(st || "").trim());
+const rpTextoConfirmarExclusao = n => `Apagar ${int(n)} ${n === 1 ? "cupom cancelado" : "cupons cancelados"} da Nuvemshop? Eles somem da lista de cupons da loja. As jogadas e os números da campanha continuam no Painel. Não dá para desfazer.`;
+async function rpApagar(linhas){
+  const iSt = ((D.rjog || [])[0] || []).indexOf("cupom_status");
+  if (iSt < 0 || !linhas.length) return;
+  const col = colL(iSt);
+  const r = await MCP.callTool(SERVER, TOOL, {spreadsheetId:SHEET, range:`rasp_jogadas!${col}1:${col}20000`}, {cache:false});
+  const atual = ((r && r.payload && r.payload.values) || []).map(x => [x && x[0] != null ? String(x[0]) : ""]);
+  if (!atual.length || atual[0][0] !== "cupom_status") throw new Error("não consegui ler os cupons agora; tente de novo em um minuto");
+  let mudou = 0;
+  linhas.forEach(n => { if (atual[n - 1] && rpPodeApagarStatus(atual[n - 1][0])){ atual[n - 1][0] = "apagar"; mudou++; } });
+  if (!mudou) return;
+  if (linhas.length === 1){ await write(`rasp_jogadas!${col}${linhas[0]}`, [["apagar"]]); }
+  else { await write(`rasp_jogadas!${col}2:${col}${atual.length}`, atual.slice(1)); }
+  linhas.forEach(n => { const l = (D.rjog || [])[n - 1]; if (l && rpPodeApagarStatus(l[iSt])) l[iSt] = "apagar"; });
 }
 async function rpCancelar(linhas){
   const iSt = ((D.rjog || [])[0] || []).indexOf("cupom_status");
@@ -2395,7 +2415,7 @@ function rpLista(L, ped){
     vis.map(c => { const x = rpStats(c, ped), [t, cl] = rpRotulo(c);
       return `<tr data-c="${esc(c.campanha)}" class="${!RP_NOVA && c.campanha === RP_SEL ? "sel" : ""}${c.status === "teste" ? " rp-teste" : ""}"><td><b>${esc(c.nome || c.campanha)}</b><div class="s">${esc(c.campanha)}</div></td><td><span class="pill ${cl}">${esc(t)}</span></td><td class="hm">${per(c)}</td><td class="n">${int(x.rasparam)}</td><td class="n">${int(x.usaram)}</td><td class="n hm">${brl(x.vendas)}</td></tr>`; }).join("")}</tbody></table>`;
   $("rp-lista").querySelectorAll("tbody tr").forEach(tr => tr.onclick = () => {
-    RP_NOVA = false; RP_MODELO = null; RP_CONF = null; RP_SEL = tr.dataset.c; RP_CF = "todos"; RP_BUSCA = "";
+    RP_NOVA = false; RP_MODELO = null; RP_CONF = null; RP_APAG_CONF = null; RP_SEL = tr.dataset.c; RP_CF = "todos"; RP_BUSCA = ""; RP_EXCL = false;
     const ch = document.querySelector("#rp-form .changed"); if (ch) ch.classList.remove("changed"); renderRasp(); });
 }
 function rpAcoes(c, ped){
@@ -2451,22 +2471,25 @@ function rpCupons(c, ped){
   if (!J.length){ box.innerHTML = '<div class="empty">Ninguém raspou ainda.</div>'; return; }
   const grupo = k => k === "valendo" || k === "cancelando" || k === "erro_canc" ? "valendo" : k === "usado" ? "usado" : k === "teste" ? "teste" : "fora";
   const F = [["todos","Todos"],["valendo","Não usados"],["usado","Usados"],["fora","Cancelados e vencidos"]];
-  const cont = {todos:J.length, valendo:0, usado:0, fora:0, teste:0}; J.forEach(j => cont[grupo(j._e.k)]++);
-  const livres = J.filter(j => j._e.k === "valendo");
+  const excluidos = J.filter(j => j._e.k === "apagado"), Jvis = J.filter(j => RP_EXCL || j._e.k !== "apagado");
+  const cont = {todos:Jvis.length, valendo:0, usado:0, fora:0, teste:0}; Jvis.forEach(j => cont[grupo(j._e.k)]++);
+  const livres = J.filter(j => j._e.k === "valendo"), cancelados = J.filter(j => j._e.k === "cancelado" || j._e.k === "erro_apag");
+  const confApag = RP_APAG_CONF && RP_APAG_CONF.c === c.campanha ? RP_APAG_CONF.rows : null;
   box.innerHTML = `<div class="rp-cup-top"><div class="seg" id="rp-cf">${F.map(([v,l]) => `<button type="button" data-v="${v}" aria-pressed="${v === RP_CF}">${l} (${cont[v]})</button>`).join("")}</div>
     <input id="rp-busca" placeholder="buscar email ou cupom" value="${esc(RP_BUSCA)}">
-    ${livres.length ? `<button type="button" id="rp-canc-todos">Cancelar os ${int(livres.length)} não usados</button>` : ""}<span class="status" id="rp-cup-st"></span></div>
+    ${livres.length ? `<button type="button" id="rp-canc-todos">Cancelar os ${int(livres.length)} não usados</button>` : ""}${cancelados.length ? `<button type="button" id="rp-apag-todos">Excluir cupons cancelados (${int(cancelados.length)})</button>` : ""}<label class="s" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="rp-mostra-excl" style="width:auto"${RP_EXCL ? " checked" : ""}> Mostrar excluídos${excluidos.length ? " (" + int(excluidos.length) + ")" : ""}</label><span class="status" id="rp-cup-st"></span></div>${confApag ? `<div class="rp-conf" style="margin:8px 0"><p>${esc(rpTextoConfirmarExclusao(confApag.length))}</p><button type="button" class="primary" id="rp-apag-ok">Confirmar</button> <button type="button" id="rp-apag-no">Voltar</button></div>` : ""}
     <div class="tbl" id="rp-cup-t"></div>`;
   const st = $("rp-cup-st");
   const tabela = () => {
     const b = RP_BUSCA.trim().toLowerCase();
-    const V = J.filter(j => (RP_CF === "todos" || grupo(j._e.k) === RP_CF) && (!b || j.email.toLowerCase().includes(b) || j.cupom.toLowerCase().includes(b)))
+    const V = Jvis.filter(j => (RP_CF === "todos" || grupo(j._e.k) === RP_CF) && (!b || j.email.toLowerCase().includes(b) || j.cupom.toLowerCase().includes(b)))
       .sort((a,z) => String(z.quando).localeCompare(String(a.quando)));
     const M = V.slice(0, 100);
     $("rp-cup-t").innerHTML = V.length ? `<table><thead><tr><th>Cupom</th><th class="hm">Prêmio</th><th>Email</th><th class="hm">Canal</th><th class="hm">Raspou</th><th>Situação</th><th></th></tr></thead><tbody>${
       M.map(j => `<tr><td><code>${esc(j.cupom)}</code><div class="s sm-only">${esc(j.premio)}</div></td><td class="hm">${esc(j.premio)}</td><td style="overflow-wrap:anywhere">${esc(j.email)}</td><td class="hm">${esc(rpNomeCanal(rpCanalJogada(j, c), c))}</td><td class="hm">${esc(brDiaC(rpDia(j.quando)))}</td><td><span class="pill ${j._e.c}">${esc(j._e.t)}</span></td><td>${
-        j._e.k === "valendo" ? `<button type="button" data-r="${j._row}">Cancelar</button>` : j._e.k === "erro_canc" ? `<button type="button" data-r="${j._row}">Tentar de novo</button>` : ""}</td></tr>`).join("")}</tbody></table>${
+        j._e.k === "valendo" ? `<button type="button" data-r="${j._row}">Cancelar</button>` : j._e.k === "erro_canc" ? `<button type="button" data-r="${j._row}">Tentar de novo</button>` : (j._e.k === "cancelado" || j._e.k === "erro_apag") ? `<button type="button" data-apag="${j._row}">Excluir</button>` : ""}</td></tr>`).join("")}</tbody></table>${
       V.length > 100 ? `<p class="fl-note" style="padding:0 12px">Mostrando 100 de ${int(V.length)}. Use a busca para achar um cupom.</p>` : ""}` : '<div class="empty">Nenhum cupom neste filtro.</div>';
+    $("rp-cup-t").querySelectorAll("[data-apag]").forEach(bt => bt.onclick = () => { RP_APAG_CONF = {c: c.campanha, rows: [+bt.dataset.apag]}; rpCupons(c, ped); });
     $("rp-cup-t").querySelectorAll("[data-r]").forEach(bt => bt.onclick = async () => {
       if (bt.dataset.ok !== "1"){ const orig = bt.textContent; bt.dataset.ok = "1"; bt.textContent = "Confirmar"; bt.className = "primary"; setTimeout(() => { if (bt.isConnected && bt.dataset.ok === "1"){ bt.dataset.ok = ""; bt.textContent = orig; bt.className = ""; } }, 4000); return; }
       bt.disabled = true; st.className = "status"; st.textContent = "Salvando…";
@@ -2477,6 +2500,14 @@ function rpCupons(c, ped){
   tabela();
   $("rp-cf").querySelectorAll("button").forEach(b => b.onclick = () => { RP_CF = b.dataset.v; rpCupons(c, ped); });
   $("rp-busca").oninput = e => { RP_BUSCA = e.target.value; tabela(); };
+  const mexcl = $("rp-mostra-excl"); if (mexcl) mexcl.onchange = () => { RP_EXCL = mexcl.checked; rpCupons(c, ped); };
+  const apTodos = $("rp-apag-todos"); if (apTodos) apTodos.onclick = () => { RP_APAG_CONF = {c: c.campanha, rows: cancelados.map(j => j._row)}; rpCupons(c, ped); };
+  const apNo = $("rp-apag-no"); if (apNo) apNo.onclick = () => { RP_APAG_CONF = null; rpCupons(c, ped); };
+  const apOk = $("rp-apag-ok"); if (apOk) apOk.onclick = async () => {
+    const linhas = confApag || []; apOk.disabled = true; if (apNo) apNo.disabled = true; st.className = "status"; st.textContent = "Salvando…";
+    try { await rpApagar(linhas); RP_APAG_CONF = null; st.className = "status ok"; st.textContent = "Pedido de exclusão salvo: os cupons saem da Nuvemshop em até 5 minutos."; await afterSave(); renderRasp(); }
+    catch(e){ st.className = "status err"; st.textContent = rpErr(e); apOk.disabled = false; if (apNo) apNo.disabled = false; }
+  };
   const todos = $("rp-canc-todos");
   if (todos) todos.onclick = async () => {
     if (todos.dataset.ok !== "1"){ todos.dataset.ok = "1"; todos.className = "primary"; todos.textContent = `Confirmar: cancelar ${int(livres.length)} cupons`; return; }
@@ -2712,6 +2743,8 @@ function renderCad(){
 }
 // Novo/lacrado: sem estado de conservação, com quantidade (D-073). Usado continua exemplar único.
 const cdNovo = o => /novo|lacrad/i.test(String(o.categorias) + " " + String(o.titulo)) && !/usad/i.test(String(o.categorias) + " " + String(o.titulo));
+const cdVaiPublicar = o => !/^n[aã]o$/i.test(String((o && o.publicar) || "").trim());
+const cdTemPendenciaAviso = o => /j[aá]\s+existe\s+na\s+loja|sem\s+etiqueta\s+de\s+pre[cç]o/i.test(String((o && o.pendencias) || ""));
 function cdCard(o){
   const g = cdGrupo(o.status), pill = CD_PILL[g], edit = g === "rascunho";
   const vin = CD_GRADES.find(x => new RegExp("^" + x.replace("+","\\+") + "(\\s|$)").test(String(o.vinil).trim()) && !/conferir/i.test(o.vinil)) || "";
@@ -2721,7 +2754,7 @@ function cdCard(o){
   const dis = edit ? "" : " disabled";
   const novo = cdNovo(o);
   return `<div class="fcard" data-cd="${esc(o.id)}">
-    <div class="fcard-h"><b style="overflow-wrap:anywhere">${esc(o.titulo)}</b><span class="pill ${pill[0]}">${esc(g === "erro" || g === "descartado" ? o.status : pill[1])}</span></div>
+    <div class="fcard-h"><b style="overflow-wrap:anywhere">${esc(o.titulo)}</b><span class="pill ${pill[0]}">${esc(g === "erro" || g === "descartado" ? o.status : pill[1])}</span>${g === "aprovado" || g === "criado" ? `<span class="pill ${cdVaiPublicar(o) ? "p-ok" : "p-wait"}">${cdVaiPublicar(o) ? "vai aparecer" : "fica oculto"}</span>` : ""}</div>
     <div class="s">${esc(o.ficha)}</div>
     <div class="cost-form" style="margin-top:10px">
       <label>Preço (R$)<input data-f="preco" inputmode="decimal" value="${esc(o.preco)}" data-orig="${esc(o.preco)}"${dis}>
@@ -2748,6 +2781,7 @@ function cdCard(o){
     </details>
     ${g === "criado" || g === "publicado" ? `<div class="fobs">Produto ${esc(o.produto_id)}${o.link_loja ? ` · <a href="${esc(o.link_loja)}" target="_blank" rel="noopener">link na loja</a>` : ""}</div>` : ""}
     ${g === "erro" ? `<div class="fobs" style="color:var(--accent)">A rotina não conseguiu criar. Não aprove de novo antes de conferir: peça ao Claude ou ao Codex para olhar o diário desta linha e a loja.</div>` : ""}
+    ${edit ? `<div style="margin:10px 0 2px;display:flex;flex-wrap:wrap;gap:8px;align-items:center"><label class="s" style="display:flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" data-f="publicar" data-orig="${cdVaiPublicar(o) ? "sim" : "nao"}" style="width:auto"${cdVaiPublicar(o) ? " checked" : ""}> Mostrar na loja assim que for criado</label>${cdTemPendenciaAviso(o) ? `<span class="pill p-wait">Confira as pendências antes de deixar aparecer na loja.</span>` : ""}</div>` : ""}
     <div class="savebar">
       <button type="button" data-a="salvar">Salvar alterações</button>
       ${edit ? `<button type="button" class="primary" data-a="aprovar">Aprovar para criar na loja</button>` : ""}
@@ -2768,11 +2802,11 @@ function cdCard(o){
 }
 function cdLigar(box, o){
   if (!o) return;
-  box.querySelectorAll("input,select,textarea").forEach(el => el.addEventListener("input", () => { if (el.dataset.orig !== undefined) el.classList.toggle("changed", el.value !== el.dataset.orig); }));
+  box.querySelectorAll("input,select,textarea").forEach(el => el.addEventListener("input", () => { if (el.dataset.orig !== undefined){ const v = el.type === "checkbox" ? (el.checked ? "sim" : "nao") : el.value; el.classList.toggle("changed", v !== el.dataset.orig); } }));
   const st = box.querySelector(".status"), q = f => box.querySelector(`[data-f="${f}"]`);
   const idx = k => o._h.indexOf(k), cel = k => `cadastro_rascunhos!${colL(idx(k))}${o._row}`;
   const agora = () => new Date().toLocaleString("sv-SE",{timeZone:"America/Sao_Paulo"}).slice(0,16);
-  async function salvar(){
+  async function salvar(aoAprovar){
     const w = [];
     const set = (k, v) => { if (idx(k) < 0) throw new Error("coluna " + k + " não existe"); w.push([cel(k), v]); };
     const g = cdGrupo(o.status);
@@ -2786,6 +2820,7 @@ function cdLigar(box, o){
       if (pr !== o.preco){ const n = num(pr); if (pr && (n == null || n <= 0)) throw new Error("preço inválido"); set("preco", n == null ? "" : n); set("preco_origem", "Túlio (painel)"); }
       if (q("estoque")) { const ev = q("estoque").value.trim(); if (ev !== (o.estoque || "")){ const n = num(ev); if (ev && !(n >= 1 && Number.isInteger(n))) throw new Error("quantidade em estoque inválida"); set("estoque", ev ? String(n) : ""); } }
       if (q("faixas")) { const fv = q("faixas").checked ? "sim" : "não"; if (fv !== (o.faixas_na_descricao || "não")) set("faixas_na_descricao", fv); }
+      if (q("publicar")) { const pv = q("publicar").checked ? "sim" : "nao"; if (pv !== (o.publicar || "") && (aoAprovar || pv !== q("publicar").dataset.orig)) { if (idx("publicar") < 0) { await write(`cadastro_rascunhos!${colL(o._h.length)}1`, [["publicar"]]); o._h.push("publicar"); } set("publicar", pv); } }
     }
     const ob = q("obs").value.trim(); if (ob !== o.observacao_tulio) set("observacao_tulio", ob);
     if (w.length) set("atualizado_em", agora());
@@ -2802,9 +2837,10 @@ function cdLigar(box, o){
         if (!vin) throw new Error("escolha o estado do vinil conferido na mão");
         if (q("estoque") && !(num(q("estoque").value) >= 1)) throw new Error("coloque a quantidade em estoque antes de aprovar");
         if (q("pendok") && !q("pendok").checked) throw new Error("marque que conferiu as pendências");
-        st.textContent = "Salvando…"; await salvar();
+        st.textContent = "Salvando…"; await salvar(true);
         await write(cel("status"), [["aprovado"]]);
-        st.className = "status ok"; st.textContent = "Aprovado. A rotina cria o produto oculto na próxima rodada (até 1 hora).";
+        const vaiPub = q("publicar") ? q("publicar").checked : cdVaiPublicar(o);
+        st.className = "status ok"; st.textContent = vaiPub ? "Aprovado. A rotina cria e mostra o produto na loja na próxima rodada (até 1 hora)." : "Aprovado. A rotina cria o produto oculto na próxima rodada (até 1 hora).";
       } else if (a === "descartar"){
         const d = box.querySelector(".cd-desc"); d.hidden = !d.hidden; st.textContent = d.hidden ? "" : "Escolha o motivo e confirme.";
         box.querySelectorAll("[data-a]").forEach(x => x.disabled = false); return;

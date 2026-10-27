@@ -163,3 +163,8 @@ python -m painel_monstro.saidas.raspadinha --criar-cupons   # cria os cupons (ex
 python -m painel_monstro.saidas.raspadinha --resultado      # atualiza uso e resultado agora (a rotina já faz de hora em hora)
 python -m painel_monstro.saidas.raspadinha --forcar         # refaz o sorteio da campanha, só se nenhum cupom foi criado
 ```
+
+## Origens personalizadas, WhatsApp e exclusão de cupons cancelados (D-081 e D-083, 27/10/2026)
+
+- **Origens personalizadas e WhatsApp (`D-081`):** a aba `rasp_campanhas` tem a coluna `origens` (R, JSON `[{"codigo":"...","nome":"..."}]`). No Painel, a campanha permite marcar **WhatsApp** em Canais e cadastrar origens específicas em **Outras origens desta campanha** (gerando um link próprio com botão **Copiar** para cada uma e separando os números nos resultados).
+- **Excluir de uma vez os cupons cancelados (`D-083`):** na seção **Cupons da campanha** da aba Raspadinha no Painel, o botão **Excluir cupons cancelados (N)** (e o botão **Excluir** individual na linha de cada cupom cancelado) pede confirmação e grava `apagar` em `cupom_status` apenas nas linhas `cancelado...` daquela campanha. O gatilho `processarCancelamentos` do `Sorteio.gs` (a cada 5 minutos) confere que o cupom não está ativo nem usado, apaga da Nuvemshop com `DELETE /coupons/{id}` e grava `apagado <data>`. As linhas continuam em `rasp_jogadas` (ocultas por padrão na tabela de cupons, com a caixa **Mostrar excluídos** para conferir) e nenhum número ou resultado da campanha muda no Painel.

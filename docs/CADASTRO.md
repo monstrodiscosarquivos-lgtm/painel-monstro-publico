@@ -148,3 +148,11 @@ Tags servem para a busca da loja: cada tag tem que ser algo que o cliente digita
 Exemplo: `Antonio Carlos Jobim, Tom Jobim, Passarim, LP, LP Usado, Vinil Usado, MPB, Bossa Nova`.
 
 Não usar o estilo antigo de nome colado (`AntonioCarlosJobim`) nem `colecionável`: ninguém busca assim. Os rascunhos do piloto foram corrigidos na planilha; o Passarim já criado deve ser corrigido à mão no administrador (a rotina nunca altera produto existente).
+
+## Escolher se o disco aparece na loja ao aprovar (D-082, 27/10/2026)
+
+- Coluna `publicar` no fim de `cadastro_rascunhos` (`sim`, `nao` ou vazio; vazio vale como `sim`). Criada automaticamente por `preparar_abas`.
+- No Painel (aba Cadastro), cada cartão em revisão mostra a opção **Mostrar na loja assim que for criado**, marcada por padrão. Se a linha tiver pendência de já existir na loja ou de falta de etiqueta de preço, aparece um aviso amarelo ao lado lembrando de conferir antes de deixar visível. Nos cartões aprovados e criados, o Painel mostra se o disco *vai aparecer* ou *fica oculto*.
+- Na rotina (`painel_monstro/saidas/cadastro.py`), o produto continua nascendo oculto (`POST /products` com `published: False`) para nunca aparecer sem fotos na loja. Depois que todas as imagens são confirmadas:
+  - se `publicar` for `nao`, para em `status = criado` (oculto);
+  - se `publicar` for `sim` ou vazio, grava `publicacao_pedida: true` em `cadastro_execucao` antes de enviar `PUT /products/{id}` com `{"published": True}` (único campo aceito pelo método) e muda `status` para `publicado`; se o `PUT` falhar, mantém `status = criado` e acrescenta em `pendencias`: `Não consegui deixar visível; publique à mão na Nuvemshop`, sem repetir o `PUT`.

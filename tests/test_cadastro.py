@@ -75,7 +75,7 @@ def test_faixas_so_entram_na_descricao_com_sim():
 
 
 class Loja:
-    def __init__(self): self.posts=[]; self.produtos={}; self.falha=False; self.falha_imagem=False; self.eventos=[]
+    def __init__(self): self.posts=[]; self.puts=[]; self.produtos={}; self.falha=False; self.falha_imagem=False; self.falha_put=False; self.eventos=[]
     def categorias(self): return categorias()
     def buscar(self,sku): return next((v for v in self.produtos.values() if v['sku']==sku),None)
     def criar(self,corpo):
@@ -89,6 +89,11 @@ class Loja:
         self.eventos.append('imagem')
         if self.falha_imagem: raise c.ErroCadastro('imagem incerta')
         self.posts.append(('imagem',pos,nome))
+    def publicar(self,pid,corpo=None):
+        self.eventos.append('put'); self.puts.append((int(pid),corpo or {'published':True}))
+        if self.falha_put: raise c.ErroCadastro('PUT não confirmado')
+        self.produtos[int(pid)]['published']=True
+        return self.produtos[int(pid)]
 
 
 class Drive:
@@ -110,7 +115,7 @@ def test_idempotente_id_gravado_antes_das_fotos_etiqueta_fora(tmp_path):
         if 'produto_id' in d: loja.eventos.append('id_gravado')
     caminho=tmp_path/'cadastro.json'
     c.processar_linha(l,lista_fotos(),loja,drive,gravar,caminho)
-    assert l['status']=='criado' and l['produto_id']=='12'
+    assert l['status']=='publicado' and l['produto_id']=='12'
     assert drive.baixados==['frente','verso']
     assert loja.eventos.index('id_gravado')<loja.eventos.index('imagem')
     assert len([p for p in loja.posts if isinstance(p,dict)])==1
@@ -126,7 +131,7 @@ def test_resposta_perdida_recupera_sku_sem_segundo_post_mesmo_sem_cache(tmp_path
     caminho.unlink()  # simula expiração do cache do Actions, diário na planilha continua
     loja.falha=False
     c.processar_linha(l,lista_fotos(),loja,drive,l.update,caminho)
-    assert l['status']=='criado' and len([p for p in loja.posts if isinstance(p,dict)])==1
+    assert l['status']=='publicado' and len([p for p in loja.posts if isinstance(p,dict)])==1
 
 
 def test_ambiguidade_nao_encontrada_bloqueia_repost_e_imagem_incerta(tmp_path):
@@ -416,7 +421,7 @@ def test_resolve_na_rotina_antes_de_previa_ou_produto_e_remove_so_pendencia_prop
     assert c.ler(p,'cadastro_fotos')[1][3]=='id-encontrado' and drive.baixados==['id-encontrado']
     assert atual['pendencias']=='conferir vinil'
     if status=='rascunho': assert atual['status']=='rascunho' and loja.posts==[]
-    else: assert atual['status']=='criado' and res['criados']==1 and loja.posts[0]['published'] is False
+    else: assert atual['status']=='publicado' and res['criados']==1 and loja.posts[0]['published'] is False
 
 
 def test_busca_na_entrada_percorre_paginas_e_exclui_lixeira():
@@ -470,3 +475,77 @@ def test_novo_lacrado_repetido_vale_o_ramo_do_formato():
     assert c.mapa_categorias(cats,'LP, Novo/Lacrado')==[1,2]
     assert c.mapa_categorias(cats,'Fitas Cassete, Usado')==[10,12]
     assert c.mapa_categorias(cats,'LP, Novo/Lacrado, Pré-Venda, Pré Venda')==[1,2,21,20]
+
+
+@pytest.mark.parametrize('val',['','sim','SIM'])
+def test_publicar_vazio_ou_sim_publica_so_depois_da_ultima_imagem(tmp_path,val):
+    loja=Loja(); drive=Drive(); l=linha(publicar=val)
+    def gravar(d):
+        l.update(d)
+        if 'produto_id' in d: loja.eventos.append('id_gravado')
+    c.processar_linha(l,lista_fotos(),loja,drive,gravar,tmp_path/f'cad-{val or "vazio"}.json')
+    assert l['status']=='publicado' and l['link_loja'].endswith('/disco-ficticio')
+    assert loja.eventos==['post','id_gravado','imagem','imagem','put']
+    assert loja.puts==[(12,{'published':True})]
+    est=json.loads(l['cadastro_execucao'])
+    assert est.get('publicacao_pedida') is True and est.get('publicado') is True
+
+
+@pytest.mark.parametrize('val',['nao','não','NAO'])
+def test_publicar_nao_mantem_oculto_sem_put(tmp_path,val):
+    loja=Loja(); drive=Drive(); l=linha(publicar=val)
+    c.processar_linha(l,lista_fotos(),loja,drive,l.update,tmp_path/f'cad-{val}.json')
+    assert l['status']=='criado' and loja.puts==[] and 'put' not in loja.eventos
+    assert loja.produtos[12]['published'] is False
+
+
+def test_falha_no_put_mantem_criado_registra_pendencia_e_nao_repete(tmp_path):
+    loja=Loja(); loja.falha_put=True; drive=Drive(); l=linha(publicar='sim')
+    caminho=tmp_path/'cad-falha.json'
+    c.processar_linha(l,lista_fotos(),loja,drive,l.update,caminho)
+    assert l['status']=='criado' and len(loja.puts)==1
+    assert 'Não consegui deixar visível; publique à mão na Nuvemshop' in l['pendencias']
+    est=json.loads(l['cadastro_execucao'])
+    assert est.get('publicacao_pedida') is True and not est.get('publicado')
+    # Se tentar rodar de novo sem confirmar na loja, não repete o PUT
+    loja.falha_put=False; l['status']='aprovado'
+    c.processar_linha(l,lista_fotos(),loja,drive,l.update,caminho)
+    assert l['status']=='criado' and len(loja.puts)==1
+    assert l['pendencias'].count('Não consegui deixar visível; publique à mão na Nuvemshop')==1
+
+
+def test_retomada_com_publicacao_pedida_nao_trava_se_ja_visivel_e_sem_ela_trava(tmp_path):
+    # Com publicacao_pedida e produto já visível na Nuvemshop: reconhece e conclui como publicado sem novo PUT
+    loja=Loja(); loja.produtos[12]=dict(id=12,published=True,handle={'pt':'disco-ficticio'},sku=c.sku_da_linha('disco-teste-1'))
+    est={'produto_id':'12','publicacao_pedida':True,'imagens':{'1':True,'2':True}}
+    l=linha(produto_id='12',cadastro_execucao=json.dumps(est))
+    c.processar_linha(l,lista_fotos(),loja,Drive(),l.update,tmp_path/'retomada.json')
+    assert l['status']=='publicado' and loja.puts==[]
+    assert json.loads(l['cadastro_execucao']).get('publicado') is True
+    # Sem publicacao_pedida: produto visível continua travando por segurança
+    l2=linha(produto_id='12',cadastro_execucao=json.dumps({'produto_id':'12'}))
+    with pytest.raises(c.ErroCadastro,match='visível; interrompido'):
+        c.processar_linha(l2,lista_fotos(),loja,Drive(),l2.update,tmp_path/'trava.json')
+
+
+def test_put_so_aceita_published_true_em_products_id():
+    puts=[]
+    class ApiFalsa:
+        _base='https://api.tiendanube.com/v1/123'; _cabecalhos={}
+        def _esperar_vaga(self): pass
+        def _guardar_limites(self,r): pass
+        def put(self,url,**kw):
+            puts.append((url,kw.get('json'))); return Resp({'id':12,'published':True})
+    api=ApiFalsa(); api._sessao=api
+    loja=c.LojaCadastro(api)
+    assert loja.publicar(12)=={'id':12,'published':True}
+    assert puts==[('https://api.tiendanube.com/v1/123/products/12',{'published':True})]
+    with pytest.raises(c.ErroCadastro,match='bloqueado'):
+        loja.publicar(12,{'published':False})
+    with pytest.raises(c.ErroCadastro,match='bloqueado'):
+        loja.publicar(12,{'published':True,'price':'10'})
+    with pytest.raises(c.ErroCadastro,match='bloqueado'):
+        loja._put('orders/12',{'published':True})
+    with pytest.raises(c.ErroCadastro,match='bloqueado'):
+        loja._put('products/12/variants/1',{'published':True})
+

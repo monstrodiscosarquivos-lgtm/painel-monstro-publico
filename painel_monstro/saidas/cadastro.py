@@ -29,7 +29,7 @@ from painel_monstro.saidas.planilha_google import _letra
 
 ABA='cadastro_rascunhos'
 BASE='id lote pasta status titulo marca categorias ficha descricao capa vinil preco preco_referencia peso_kg altura_cm largura_cm comprimento_cm discogs_url discogs_confianca pendencias fotos seo_titulo seo_descricao tags produto_id link_loja observacao_tulio atualizado_em'.split()
-EXTRAS='discogs_id faixas creditos discogs_menor_preco discogs_a_venda faixas_na_descricao preco_origem cadastro_execucao fotos_ajustadas estoque'.split()
+EXTRAS='discogs_id faixas creditos discogs_menor_preco discogs_a_venda faixas_na_descricao preco_origem cadastro_execucao fotos_ajustadas estoque publicar'.split()
 COLUNAS=BASE+EXTRAS
 FOTOS='id_disco ordem papel arquivo_drive_id cantos observacao'.split()
 
@@ -183,6 +183,11 @@ def estoque_da_linha(linha):
     return max(1,min(int(n),999)) if n else 1
 
 
+def deve_publicar(linha):
+    """D-082: padrão é publicar ('sim' ou vazio); só 'nao'/'não' mantém oculto."""
+    return texto_normal(linha.get('publicar',''))!='nao'
+
+
 class LojaCadastro:
     """Somente POST nos dois endpoints autorizados; nenhuma atualização de produto."""
     def __init__(self, api): self.api=api
@@ -209,6 +214,20 @@ class LojaCadastro:
     def imagem(self,pid,jpeg,ordem,nome):
         return self._post(f'products/{int(pid)}/images',{'attachment':base64.b64encode(jpeg).decode(),
                                                       'filename':nome,'position':ordem})
+    def _put(self,caminho,corpo):
+        if not re.fullmatch(r'products/\d+',caminho) or not isinstance(corpo,dict) or list(corpo.keys())!=['published'] or corpo.get('published') is not True:
+            raise ErroCadastro('PUT fora da publicação do cadastro bloqueado')
+        self.api._esperar_vaga()
+        try:
+            r=self.api._sessao.put(self.api._base+'/'+caminho,headers=self.api._cabecalhos,
+                                   json=corpo,timeout=60,allow_redirects=False)
+            self.api._guardar_limites(r)
+            if r.status_code not in (200,201): raise ErroCadastro('PUT não confirmado')
+            return r.json()
+        except ErroCadastro: raise
+        except Exception: raise ErroCadastro('PUT não confirmado') from None
+    def publicar(self,pid,corpo=None):
+        return self._put(f'products/{int(pid)}',{'published':True} if corpo is None else corpo)
 
 
 class DriveFotos:
@@ -417,7 +436,13 @@ def processar_linha(linha,fs,loja,drive,gravar,caminho,confirmar=lambda:True):
     produto=loja.produto(pid)
     if not any(v.get('sku')==sku_da_linha(linha['id']) for v in (produto.get('variants') or [produto])):
         raise ErroCadastro('produto não pertence a este cadastro; interrompido')
-    if produto.get('published') is True: raise ErroCadastro('produto está visível; interrompido para conferência')
+    link_loja=f'https://lojamonstro.com.br/produtos/'+str(_pt(produto.get('handle')) or '')
+    pendencias_limpas=pendencias_sem_busca_fotos(linha.get('pendencias',''))
+    if produto.get('published') is True:
+        if not estado.get('publicacao_pedida'): raise ErroCadastro('produto está visível; interrompido para conferência')
+        estado['publicado']=True; persistir()
+        gravar({'link_loja':link_loja,'status':'publicado','pendencias':pendencias_limpas})
+        return
     gravar({'link_loja':f'https://lojamonstro.com.br/produtos/'+str(_pt(produto.get('handle')) or '')})
     # ID precisa estar confirmado na planilha antes da primeira imagem.
     for pos,nome,jpg in ajustadas:
@@ -428,7 +453,23 @@ def processar_linha(linha,fs,loja,drive,gravar,caminho,confirmar=lambda:True):
         estado['imagem_pendente']=nome; persistir()
         loja.imagem(pid,jpg,pos,nome)
         estado.setdefault('imagens',[]).append(nome); estado.pop('imagem_pendente',None); persistir()
-    gravar({'status':'criado','pendencias':pendencias_sem_busca_fotos(linha.get('pendencias',''))})
+    if not deve_publicar(linha):
+        gravar({'status':'criado','pendencias':pendencias_limpas})
+        return
+    aviso_pub='Não consegui deixar visível; publique à mão na Nuvemshop'
+    if estado.get('publicacao_pedida'):
+        pends='; '.join(filter(None,[pendencias_limpas,aviso_pub if aviso_pub not in pendencias_limpas else '']))
+        gravar({'status':'criado','pendencias':pends})
+        return
+    estado['publicacao_pedida']=True; persistir()
+    try:
+        loja.publicar(pid)
+    except Exception:
+        pends='; '.join(filter(None,[pendencias_limpas,aviso_pub if aviso_pub not in pendencias_limpas else '']))
+        gravar({'status':'criado','pendencias':pends})
+        return
+    estado['publicado']=True; persistir()
+    gravar({'status':'publicado','link_loja':link_loja,'pendencias':pendencias_limpas})
 
 
 def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=None):

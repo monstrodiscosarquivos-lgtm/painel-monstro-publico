@@ -2,7 +2,12 @@
 
 Atualize este arquivo ao fim de toda sessão. Ele responde a uma pergunta: onde o projeto está agora?
 
-**Última atualização:** 27/10/2026: D-080 (pedidos fora da Nuvemshop na comissão) e D-081 (origens personalizadas e WhatsApp na raspadinha) implementadas, `Painel.html` regerado e testes passando (708 em pytest + 40 em `apps-script/teste_local.js`). Nenhum push ou alteração em serviços externos.
+**Última atualização:** 27/10/2026: D-082 (escolher se o disco aparece na loja ao aprovar no Cadastro) e D-083 (excluir de uma vez na Nuvemshop os cupons cancelados da raspadinha) implementadas, `Painel.html` regerado e testes passando (717 em pytest + 42 em `apps-script/teste_local.js`). Nenhum push ou alteração em serviços externos.
+
+## D-082 e D-083 · publicar disco ao aprovar e excluir cupons cancelados (27/10/2026)
+
+- **D-082 (Parte 1 · publicar disco na loja ao aprovar):** coluna `publicar` adicionada ao fim de `EXTRAS` em `painel_monstro/saidas/cadastro.py` (criada sozinha por `preparar_abas`) e lida em `cadastro_rascunhos!A1:AM500` no Painel. O cartão em revisão traz a caixa **Mostrar na loja assim que for criado** marcada por padrão (com aviso amarelo ao lado quando houver pendência de exemplar repetido ou sem etiqueta de preço) e indica *vai aparecer* ou *fica oculto* nos cartões aprovados/criados. O `POST /products` continua criando oculto (`published: False`); após a última imagem confirmada, se `publicar` não for `nao`, grava `publicacao_pedida: true` no diário e chama `PUT /products/{id}` apenas com `{"published": True}`, mudando `status` para `publicado`. Se o `PUT` falhar, mantém `criado` e registra pendência sem repetir o `PUT`.
+- **D-083 (Parte 2 · excluir de uma vez os cupons cancelados):** em `apps-script/raspadinha/Sorteio.gs`, `processarCancelamentos` processa também `apagar` via `apagarCupom_(codigo, id)`, conferindo que o cupom não está ativo nem usado antes de chamar `DELETE /coupons/{id}` (200/204/404 → `apagado <data>`). No Painel, a tabela de cupons da campanha ganha o botão **Excluir cupons cancelados (N)** e o botão **Excluir** individual nas linhas canceladas com confirmação, esconde os excluídos por padrão (com a caixa **Mostrar excluídos**) e preserva todas as jogadas e métricas da campanha. Cofre inalterado.
 
 ## D-080 e D-081 · pedidos fora da Nuvemshop e origens da raspadinha (27/10/2026)
 

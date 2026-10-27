@@ -458,7 +458,7 @@ teste('newsletter: data convertida pela planilha em Date também é reconhecida'
 const codigoSorteio = fs.readFileSync(path.join(__dirname, 'raspadinha', 'Sorteio.gs'), 'utf8');
 const htmlPainel = fs.readFileSync(path.join(__dirname, 'painel-web', 'painel-monstro.html'), 'utf8');
 
-function carregarSorteio(abas = {}) {
+function carregarSorteio(abas = {}, fetchFn = null) {
   const ctx = {
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => 'planilha-teste' }) },
     SpreadsheetApp: {
@@ -469,11 +469,14 @@ function carregarSorteio(abas = {}) {
           return {
             getDataRange: () => ({ getDisplayValues: () => v.map((l) => l.map(String)) }),
             appendRow: (l) => v.push(l),
+            getRange: (r, c) => ({ setValue: (val) => { v[r - 1][c - 1] = String(val); } }),
           };
         },
       }),
     },
-    LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
+    LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },
+    UrlFetchApp: { fetch: (url, op) => fetchFn ? fetchFn(url, op) : ({ getResponseCode: () => 200, getContentText: () => '{}' }) },
+    Logger: { log: () => {} },
     CacheService: { getScriptCache: () => ({ get: () => '{}', put: () => {} }) },
     Utilities: {
       formatDate: () => '2026-10-27',
@@ -502,10 +505,16 @@ function extrairFuncoesPainel() {
     htmlPainel.indexOf('const RP_PADRAO =')
   );
   const brl2 = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
+  const brl = brl2, int = v => String(v), brDiaC = v => String(v || '');
+  const rpDia = v => String(v || '').slice(0, 10);
+  const rows = v => { if (!v || v.length < 2) return []; const h = v[0]; return v.slice(1).map(r => { const o = {}; h.forEach((k, j) => o[k] = r && r[j] != null ? String(r[j]) : ''); return o; }); };
+  const trechoRp = htmlPainel.slice(htmlPainel.indexOf('function rpJogadas(c){'), htmlPainel.indexOf('async function rpSalvarCamp'));
+  const trechoApag = htmlPainel.slice(htmlPainel.indexOf('const rpPodeApagarStatus ='), htmlPainel.indexOf('async function rpApagar(linhas){'));
+  const trechoCd = htmlPainel.slice(htmlPainel.indexOf('const cdVaiPublicar ='), htmlPainel.indexOf('function cdCard(o){'));
   const hojeSP = () => '2026-10-27';
-  const ctx = { String, Array, JSON, RegExp, Math, Number, Object, parseFloat, isFinite, brl2, hojeSP, D: {} };
+  const ctx = { String, Array, JSON, RegExp, Math, Number, Object, parseFloat, isFinite, brl2, brl, int, brDiaC, rpDia, rows, hojeSP, D: {} };
   vm.createContext(ctx);
-  vm.runInContext(trechoNum + '\n' + trechoPm + '\n' + trecho + '\nthis.exports = { num, pmAddMes, pmDividirParcelas, pmValidarCronograma, pmLerCronograma, pmRateioNoMes, rpCodigoOrigem, rpOrigensLista, rpCanalDe, rpCanalJogada, rpNomeCanal };', ctx);
+  vm.runInContext(trechoNum + '\n' + trechoPm + '\n' + trecho + '\n' + trechoRp + '\n' + trechoApag + '\n' + trechoCd + '\nthis.exports = { D, num, pmAddMes, pmDividirParcelas, pmValidarCronograma, pmLerCronograma, pmRateioNoMes, rpCodigoOrigem, rpOrigensLista, rpCanalDe, rpCanalJogada, rpNomeCanal, rpJogadas, rpEstado, rpStats, rpPodeApagarStatus, rpTextoConfirmarExclusao, cdVaiPublicar, cdTemPendenciaAviso };', ctx);
   return ctx.exports;
 }
 
@@ -636,6 +645,94 @@ teste('pedidos manuais (D-080): modo mes cai inteiro no mês escolhido, cancelad
   assert.strictEqual(rParc[0].frete, 10);
   assert.strictEqual(rParc[0].taxa, 6);
   assert.strictEqual(rParc[0].base, 184);
+});
+
+teste('excluir cupons cancelados (D-083): apagar vira apagado, 404 vira apagado, erro vira erro ao apagar e não cancelado não é apagado', () => {
+  const chamadasDelete = [];
+  const abas = {
+    rasp_jogadas: [
+      ['quando', 'campanha', 'email', 'canal', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'premio', 'tipo', 'valor', 'cupom', 'valido_ate', 'cupom_status', 'consentiu', 'novo_contato', 'cupom_id'],
+      ['2026-10-20 10:00:00', 'camp-1', 'c1@exemplo.com', 'email', 'brevo', 'email', 'camp-1', '', '10%', 'Porcentagem', '10', 'RASPACANC1', '2026-10-27', 'apagar', 'Sim', 'Não', '101'],
+      ['2026-10-20 10:01:00', 'camp-1', 'c2@exemplo.com', 'email', 'brevo', 'email', 'camp-1', '', '10%', 'Porcentagem', '10', 'RASPA404', '2026-10-27', 'apagar', 'Sim', 'Não', '102'],
+      ['2026-10-20 10:02:00', 'camp-1', 'c3@exemplo.com', 'email', 'brevo', 'email', 'camp-1', '', '10%', 'Porcentagem', '10', 'RASPAERR', '2026-10-27', 'apagar', 'Sim', 'Não', '103'],
+      ['2026-10-20 10:03:00', 'camp-1', 'c4@exemplo.com', 'email', 'brevo', 'email', 'camp-1', '', '10%', 'Porcentagem', '10', 'RASPAATIVO', '2026-10-27', 'criado', 'Sim', 'Não', '104'],
+      ['2026-10-20 10:04:00', 'camp-1', 'c5@exemplo.com', 'email', 'brevo', 'email', 'camp-1', '', '10%', 'Porcentagem', '10', 'RASPAUSADO', '2026-10-27', 'apagar', 'Sim', 'Não', '105'],
+      ['2026-10-20 10:05:00', 'camp-1', 'c6@exemplo.com', 'email', 'brevo', 'email', 'camp-1', '', '10%', 'Porcentagem', '10', 'RASPASEMID', '2026-10-27', 'apagar', 'Sim', 'Não', ''],
+    ],
+  };
+  const s = carregarSorteio(abas, (url, op) => {
+    const metodo = String((op && op.method) || 'get').toLowerCase();
+    if (metodo === 'get' && url.includes('/coupons/105')) {
+      return { getResponseCode: () => 200, getContentText: () => JSON.stringify({ id: 105, valid: true, used: 1 }) };
+    }
+    if (metodo === 'get' && url.includes('/coupons/')) {
+      return { getResponseCode: () => 200, getContentText: () => JSON.stringify({ valid: false, used: 0 }) };
+    }
+    if (metodo === 'get' && url.includes('/coupons')) {
+      return { getResponseCode: () => 200, getContentText: () => '[]' };
+    }
+    if (metodo === 'delete') {
+      chamadasDelete.push(url);
+      if (url.endsWith('/101')) return { getResponseCode: () => 204, getContentText: () => '' };
+      if (url.endsWith('/102')) return { getResponseCode: () => 404, getContentText: () => '' };
+      if (url.endsWith('/103')) return { getResponseCode: () => 403, getContentText: () => '' };
+    }
+    return { getResponseCode: () => 200, getContentText: () => '{}' };
+  });
+  s.processarCancelamentos();
+  assert.strictEqual(abas.rasp_jogadas[1][13], 'apagado 2026-10-27');
+  assert.strictEqual(abas.rasp_jogadas[2][13], 'apagado 2026-10-27');
+  assert.strictEqual(abas.rasp_jogadas[3][13], 'erro ao apagar: Nuvemshop respondeu 403');
+  assert.strictEqual(abas.rasp_jogadas[4][13], 'criado');
+  assert.strictEqual(abas.rasp_jogadas[5][13], 'erro ao apagar: cupom ativo ou usado');
+  assert.strictEqual(abas.rasp_jogadas[6][13], 'apagado 2026-10-27 (não existia)');
+  assert.strictEqual(chamadasDelete.some(u => u.endsWith('/104') || u.endsWith('/105')), false);
+});
+
+teste('painel cupons cancelados (D-083) e publicar (D-082): conta só cancelado da campanha e métricas não mudam', () => {
+  const p = extrairFuncoesPainel();
+  assert.strictEqual(p.cdVaiPublicar({ publicar: '' }), true);
+  assert.strictEqual(p.cdVaiPublicar({ publicar: 'sim' }), true);
+  assert.strictEqual(p.cdVaiPublicar({ publicar: 'nao' }), false);
+  assert.strictEqual(p.cdTemPendenciaAviso({ pendencias: 'Já existe na loja; conferir exemplar' }), true);
+  assert.strictEqual(p.cdTemPendenciaAviso({ pendencias: 'sem etiqueta de preço' }), true);
+  assert.strictEqual(p.cdTemPendenciaAviso({ pendencias: 'conferir vinil' }), false);
+  assert.strictEqual(p.rpPodeApagarStatus('cancelado 2026-10-20'), true);
+  assert.strictEqual(p.rpPodeApagarStatus('erro ao apagar: Nuvemshop respondeu 500'), true);
+  assert.strictEqual(p.rpPodeApagarStatus('criado'), false);
+  assert.strictEqual(p.rpPodeApagarStatus('apagado 2026-10-27'), false);
+
+  const ped = { RASPAUSADO: { numero: '501', total: 250 } };
+  p.D.rev = [['campanha', 'evento'], ['camp-a', 'abriu'], ['camp-a', 'abriu'], ['camp-a', 'abriu']];
+  p.D.rjog = [
+    ['campanha', 'cupom', 'cupom_status', 'valido_ate'],
+    ['camp-a', 'RASPAUSADO', 'criado', '2026-10-30'],
+    ['camp-a', 'RASPACANC1', 'cancelado 2026-10-20', '2026-10-25'],
+    ['camp-a', 'RASPACANC2', 'cancelado 2026-10-21', '2026-10-25'],
+    ['camp-a', 'RASPAVAL', 'criado', '2026-10-30'],
+    ['camp-b', 'RASPAB1', 'cancelado 2026-10-20', '2026-10-25'],
+  ];
+  const antes = p.rpStats({ campanha: 'camp-a' }, ped);
+  assert.strictEqual(antes.cancelados.length, 2);
+  assert.strictEqual(antes.abriram, 3);
+  assert.strictEqual(antes.rasparam, 4);
+  assert.strictEqual(antes.usaram, 1);
+  assert.strictEqual(antes.vendas, 250);
+  assert.strictEqual(antes.reais, 4);
+
+  // Depois que os 2 cupons cancelados viram apagado, o botão zera (0) e as métricas da campanha continuam idênticas
+  p.D.rjog[2][2] = 'apagado 2026-10-27';
+  p.D.rjog[3][2] = 'apagado 2026-10-27';
+  const depois = p.rpStats({ campanha: 'camp-a' }, ped);
+  assert.strictEqual(depois.cancelados.length, 0);
+  assert.strictEqual(depois.abriram, antes.abriram);
+  assert.strictEqual(depois.rasparam, antes.rasparam);
+  assert.strictEqual(depois.usaram, antes.usaram);
+  assert.strictEqual(depois.vendas, antes.vendas);
+  assert.strictEqual(depois.reais, antes.reais);
+  assert.strictEqual(p.rpEstado({ cupom: 'RASPACANC1', cupom_status: 'apagar' }, ped).t, 'excluindo…');
+  assert.strictEqual(p.rpEstado({ cupom: 'RASPACANC1', cupom_status: 'apagado 2026-10-27' }, ped).t, 'excluído');
+  assert.strictEqual(p.rpEstado({ cupom: 'RASPACANC1', cupom_status: 'erro ao apagar: Nuvemshop respondeu 500' }, ped).t, 'não consegui excluir');
 });
 
 console.log(`\n${n} testes do script passaram.`);
