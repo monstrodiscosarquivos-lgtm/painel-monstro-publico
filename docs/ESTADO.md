@@ -2,7 +2,19 @@
 
 Atualize este arquivo ao fim de toda sessão. Ele responde a uma pergunta: onde o projeto está agora?
 
-**Última atualização:** 27/10/2026: D-078 (`scripts/cadastro_lote.py` para cadastro de discos por agente local) implementada com 37 testes novos (754 testes passando em pytest + 42 em `apps-script/teste_local.js`). Lote `2026-10-27` (`2026-10-27-01` e `2026-10-27-02`) conferido e gravado na planilha com confirmação do Túlio.
+**Última atualização:** 28/10/2026: D-086 (ajustes da Comissão passam do navegador para a aba `comissao_ajustes`). 46 testes em `apps-script/teste_local.js` e 755 testes Python passando.
+
+## D-086 · ajustes da Comissão na planilha (28/10/2026)
+
+- Os ajustes de cada mês da aba Comissão (pedidos tirados da base, cupons, frete grátis, taxas reais, pedidos manuais, estornos digitados) agora ficam na aba `comissao_ajustes` da planilha, uma linha por mês, com o JSON em `ajustes`, data/hora e email de quem mexeu. Valem em qualquer navegador.
+- O Painel lê `comissao_ajustes!A1:D200`. A linha da planilha manda; sem ela, usa o que estiver no navegador. Grava 1,5 s depois da última mudança e mostra "salvando…" / "salvo às HH:MM" ao lado de "Ajustes deste mês". Se falhar, mostra o erro e o ajuste fica guardado no navegador.
+- Migração: ao abrir um mês que só tinha ajustes no navegador, o Painel grava na planilha uma vez e avisa "Ajustes deste navegador salvos na planilha". Abra cada mês com ajustes no navegador onde eles foram digitados.
+- `comCalc`, Registrar o mês e as outras abas não mudaram. O Cofre já tem `comissao_ajustes` nas abas restritas (feito pelo Cowork).
+- Falta: Túlio colar o `Painel.html` novo no projeto Entrada (Nova versão) e o Cowork republicar o Painel do claude.ai com o `painel-monstro.html` novo.
+
+### Avisar o Cowork: D-086
+
+- Republicar o Painel do claude.ai com `apps-script/painel-web/painel-monstro.html`. Ele passa a ler e gravar `comissao_ajustes!A1:D200` (permissão de leitura e gravação nessa faixa). Nenhuma aba lida pelo painel mudou de nome ou colunas.
 
 ## D-078 · cadastro de discos por agente local (`scripts/cadastro_lote.py`, 27/10/2026)
 

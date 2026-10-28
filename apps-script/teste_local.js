@@ -735,4 +735,131 @@ teste('painel cupons cancelados (D-083) e publicar (D-082): conta só cancelado 
   assert.strictEqual(p.rpEstado({ cupom: 'RASPACANC1', cupom_status: 'erro ao apagar: Nuvemshop respondeu 500' }, ped).t, 'não consegui excluir');
 });
 
-console.log(`\n${n} testes do script passaram.`);
+// ---------- Ajustes da Comissão na planilha (D-086) ----------
+function carregarAjustesComissao({ cajust, local = {}, falharGravacao = false, email = 'tulio@exemplo.com' } = {}) {
+  const pega = (ini, fim) => { const a = htmlPainel.indexOf(ini), b = htmlPainel.indexOf(fim, a); assert.ok(a >= 0 && b > a, 'trecho não achado: ' + ini); return htmlPainel.slice(a, b); };
+  const trechoMes = pega('function normMes(s){', 'function prevMonth(){');
+  const trechoAj = pega('const comKey =', 'function freteLoja(m){');
+  const gravacoes = [], timers = [], status = { el: { className: '', textContent: '' } };
+  const localStorage = {
+    dados: local,
+    getItem: (k) => (k in local ? local[k] : null),
+    setItem: (k, v) => { local[k] = String(v); },
+  };
+  const ctx = {
+    String, Array, JSON, RegExp, Math, Number, Object, Promise, Error, isFinite, console,
+    D: { cajust }, localStorage, window: { PM: { email } },
+    hojeSP: () => '2026-10-28', hhmm: () => '10:30',
+    writeErr: (e) => 'Não consegui salvar agora.', afterSave: () => {},
+    $: (id) => (id === 'cm-adj-st' ? status.el : null),
+    write: async (range, values) => { if (falharGravacao) throw new Error('falhou'); gravacoes.push({ range, values }); },
+    setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    clearTimeout: (id) => { if (id && timers[id - 1]) timers[id - 1].fn = null; },
+  };
+  vm.createContext(ctx);
+  vm.runInContext(trechoMes + '\n' + trechoAj + '\nCOM_MES = "2026-10";\nthis.exports = { comState, comSaveState, comMigrar, comLinhaAjuste, comGravarAgora, fila: () => COM_FILA, st: () => COM_AJ_ST };', ctx);
+  const rodarTimers = async () => { timers.splice(0).forEach((t) => t.fn && t.fn()); await ctx.exports.fila(); };
+  return { ...ctx.exports, ctx, gravacoes, timers, local, rodarTimers };
+}
+const AJ_CAB = ['mes', 'ajustes', 'atualizado_em', 'atualizado_por'];
+
+const testesAsync = [];
+const testeAsync = (nome, fn) => testesAsync.push([nome, fn]);
+
+teste('ajustes da comissão (D-086): a linha da planilha tem prioridade sobre o navegador', () => {
+  const a = carregarAjustesComissao({
+    cajust: [AJ_CAB, ['2026-09', JSON.stringify({ excl: ['101'], frete: true }), '2026-10-01 09:00', 'tulio@exemplo.com']],
+    local: { 'pm-com-2026-09': JSON.stringify({ excl: ['999'], outros: true }) },
+  });
+  const st = a.comState('2026-09');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(st.excl)), ['101']);
+  assert.strictEqual(st.frete, true);
+  assert.strictEqual(st.outros, false);   // não mistura com o localStorage
+  assert.strictEqual(st.freteValor, '');  // campos ausentes vêm do padrão
+  // mês gravado como data pela planilha (01/09/2026) também é reconhecido
+  const b = carregarAjustesComissao({ cajust: [AJ_CAB, ['01/09/2026', JSON.stringify({ cupons: ['VOLTA10OUT'] }), '', '']] });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(b.comState('2026-09').cupons)), ['VOLTA10OUT']);
+});
+
+teste('ajustes da comissão (D-086): sem linha do mês (ou aba sem carregar) usa o localStorage; sem nada usa o padrão', () => {
+  const local = { 'pm-com-2026-08': JSON.stringify({ taxasReais: '123,45', est: { 205: '30' } }) };
+  const a = carregarAjustesComissao({ cajust: [AJ_CAB, ['2026-09', '{"frete":true}', '', '']], local });
+  assert.strictEqual(a.comState('2026-08').taxasReais, '123,45');
+  assert.strictEqual(a.comState('2026-08').est['205'], '30');
+  const semAba = carregarAjustesComissao({ cajust: undefined, local });
+  assert.strictEqual(semAba.comState('2026-08').taxasReais, '123,45');
+  const padrao = a.comState('2026-07');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(padrao)), { excl: [], cupons: [], frete: false, freteValor: '', taxasReais: '', outros: false, est: {} });
+  // JSON estragado na planilha cai para o localStorage
+  const ruim = carregarAjustesComissao({ cajust: [AJ_CAB, ['2026-08', '{quebrado', '', '']], local });
+  assert.strictEqual(ruim.comState('2026-08').taxasReais, '123,45');
+});
+
+testeAsync('ajustes da comissão (D-086): migração do navegador para a planilha acontece uma vez só', async () => {
+  const local = { 'pm-com-2026-08': JSON.stringify({ excl: ['300'] }) };
+  const a = carregarAjustesComissao({ cajust: [AJ_CAB, ['2026-09', '{}', '', '']], local });
+  assert.strictEqual(carregarAjustesComissao({ cajust: undefined, local }).comMigrar('2026-08'), null); // aba ainda não carregou: não grava
+  await a.comMigrar('2026-08');
+  assert.strictEqual(a.gravacoes.length, 1);
+  assert.strictEqual(a.gravacoes[0].range, 'comissao_ajustes!A3:D3');
+  const linha = a.gravacoes[0].values[0];
+  assert.strictEqual(linha[0], '2026-08');
+  assert.deepStrictEqual(JSON.parse(linha[1]).excl, ['300']);
+  assert.strictEqual(a.st().txt, 'Ajustes deste navegador salvos na planilha');
+  assert.ok(local['pm-com-2026-08-planilha']);
+  assert.strictEqual(a.comMigrar('2026-08'), null);   // mesma sessão
+  // outra sessão, mesmo navegador, mesmo se a linha sumir da planilha: não grava de novo
+  const b = carregarAjustesComissao({ cajust: [AJ_CAB], local });
+  assert.strictEqual(b.comMigrar('2026-08'), null);
+  assert.strictEqual(b.gravacoes.length, 0);
+  // mês que já tem linha na planilha não migra
+  const c = carregarAjustesComissao({ cajust: [AJ_CAB, ['2026-08', '{}', '', '']], local: { 'pm-com-2026-08': '{"frete":true}' } });
+  assert.strictEqual(c.comMigrar('2026-08'), null);
+  // navegador sem ajustes daquele mês não migra
+  assert.strictEqual(c.comMigrar('2026-05'), null);
+});
+
+testeAsync('ajustes da comissão (D-086): gravação junta mudanças, atualiza a linha do mês ou acrescenta, e falha mantém a cópia local', async () => {
+  const a = carregarAjustesComissao({ cajust: [AJ_CAB, ['2026-09', '{}', '', ''], ['2026-10', '{"excl":["1"]}', '', '']] });
+  a.comSaveState('2026-10', Object.assign(a.comState('2026-10'), { frete: true }));
+  assert.strictEqual(a.st().txt, 'salvando…');
+  a.comSaveState('2026-10', Object.assign(a.comState('2026-10'), { freteValor: '45' }));
+  assert.strictEqual(a.comState('2026-10').freteValor, '45');   // a tela já mostra o que foi digitado
+  assert.strictEqual(a.timers[0].ms, 1500);
+  assert.strictEqual(JSON.parse(a.local['pm-com-2026-10']).freteValor, '45');   // cópia local na hora
+  assert.strictEqual(a.gravacoes.length, 0);
+  await a.rodarTimers();
+  assert.strictEqual(a.gravacoes.length, 1);   // duas mudanças, uma gravação
+  assert.strictEqual(a.gravacoes[0].range, 'comissao_ajustes!A3:D3');   // atualiza a linha existente
+  const [mes, json, quando, quem] = a.gravacoes[0].values[0];
+  assert.strictEqual(mes, '2026-10');
+  assert.deepStrictEqual(JSON.parse(json), { excl: ['1'], cupons: [], frete: true, freteValor: '45', taxasReais: '', outros: false, est: {} });
+  assert.strictEqual(quando, '2026-10-28 10:30');
+  assert.strictEqual(quem, 'tulio@exemplo.com');
+  assert.strictEqual(a.st().txt, 'salvo às 10:30');
+  // mês novo vai para o fim da aba
+  a.comSaveState('2026-11', a.comState('2026-11'));
+  await a.rodarTimers();
+  assert.strictEqual(a.gravacoes[1].range, 'comissao_ajustes!A4:D4');
+  // sem email (painel do claude.ai) a coluna fica vazia
+  const semEmail = carregarAjustesComissao({ cajust: [AJ_CAB], email: '' });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(semEmail.comLinhaAjuste('2026-10', { a: 1 }))), ['2026-10', '{"a":1}', '2026-10-28 10:30', '']);
+  // aba vazia: escreve o cabeçalho antes
+  const vazia = carregarAjustesComissao({ cajust: [] });
+  vazia.comSaveState('2026-10', vazia.comState('2026-10'));
+  await vazia.rodarTimers();
+  assert.deepStrictEqual(vazia.gravacoes.map((g) => g.range), ['comissao_ajustes!A1:D1', 'comissao_ajustes!A2:D2']);
+  // falha: mostra o erro, mantém a cópia local e o que foi digitado
+  const f = carregarAjustesComissao({ cajust: [AJ_CAB, ['2026-10', '{}', '', '']], falharGravacao: true });
+  f.comSaveState('2026-10', Object.assign(f.comState('2026-10'), { outros: true }));
+  await f.rodarTimers();
+  assert.strictEqual(f.st().cls, 'err');
+  assert.ok(/guardado neste navegador/.test(f.st().txt));
+  assert.strictEqual(JSON.parse(f.local['pm-com-2026-10']).outros, true);
+  assert.strictEqual(f.comState('2026-10').outros, true);
+});
+
+(async () => {
+  for (const [nome, fn] of testesAsync) { await fn(); n += 1; console.log('ok  ' + nome); }
+  console.log(`\n${n} testes do script passaram.`);
+})().catch((e) => { console.error(e); process.exit(1); });

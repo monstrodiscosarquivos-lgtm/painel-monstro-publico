@@ -699,7 +699,7 @@ const RANGES = {
   pedMail: "pedidos!B1:B8000", itens: "itens!C1:I9000", prodA: "produtos!B1:H7000", prodM: "produtos!M1:M7000", prodQ: "produtos!Q1:Q7000",
   reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AM500", cadf: "cadastro_fotos!A1:F3000",
   g4d: "ga4_diario!A1:I15000", g4l: "ga4_links!A1:I400",
-  itNum: "itens!A1:A9000", prodId: "produtos!L1:L7000", cprod: "comissao_produtos!A1:D300", pman: "pedidos_manuais!A1:N500"
+  itNum: "itens!A1:A9000", prodId: "produtos!L1:L7000", cprod: "comissao_produtos!A1:D300", pman: "pedidos_manuais!A1:N500", cajust: "comissao_ajustes!A1:D200"
 };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -770,7 +770,7 @@ function barChart(host, o){
 /* ---------- estado ---------- */
 const D = {};
 function setErr(sec, msg){ const el = $("e-"+sec); if (!el) return; el.hidden = !msg; el.textContent = msg || ""; }
-const SEC_OF = { itNum:["com"], prodId:["com"], cprod:["com"], pman:["com"], g4d:["res"], g4l:["res"], rcamp:["rasp","res"], rjog:["rasp","res"], rev:["rasp"], rlem:["rasp"], reguaLog:["res"], cad:["cad"], cadf:["cad"], pedMail:["res"], itens:["res"], prodA:["res"], prodM:["res"], prodQ:["res"], acd:["ads"], ahoje:["ads"], aads:["ads"], asem:["ads"], aalert:["ads"], ares:["ads"], anotas:["ads"], adir:["ads"], atrib:["valeapena"], ped:["com"], pedNum:["com"], comis:["com"], fila:["fila"], rodada:["fila"], atual:["objetivo","novos","custos"], mensal:["objetivo"], coortes:["novos"], regua:["regua"], reguaRes:["regua"], car:["carrinhos"], vale:["valeapena"], ind:["custos"], res:["carrinhos"] };
+const SEC_OF = { itNum:["com"], prodId:["com"], cprod:["com"], pman:["com"], cajust:["com"], g4d:["res"], g4l:["res"], rcamp:["rasp","res"], rjog:["rasp","res"], rev:["rasp"], rlem:["rasp"], reguaLog:["res"], cad:["cad"], cadf:["cad"], pedMail:["res"], itens:["res"], prodA:["res"], prodM:["res"], prodQ:["res"], acd:["ads"], ahoje:["ads"], aads:["ads"], asem:["ads"], aalert:["ads"], ares:["ads"], anotas:["ads"], adir:["ads"], atrib:["valeapena"], ped:["com"], pedNum:["com"], comis:["com"], fila:["fila"], rodada:["fila"], atual:["objetivo","novos","custos"], mensal:["objetivo"], coortes:["novos"], regua:["regua"], reguaRes:["regua"], car:["carrinhos"], vale:["valeapena"], ind:["custos"], res:["carrinhos"] };
 
 function renderAtual(){
   const a = rows(D.atual)[0]; if (!a) return;
@@ -1278,8 +1278,74 @@ function pedidosRows(){
     .filter(o => o.data && (/^true$/i.test(o.valido) || /^estornado$/i.test(String(o.status_pagamento).trim())));
 }
 const comKey = m => "pm-com-" + m;
-function comState(m){ let st = {}; try { st = JSON.parse(localStorage.getItem(comKey(m)) || "{}"); } catch(e){} return Object.assign({excl:[], cupons:[], frete:false, freteValor:"", taxasReais:"", outros:false, est:{}}, st); }
-function comSaveState(m, st){ try { localStorage.setItem(comKey(m), JSON.stringify(st)); } catch(e){} }
+/* Ajustes do mês (D-086): ficam na aba comissao_ajustes (mes | ajustes em JSON | atualizado_em | atualizado_por).
+   O localStorage continua como cópia e como reserva quando a aba não tem a linha do mês ou não carregou. */
+const COM_PADRAO = () => ({excl:[], cupons:[], frete:false, freteValor:"", taxasReais:"", outros:false, est:{}});
+const COM_AJ_CAB = ["mes","ajustes","atualizado_em","atualizado_por"], COM_ESPERA = 1500;
+const COM_PEND = {}, COM_TIMER = {}, COM_LINHA = {}, COM_MIGRANDO = {};
+let COM_FILA = Promise.resolve(), COM_AJ_ST = {m:"", cls:"", txt:""};
+const comObj = s => { try { const o = typeof s === "string" ? JSON.parse(s) : s; return o && typeof o === "object" && !Array.isArray(o) ? o : null; } catch(e){ return null; } };
+function comLocal(m){ let s = null; try { s = localStorage.getItem(comKey(m)); } catch(e){} return s ? comObj(s) : null; }
+function comLinhaPlanilha(m){
+  const v = D.cajust; if (!Array.isArray(v)) return null;
+  for (let i = 1; i < v.length; i++){ const r = v[i] || []; if (normMes(r[0]) === m) return {row: i + 1, r}; }
+  return null;
+}
+function comDaPlanilha(m){ const l = comLinhaPlanilha(m); return l ? comObj(String(l.r[1] ?? "")) : null; }
+function comState(m){
+  const st = COM_PEND[m] || comDaPlanilha(m) || comLocal(m) || {};
+  return Object.assign(COM_PADRAO(), JSON.parse(JSON.stringify(st)));
+}
+function comAjStatus(m, cls, txt){
+  COM_AJ_ST = {m, cls, txt};
+  const el = $("cm-adj-st"); if (el && m === COM_MES){ el.className = "status" + (cls ? " " + cls : ""); el.textContent = txt; }
+}
+function comLinhaAjuste(m, st){ return [m, JSON.stringify(st), hojeSP() + " " + hhmm(), String((window.PM && window.PM.email) || "")]; }
+function comEnfileirar(fn){ const p = COM_FILA.then(fn, fn); COM_FILA = p.catch(() => {}); return p; }
+async function comGravarPlanilha(m, st){
+  if (!Array.isArray(D.cajust)){ const e = new Error("aba comissao_ajustes não carregou"); e.semAba = true; throw e; }
+  const linha = comLinhaAjuste(m, st), atual = D.cajust.length ? D.cajust.slice() : [COM_AJ_CAB];
+  const l = comLinhaPlanilha(m), row = l ? l.row : (COM_LINHA[m] || Math.max(2, atual.length + 1));
+  if (!D.cajust.length) await write("comissao_ajustes!A1:D1", [COM_AJ_CAB]);
+  await write(`comissao_ajustes!A${row}:D${row}`, [linha]);
+  while (atual.length < row - 1) atual.push([]);
+  atual[row - 1] = linha; D.cajust = atual; COM_LINHA[m] = row;
+  return linha;
+}
+const comErroAj = e => (e && e.semAba ? "A aba comissao_ajustes não carregou." : writeErr(e)) + " O ajuste ficou guardado neste navegador.";
+function comGravarAgora(m){
+  const st = COM_PEND[m]; if (!st) return Promise.resolve();
+  return comEnfileirar(async () => {
+    try { await comGravarPlanilha(m, st);
+      if (COM_PEND[m] === st) delete COM_PEND[m];   // se mudou de novo no meio, a próxima gravação leva o mais novo
+      comAjStatus(m, "ok", "salvo às " + hhmm()); afterSave();
+    } catch(e){ comAjStatus(m, "err", comErroAj(e)); }   // COM_PEND fica: a tela mostra o que foi digitado e a próxima mudança tenta de novo
+  });
+}
+/* Migração: mês com ajustes só neste navegador e sem linha na planilha vai para a planilha uma única vez. */
+function comMigrar(m){
+  if (!m || !Array.isArray(D.cajust) || COM_PEND[m] || COM_MIGRANDO[m] || comLinhaPlanilha(m)) return null;
+  let feito = null; try { feito = localStorage.getItem(comKey(m) + "-planilha"); } catch(e){}
+  if (feito) return null;
+  const loc = comLocal(m); if (!loc || !Object.keys(loc).length) return null;
+  COM_MIGRANDO[m] = true;
+  const st = Object.assign(COM_PADRAO(), loc);
+  comAjStatus(m, "", "salvando…");
+  return comEnfileirar(async () => {
+    if (comLinhaPlanilha(m)) return;
+    try { await comGravarPlanilha(m, st);
+      try { localStorage.setItem(comKey(m) + "-planilha", hojeSP()); } catch(e){}
+      comAjStatus(m, "ok", "Ajustes deste navegador salvos na planilha"); afterSave();
+    } catch(e){ comAjStatus(m, "err", comErroAj(e)); }
+  });
+}
+function comSaveState(m, st){
+  try { localStorage.setItem(comKey(m), JSON.stringify(st)); } catch(e){}   // cópia local
+  COM_PEND[m] = JSON.parse(JSON.stringify(st));
+  comAjStatus(m, "", "salvando…");
+  clearTimeout(COM_TIMER[m]);   // junta mudanças seguidas: grava depois de 1,5 s sem mexer
+  COM_TIMER[m] = setTimeout(() => { delete COM_TIMER[m]; comGravarAgora(m); }, COM_ESPERA);
+}
 let COM_MES = "";
 function freteLoja(m){
   const man = (COSTS || []).find(c => normMes(c.data.mes) === m); const vm = man ? num(man.data.frete_pago_loja) : null;
@@ -1352,6 +1418,7 @@ function renderCom(){
   const mesAt = hojeSP().slice(0, 7);
   sel.innerHTML = meses.map(m => `<option value="${m}"${m===COM_MES?" selected":""}>${esc(mesLabel(m))}${m === mesAt ? " (em andamento)" : (m > mesAt ? " (parcelas futuras)" : "")}</option>`).join("");
   sel.onchange = () => { COM_MES = sel.value; renderCom(); };
+  comMigrar(COM_MES);
   const cfg = comCfg(), st = comState(COM_MES), r = comCalc(COM_MES, st, cfg);
   const reg = rows(D.comis || []).find(x => x.mes === COM_MES);
   $("cm-info").textContent = `${r.ped.length} pedidos pagos no site` + (r.manL.length ? ` + ${r.manL.length} fora da Nuvemshop` : "") + (r.estL.length ? `, ${r.estL.length} com estorno` : "") + (reg ? ` · registrado em ${reg.registrado_em}: ${brl2(num(reg.comissao))}` : "");
@@ -1377,7 +1444,7 @@ function renderCom(){
     `<label class="ck"><input type="checkbox" data-cup="${esc(c)}"${st.cupons.map(z=>z.toUpperCase()).includes(c)?" checked":""}><span>Tirar da base os pedidos com o cupom <code>${esc(c)}</code> <span class="s" style="color:var(--muted)">(${x.n} ${x.n>1?"pedidos":"pedido"}, ${brl2(x.v)} líquidos)</span></span></label>`).join("")
     : '<div class="s" style="font-size:13px;color:var(--muted)">Nenhum pedido com cupom neste mês.</div>';
   const fl = r.fl;
-  $("cm-adj").innerHTML = `<h3>Ajustes deste mês</h3>
+  $("cm-adj").innerHTML = `<h3>Ajustes deste mês <span class="status${COM_AJ_ST.m === COM_MES && COM_AJ_ST.cls ? " " + COM_AJ_ST.cls : ""}" id="cm-adj-st" style="font-weight:400">${COM_AJ_ST.m === COM_MES ? esc(COM_AJ_ST.txt) : ""}</span></h3>
     <div><div class="k" style="margin-bottom:4px">Ofertas específicas</div>${cupHtml}</div>
     <div><label class="ck"><input type="checkbox" id="cm-frete"${st.frete?" checked":""}><span>Descontar o frete que a loja pagou nos pedidos com frete grátis <span class="s" style="color:var(--muted)">(${r.gratis} ${r.gratis===1?"pedido":"pedidos"} sem frete cobrado, fora retirada)</span></span></label>
       <div class="cm-inline">Valor: <input id="cm-frete-v" inputmode="decimal" value="${esc(st.freteValor)}" placeholder="${fl.v != null ? nf1.format(fl.v).replace(/,0$/,"") : "R$"}"> ${fl.v != null ? `em branco usa ${brl2(fl.v)}, de ${esc(fl.fonte)}` : "sem valor de frete pago no mês: digite o valor"}</div></div>
@@ -2966,7 +3033,7 @@ function cdIguais(o){
 const cdR = () => { if (D.cad) { try { renderCad(); } catch(e){ setErr("cad", "Não consegui desenhar o cadastro: o formato da aba mudou."); } } };
 
 const adR = () => { if (D.acd) renderAds(); };
-const RENDER = { itNum:renderCom, prodId:renderCom, cprod:renderCom, pman:renderCom, itens:renderCom, prodA:renderCom, g4d:()=>{}, g4l:()=>{}, rcamp:()=>rpR(), rjog:()=>rpR(), rev:()=>rpR(), rlem:()=>rpR(), prodUrl:cdR, cad:cdR, cadf:cdR, acd:adR, ahoje:adR, aads:adR, asem:adR, aalert:adR, ares:adR, anotas:adR, adir:adR, atrib:renderAtrib, ped:()=>{renderCom(); renderAtrib();}, pedNum:()=>{renderCom(); renderAtrib();}, cauto:renderCom, comis:renderCom, fila:renderFila, rodada:renderFila, regcfg:renderRegCfg, bplano:renderBrevo, atual:()=>{renderAtual(); if (D.mensal) renderMensal();}, mensal:renderMensal, coortes:renderCoortes, regua:renderRegua, reguaRes:renderReguaRes, car:renderCar, vale:renderVale, ind:()=>{}, res:renderCarRes,
+const RENDER = { itNum:renderCom, prodId:renderCom, cprod:renderCom, pman:renderCom, cajust:renderCom, itens:renderCom, prodA:renderCom, g4d:()=>{}, g4l:()=>{}, rcamp:()=>rpR(), rjog:()=>rpR(), rev:()=>rpR(), rlem:()=>rpR(), prodUrl:cdR, cad:cdR, cadf:cdR, acd:adR, ahoje:adR, aads:adR, asem:adR, aalert:adR, ares:adR, anotas:adR, adir:adR, atrib:renderAtrib, ped:()=>{renderCom(); renderAtrib();}, pedNum:()=>{renderCom(); renderAtrib();}, cauto:renderCom, comis:renderCom, fila:renderFila, rodada:renderFila, regcfg:renderRegCfg, bplano:renderBrevo, atual:()=>{renderAtual(); if (D.mensal) renderMensal();}, mensal:renderMensal, coortes:renderCoortes, regua:renderRegua, reguaRes:renderReguaRes, car:renderCar, vale:renderVale, ind:()=>{}, res:renderCarRes,
   cfg:()=>{renderCfg(); renderBrevoPill(); if (D.msgs) renderMsgs(); renderCom(); adR();}, msgs:renderMsgs, custos:()=>{renderCustos(); renderCom();} };
 
 ["g4d","g4l","ped","pedNum","pedMail","itens","prodA","prodM","prodQ","cauto","custos","atrib","acd","cfg","fila","reguaLog","rjog","rcamp"].forEach(k => { const o = RENDER[k]; RENDER[k] = () => { if (o) o(); rsR(); }; });

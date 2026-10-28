@@ -13,6 +13,13 @@ Modelo:
 - Próximo passo:
 ```
 
+## 2026-10-28 · Antigravity · ajustes da Comissão na planilha (D-086)
+- Feito: `comState`/`comSaveState` do Painel passam a usar a aba `comissao_ajustes` (prioridade da planilha, reserva no localStorage, gravação agrupada em 1,5 s com status "salvando…"/"salvo", erro mantém cópia local) e migram uma única vez os ajustes que só existiam no navegador. Faixa `comissao_ajustes!A1:D200` incluída nas leituras da Comissão. `Painel.html` regerado. Cofre não alterado nesta sessão (a restrição da aba foi feita pelo Cowork).
+- Arquivos alterados: `apps-script/painel-web/painel-monstro.html`, `apps-script/painel-web/Painel.html`, `apps-script/teste_local.js`, `docs/DECISOES.md`, `docs/ESTADO.md`, `docs/HISTORICO.md`.
+- Como conferir: `node apps-script/teste_local.js` (46 testes) e `..\..\.venv\Scripts\python -m pytest -q`. No Painel, mudar um ajuste da Comissão, esperar "salvo" e abrir o mesmo mês em outro navegador.
+- Problemas conhecidos: no Painel do claude.ai não há email do usuário, então `atualizado_por` fica vazio ali.
+- Próximo passo: Túlio atualizar `Painel.html` na Entrada (Nova versão) e o Cowork republicar o Painel do claude.ai.
+
 ## 2026-10-27 · Antigravity · script de cadastro por agente local (D-078) e gravação do lote 2026-10-27
 - Feito: implementado `scripts/cadastro_lote.py` (`folhas`, `recorte`, `conferir`, `gravar`, `renomear-lote`) conforme `docs/CADASTRO_IA_SCRIPT.md`, adicionado `CADASTRO_PASTA_LOCAL` em `painel_monstro/config.py` e `env-exemplo.txt`, e criada a suíte `tests/test_cadastro_lote.py` (37 testes cobrindo regressão exata do lote 2026-10-26, validações, numeração, colisões, retomada por `plano.json`, modo simulação, detecção sintética e 92,1% de acerto nas fotos reais). Conferido o lote antigo `2026-10-26` contra a planilha real (recusado com 142 erros de fotos já cadastradas). Geradas as folhas do lote `2026-10-27` (29 fotos na pasta `entrada`), montado `dados/cadastro_ia/2026-10-27/lote.json` (2 discos para cadastrar e 7 pulados), rodado `conferir` (0 erros, 0 avisos) e, após confirmação do Túlio, executado `gravar --confirmar` (gravados `2026-10-27-01` e `2026-10-27-02` em `cadastro_rascunhos` e 8 linhas em `cadastro_fotos`, com 12 fotos renomeadas na pasta `entrada`).
 - Arquivos alterados: `scripts/cadastro_lote.py`, `tests/test_cadastro_lote.py`, `painel_monstro/config.py`, `env-exemplo.txt`, `AGENTS.md`, `PROMPTS.md`, `docs/DECISOES.md`, `docs/ESTADO.md`, `docs/HISTORICO.md`.
