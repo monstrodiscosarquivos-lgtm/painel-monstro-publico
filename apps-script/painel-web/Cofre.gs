@@ -14,7 +14,7 @@
  */
 
 var PLANILHA = PropertiesService.getScriptProperties().getProperty('PLANILHA_ID') || ''; // configurar no Apps Script, nunca no git
-var SO_ESPECIAL = ['comissao', 'comissao_produtos', 'pedidos_manuais', 'acessos', 'acessos_log'];  // abas que o nível comum não lê
+var SO_ESPECIAL = ['comissao', 'comissao_produtos', 'pedidos_manuais', 'comissao_ajustes', 'acessos', 'acessos_log'];  // abas que o nível comum não lê
 
 function prepararCofre() {
   var ss = SpreadsheetApp.openById(PLANILHA);
