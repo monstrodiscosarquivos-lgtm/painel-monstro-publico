@@ -15,6 +15,7 @@
 
 var PLANILHA = PropertiesService.getScriptProperties().getProperty('PLANILHA_ID') || ''; // configurar no Apps Script, nunca no git
 var SO_ESPECIAL = ['comissao', 'comissao_produtos', 'pedidos_manuais', 'comissao_ajustes', 'acessos', 'acessos_log'];  // abas que o nível comum não lê
+var ABAS_K7 = ['k7_resumo', 'ga4_links'];  // abas que o nível k7 pode ler (lista branca)
 
 function prepararCofre() {
   var ss = SpreadsheetApp.openById(PLANILHA);
@@ -65,7 +66,7 @@ function usuario_(email) {
   for (var i = 1; i < v.length; i++) {
     if (String(v[i][0]).trim().toLowerCase() === email) {
       var nivel = String(v[i][2]).trim().toLowerCase();
-      if (nivel === 'especial' || nivel === 'comum') return { email: email, nome: v[i][1], nivel: nivel };
+      if (nivel === 'especial' || nivel === 'comum' || nivel === 'k7') return { email: email, nome: v[i][1], nivel: nivel };
     }
   }
   return null;
@@ -74,7 +75,12 @@ function usuario_(email) {
 function aba_(range) { return String(range).split('!')[0].replace(/^'|'$/g, '').trim().toLowerCase(); }
 
 function ler_(u, ranges) {
-  var ok = ranges.filter(function (r) { return u.nivel === 'especial' || SO_ESPECIAL.indexOf(aba_(r)) < 0; });
+  var ok;
+  if (u.nivel === 'k7') {
+    ok = ranges.filter(function (r) { return ABAS_K7.indexOf(aba_(r)) >= 0; });
+  } else {
+    ok = ranges.filter(function (r) { return u.nivel === 'especial' || SO_ESPECIAL.indexOf(aba_(r)) < 0; });
+  }
   var out = {};
   if (ok.length) {
     try {
@@ -88,11 +94,12 @@ function ler_(u, ranges) {
       });
     }
   }
-  ranges.forEach(function (r) { if (!(r in out)) out[r] = null; });   // null = sem permissão
+  ranges.forEach(function (r) { if (!(r in out)) out[r] = (u.nivel === 'k7' ? [] : null); });   // null = sem permissão; k7 volta vazia
   return out;
 }
 
 function podeGravar_(u, range) {
+  if (u.nivel === 'k7') return false;
   if (aba_(range) === 'acessos' || aba_(range) === 'acessos_log') return false;   // acessos só pela planilha
   return u.nivel === 'especial' || SO_ESPECIAL.indexOf(aba_(range)) < 0;
 }

@@ -2,7 +2,15 @@
 
 Atualize este arquivo ao fim de toda sessão. Ele responde a uma pergunta: onde o projeto está agora?
 
-**Última atualização:** 29/10/2026: D-091 confirmado (recortes do lote 2026-10-28 gravados na planilha; cantos de 335 fotos atualizados em cadastro_fotos e fotos_ajustadas limpa em cadastro_rascunhos; push de D-089 e D-091 realizado na pasta pública). Suíte completa com 757 testes verdes.
+**Última atualização:** 29/10/2026: D-092 implementado (aba K7 e nível de acesso restrito k7 no Cofre e no Painel web, gerando k7_resumo na rotina com proteção estrita de privacidade). Suíte completa com 767 testes Python e 48 testes JS verdes.
+
+## D-092 · aba K7 e nível de acesso restrito "k7" no Cofre e no Painel (29/10/2026)
+- **Rotina e módulo k7.py:** a cada rodada, gera a aba `k7_resumo` (formato `bloco, chave, valor_1, valor_2, valor_3, valor_4`) com métricas da fita K7 Goiânia Rock City 2026 (produto 375734821, campanha `grc2026`): blocos `totais`, `por_dia`, `por_banda`, `canais` e `junto_com`.
+- **Privacidade absoluta garantida:** conferência em código e testes sintéticos garantem que a aba `k7_resumo` nunca expõe nomes, emails, telefones, cidades ou números de pedidos.
+- **Painel (`painel-monstro.html` e `Painel.html`):** aba K7 dedicada na barra de navegação com KPIs grandes, gráfico diário de vendas, ranking de bandas por cliques/sessões/pedidos do GA4, canais de venda e produtos mais comprados em conjunto.
+- **Nível restrito `k7` no Cofre (`Cofre.gs`):** `usuario_` aceita nível `k7`; `ler_` aplica whitelist estrita `ABAS_K7` (`k7_resumo` e `ga4_links`), retornando listas vazias (`[]`) para qualquer outra faixa solicitada; `podeGravar_` retorna `false`.
+- **Comportamento para usuário `k7` no Painel:** esconde a barra de abas `.tabs`, fixa a visualização na aba K7 e faz requisição ao Cofre exclusivamente para as faixas `k7` e `g4l`.
+- **Testes verdes:** 767 testes no pytest (`tests/test_k7.py` e regressão de `test_rotina.py`) e 48 testes no suite JS (`apps-script/teste_local.js`).
 
 ## D-091 · recorte de fotos por detecção de fundo branco e comando recortar-lote (29/10/2026)
 - **Detecção de fundo branco:** para fotos em pé (H > W) e fundo claro, reduz para 500 px de largura, segmenta por limiar de cinza (< 235 e limiares adaptativos com fechamento morfológico) e contorno principal. Capas e encartes usam minAreaRect com 1% de margem; vinil usa quadrado com 2% de folga e rejeita diâmetros < 50% do menor lado (eliminando recortes falsos no rótulo central). Fallback transparente para o método Hough anterior e foto inteira em caso de falha dupla.

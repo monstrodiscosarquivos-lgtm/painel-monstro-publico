@@ -71,7 +71,11 @@ window.PM = "__PM_CONTEXTO__";
   };
   setInterval(function(){ buscar(regs); }, 600000);
   window.claude = { use: async function(){ return conexao; } };
-  if (PM.nivel !== 'especial'){
+  if (PM.nivel === 'k7'){
+    try { localStorage.setItem('pm-view', 'k7'); } catch(e){}
+    if (!/^#k7$/.test(location.hash)) history.replaceState(null, '', '#k7');
+    document.write('<style>.tabs{display:none!important}</style>');
+  } else if (PM.nivel !== 'especial'){
     try { var v = localStorage.getItem('pm-view'); if (v === 'com') localStorage.setItem('pm-view', 'painel'); } catch(e){}
     if (/^#comissao$/.test(location.hash)) history.replaceState(null, '', '#');
     document.write('<style>#tab-com,#view-com{display:none!important}</style>');
@@ -79,7 +83,7 @@ window.PM = "__PM_CONTEXTO__";
   document.addEventListener('DOMContentLoaded', function(){
     var m = document.querySelector('header .meta');
     if (m){ var s = document.createElement('span'); s.className = 'pm-quem';
-      s.textContent = (PM.nome || PM.email || '') + (PM.nivel === 'especial' ? ' · acesso especial' : '');
+      s.textContent = (PM.nome || PM.email || '') + (PM.nivel === 'especial' ? ' · acesso especial' : (PM.nivel === 'k7' ? ' · acesso K7' : ''));
       s.style.cssText = 'font-size:12px;color:var(--muted)'; m.insertBefore(s, m.firstChild); }
   });
 })();

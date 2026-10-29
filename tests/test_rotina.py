@@ -53,7 +53,7 @@ def test_rotina_faz_coletor_motor_e_planilha(config, mundo, capsys):
     assert {k: v['total'] for k, v in r['coleta'].items()} == {'pedidos': 3, 'clientes': 3, 'produtos': 3}
     assert set(mundo['planilha_falsa'].abas) == {'custos_automaticos', 'clientes', 'pedidos', 'itens', 'produtos', 'indicadores', 'custos', 'alertas', 'Régua', 'rodada', 'resumo_email', 'meta_sumiu_180', 'meta_nao_abre', 'meta_compradores_180', 'meta_resumo', 'atual', 'mensal', 'coortes',
                                                        'regua_hoje', 'regua_resultados', 'carrinhos_dia', 'vale_a_pena',
-                                                       'Configuração', 'anuncios_notas', 'anuncios_direcao', 'anuncios_resumo'}
+                                                       'Configuração', 'anuncios_notas', 'anuncios_direcao', 'anuncios_resumo', 'k7_resumo'}
     g = {x.aba: x.linhas for x in r['gravacoes']}
     assert (g['clientes'], g['pedidos'], g['itens'], g['produtos']) == (3, 3, 6, 3)
     assert [e['etapa'] for e in r['etapas']][0] == 'Etapa 0 · Pós-compra'

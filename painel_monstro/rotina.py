@@ -24,7 +24,7 @@ from painel_monstro.log_publico import comando_seguro, ArgumentParserSeguro, res
 from painel_monstro.config import Config, carregar
 from painel_monstro.coletor import nuvemshop_api
 from painel_monstro.motor import indicadores, regua
-from painel_monstro.saidas import anuncios, brevo, cadastro, ga4, carrinhos_planilha, custos_automaticos, meta, newsletter, planilha_google, raspadinha, raspadinha_lembrete, regua_planilha, resumos_painel
+from painel_monstro.saidas import anuncios, brevo, cadastro, ga4, carrinhos_planilha, custos_automaticos, k7, meta, newsletter, planilha_google, raspadinha, raspadinha_lembrete, regua_planilha, resumos_painel
 
 SEGREDOS_OBRIGATORIOS = {
     'NUVEMSHOP_STORE_ID': 'nuvemshop_store_id',
@@ -118,6 +118,23 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
         print(f'      GA4: {len(paginas_ga4[0][1])} linhas por dia e origem, {len(paginas_ga4[1][1])} links de banda')
     except Exception as erro:  # noqa: BLE001
         print(f'      GA4: indisponível ({_resumo_do_erro(erro)}); as abas ga4_* ficam como estavam.')
+    # K7 (D-092): fita cassete Goiânia Rock City 2026
+    try:
+        df_diario = next((d for n, d in paginas_ga4 if n == 'ga4_diario'), None) if 'paginas_ga4' in locals() else None
+        df_links = next((d for n, d in paginas_ga4 if n == 'ga4_links'), None) if 'paginas_ga4' in locals() else None
+        if df_diario is None:
+            raw_diario = _ler_aba(planilha, 'ga4_diario')
+            if raw_diario and len(raw_diario) > 1:
+                df_diario = pd.DataFrame(raw_diario[1:], columns=raw_diario[0])
+        if df_links is None:
+            raw_links = _ler_aba(planilha, 'ga4_links')
+            if raw_links and len(raw_links) > 1:
+                df_links = pd.DataFrame(raw_links[1:], columns=raw_links[0])
+        df_k7 = k7.montar_resumo(tabelas, df_diario, df_links)
+        pagina_dos_resumos.append(('k7_resumo', df_k7))
+        print(f'      K7: {len(df_k7)} linhas no resumo da fita')
+    except Exception as erro:  # noqa: BLE001
+        print(f'      K7: indisponível ({_resumo_do_erro(erro)}); a aba k7_resumo fica como estava.')
     print('[3/5] Tudo calculado; gravando na Planilha Google')
 
     # 4. Grava, aba por aba. Falha numa aba mantém o conteúdo antigo dela; a rodada seguinte recalcula e tenta de novo.

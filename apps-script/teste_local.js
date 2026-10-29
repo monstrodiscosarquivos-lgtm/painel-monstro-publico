@@ -859,6 +859,180 @@ testeAsync('ajustes da comissão (D-086): gravação junta mudanças, atualiza a
   assert.strictEqual(f.comState('2026-10').outros, true);
 });
 
+// ---------- Nível de acesso k7 no Cofre e no Painel (D-092) ----------
+const codigoCofre = fs.readFileSync(path.join(__dirname, 'painel-web', 'Cofre.gs'), 'utf8');
+
+function carregarCofre({ acessos = [], dados = {} } = {}) {
+  const cache = {};
+  const gravacoes = [];
+  const ctx = {
+    PropertiesService: {
+      getScriptProperties: () => ({
+        getProperty: (k) => (k === 'PLANILHA_ID' ? 'planilha-k7' : (k === 'SEGREDO' ? 'segredo-k7' : null)),
+        setProperty: () => {},
+      }),
+    },
+    CacheService: {
+      getScriptCache: () => ({
+        get: (k) => cache[k] || null,
+        put: (k, v) => { cache[k] = v; },
+      }),
+    },
+    SpreadsheetApp: {
+      openById: () => ({
+        getSheetByName: (nome) => {
+          if (nome === 'Acessos') {
+            return {
+              getDataRange: () => ({ getDisplayValues: () => acessos }),
+            };
+          }
+          return null;
+        },
+      }),
+    },
+    Sheets: {
+      Spreadsheets: {
+        Values: {
+          batchGet: (pid, params) => {
+            const ranges = params.ranges || [];
+            return {
+              valueRanges: ranges.map((r) => ({ range: r, values: dados[r] || [['dado_' + r]] })),
+            };
+          },
+          get: (pid, r) => ({ values: dados[r] || [['dado_' + r]] }),
+          update: (body, pid, range) => {
+            gravacoes.push({ range, values: body.values });
+          },
+        },
+      },
+    },
+    ContentService: {
+      createTextOutput: (s) => ({ setMimeType: () => s }),
+      MimeType: { JSON: 'application/json' },
+    },
+    Logger: { log: () => {} },
+    String, Array, JSON, RegExp, Object, console,
+  };
+  vm.createContext(ctx);
+  vm.runInContext(codigoCofre, ctx);
+  return { ...ctx, gravacoes };
+}
+
+teste('Cofre (D-092): nível k7 reconhece usuário, lê apenas k7_resumo e ga4_links e não grava', () => {
+  const acessos = [
+    ['email', 'nome', 'nivel', 'observacao'],
+    ['admin@exemplo.com', 'Admin', 'especial', ''],
+    ['mariana@exemplo.com', 'Mariana', 'comum', ''],
+    ['banda@exemplo.com', 'Banda Rock', 'k7', ''],
+  ];
+  const dados = {
+    'k7_resumo!A1:F500': [['bloco', 'chave', 'v1', 'v2', 'v3', 'v4'], ['totais', 'fitas', '12', '', '', '']],
+    'ga4_links!A1:N': [['campanha', 'canal', 'sessões'], ['grc2026', 'banda-a', '45']],
+    'pedidos!A1:Z': [['numero', 'total'], ['1001', '150']],
+    'comissao!A1:Z': [['mes', 'base'], ['2026-10', '5000']],
+  };
+  const cofre = carregarCofre({ acessos, dados });
+
+  // 1. usuario_ aceita nível k7
+  const uK7 = cofre.usuario_('banda@exemplo.com');
+  assert.ok(uK7, 'usuário k7 deve ser encontrado');
+  assert.strictEqual(uK7.email, 'banda@exemplo.com');
+  assert.strictEqual(uK7.nome, 'Banda Rock');
+  assert.strictEqual(uK7.nivel, 'k7');
+
+  // 2. ler_ para nível k7 retorna APENAS k7_resumo e ga4_links. Qualquer outra faixa volta vazia ([] e não null)
+  const pedidosRanges = ['k7_resumo!A1:F500', 'ga4_links!A1:N', 'pedidos!A1:Z', 'comissao!A1:Z'];
+  const lidoK7 = cofre.ler_(uK7, pedidosRanges);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(lidoK7['k7_resumo!A1:F500'])), dados['k7_resumo!A1:F500']);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(lidoK7['ga4_links!A1:N'])), dados['ga4_links!A1:N']);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(lidoK7['pedidos!A1:Z'])), []);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(lidoK7['comissao!A1:Z'])), []);
+
+  // 3. podeGravar_ para nível k7 retorna sempre false
+  assert.strictEqual(cofre.podeGravar_(uK7, 'k7_resumo!A1:F500'), false);
+  assert.strictEqual(cofre.podeGravar_(uK7, 'ga4_links!A1:N'), false);
+  assert.strictEqual(cofre.podeGravar_(uK7, 'carrinhos!A1'), false);
+  assert.strictEqual(cofre.podeGravar_(uK7, 'qualquer_aba!A1'), false);
+
+  // 4. Comparação defensiva com nível comum e especial
+  const uComum = cofre.usuario_('mariana@exemplo.com');
+  const lidoComum = cofre.ler_(uComum, pedidosRanges);
+  assert.deepStrictEqual(lidoComum['pedidos!A1:Z'], dados['pedidos!A1:Z']);
+  assert.strictEqual(lidoComum['comissao!A1:Z'], null, 'comissao deve voltar null para comum');
+  assert.strictEqual(cofre.podeGravar_(uComum, 'carrinhos!A1'), true);
+  assert.strictEqual(cofre.podeGravar_(uComum, 'comissao!A1'), false);
+});
+
+teste('Painel (D-092): com PM.nivel === "k7", mostra só a aba K7 e pede só k7 e g4l ao Cofre', () => {
+  assert.ok(htmlPainel.includes('id="tab-k7"'), 'painel deve conter tab-k7');
+  assert.ok(htmlPainel.includes('id="view-k7"'), 'painel deve conter view-k7');
+
+  // Extrai RANGES do painel-monstro.html
+  const idxRanges = htmlPainel.indexOf('const RANGES = {');
+  const idxFimRanges = htmlPainel.indexOf('};', idxRanges) + 2;
+  const trechoRanges = htmlPainel.slice(idxRanges, idxFimRanges);
+
+  assert.ok(trechoRanges.includes('k7: "k7_resumo!A1:F500"'), 'RANGES deve conter k7');
+  assert.ok(trechoRanges.includes('g4l: "ga4_links!A1:I400"'), 'RANGES deve conter g4l');
+
+  // Simula execução com window.PM = { nivel: 'k7' }
+  const faixasPedidasK7 = [];
+  const fakeMCP_K7 = {
+    watchTool: (server, tool, args) => { faixasPedidasK7.push(args.range); },
+  };
+  const ctxK7 = {
+    fakeMCP_K7,
+    window: { PM: { nivel: 'k7' }, claude: { use: async () => fakeMCP_K7 } },
+    $: () => ({ textContent: '', innerHTML: '' }),
+    document: { querySelector: () => ({ style: {} }) },
+    location: { hash: '' },
+    localStorage: { getItem: () => null, setItem: () => {} },
+    console, String, Array, Object,
+  };
+  vm.createContext(ctxK7);
+  vm.runInContext(trechoRanges + `
+    const rangesAtivos = (window.PM?.nivel === "k7") ? { k7: RANGES.k7, g4l: RANGES.g4l } : RANGES;
+    for (const [key, range] of Object.entries(rangesAtivos)){
+      fakeMCP_K7.watchTool("SERVER", "TOOL", { range });
+    }
+  `, ctxK7);
+
+  assert.strictEqual(faixasPedidasK7.length, 2);
+  assert.ok(faixasPedidasK7.includes('k7_resumo!A1:F500'));
+  assert.ok(faixasPedidasK7.includes('ga4_links!A1:I400'));
+
+  // Simula execução sem k7 (painel completo)
+  const faixasPedidasGeral = [];
+  const fakeMCP_Geral = {
+    watchTool: (server, tool, args) => { faixasPedidasGeral.push(args.range); },
+  };
+  const ctxGeral = {
+    fakeMCP_Geral,
+    window: { PM: { nivel: 'comum' }, claude: { use: async () => fakeMCP_Geral } },
+    $: () => ({ textContent: '', innerHTML: '' }),
+    document: { querySelector: () => ({ style: {} }) },
+    location: { hash: '' },
+    localStorage: { getItem: () => null, setItem: () => {} },
+    console, String, Array, Object,
+  };
+  vm.createContext(ctxGeral);
+  vm.runInContext(trechoRanges + `
+    const rangesAtivos = (window.PM?.nivel === "k7") ? { k7: RANGES.k7, g4l: RANGES.g4l } : RANGES;
+    for (const [key, range] of Object.entries(rangesAtivos)){
+      fakeMCP_Geral.watchTool("SERVER", "TOOL", { range });
+    }
+  `, ctxGeral);
+
+  assert.ok(faixasPedidasGeral.length > 30, 'painel completo pede todas as faixas');
+  assert.ok(faixasPedidasGeral.includes('k7_resumo!A1:F500'));
+  assert.ok(faixasPedidasGeral.includes('pedidos!C1:R8000'));
+
+  // Confere que no Painel.html compilado o adaptador esconde .tabs no nível k7
+  const htmlBuild = fs.readFileSync(path.join(__dirname, 'painel-web', 'Painel.html'), 'utf8');
+  assert.ok(htmlBuild.includes("PM.nivel === 'k7'"), 'Painel.html deve conter tratamento para k7');
+  assert.ok(htmlBuild.includes(".tabs{display:none!important}"), 'Painel.html deve ocultar .tabs no nível k7');
+});
+
 (async () => {
   for (const [nome, fn] of testesAsync) { await fn(); n += 1; console.log('ok  ' + nome); }
   console.log(`\n${n} testes do script passaram.`);

@@ -13,6 +13,13 @@ Modelo:
 - Próximo passo:
 ```
 
+## 2026-10-29 · Antigravity · aba K7 e nível de acesso restrito k7 (D-092)
+- Feito: implementada a aba K7 e o nível de acesso "k7" conforme especificação docs/ESPEC_PAINEL_K7.md. (1) Rotina: gerador da aba `k7_resumo` em `painel_monstro/saidas/k7.py` com blocos totais, por_dia, por_banda, canais e junto_com, com validação e garantia de que nenhum dado pessoal de clientes (@, telefone, número de pedido) é exposto. (2) Painel web (`painel-monstro.html` e `Painel.html`): aba K7 com KPIs de vendas, estoque, gráfico diário, ranking de bandas com GA4, canais e produtos comprados juntos. (3) Cofre (`Cofre.gs`): aceita nível `k7` em `usuario_`, restringe leitura via whitelist `ABAS_K7` (`k7_resumo` e `ga4_links`), retorna listas vazias (`[]`) para faixas não autorizadas e desabilita gravação (`podeGravar_` retorna false). (4) Adaptador web (`montar_painel_web.py`): esconde `.tabs` no nível `k7`, define visualização `#k7` e faz requisição ao Cofre somente para as faixas `k7` e `g4l`. (5) Testes: 2 testes unitários novos em `tests/test_k7.py`, atualização em `tests/test_rotina.py` (767 testes Python passando) e 2 testes novos em `apps-script/teste_local.js` (48 testes JS passando).
+- Arquivos alterados: `painel_monstro/saidas/k7.py`, `painel_monstro/rotina.py`, `tests/test_k7.py`, `tests/test_rotina.py`, `apps-script/painel-web/Cofre.gs`, `apps-script/painel-web/LEIA-ME.md`, `apps-script/painel-web/painel-monstro.html`, `apps-script/painel-web/montar_painel_web.py`, `apps-script/painel-web/Painel.html`, `apps-script/teste_local.js`, `docs/DECISOES.md`, `docs/ESTADO.md`, `docs/HISTORICO.md`.
+- Como conferir: rodar `node apps-script/teste_local.js` (48 testes passando) e `..\..\.venv\Scripts\python -m pytest -q` (767 testes passando).
+- Problemas conhecidos: nenhum.
+- Próximo passo: commit local na pasta pública e repassar ao Túlio o passo a passo de implantação.
+
 ## 2026-10-29 · Antigravity · confirmação de recortes D-091 e push no repositório público
 - Feito: executado `recortar-lote 2026-10-28 --confirmar` com atualização dos cantos de 335 fotos em `cadastro_fotos` e limpeza da coluna `fotos_ajustadas` em `cadastro_rascunhos` para regeneração das prévias pelo Painel. Auditoria de segurança confirmada limpa no repositório público e executados `git add`, `git commit` ("Indicações da fila (D-089) e recorte por fundo branco (D-091)") e `git push` com sucesso em `migracao-publica/painel-monstro-publico`.
 - Arquivos alterados: planilha Google (`cadastro_fotos`, `cadastro_rascunhos`), `migracao-publica/painel-monstro-publico` (commit e push), `docs/ESTADO.md`, `docs/HISTORICO.md`.

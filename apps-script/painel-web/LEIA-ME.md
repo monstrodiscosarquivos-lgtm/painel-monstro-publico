@@ -14,6 +14,7 @@ Como funciona: a ENTRADA roda com a conta de quem abre, só para saber o email. 
 
 - **especial**: vê e altera tudo.
 - **comum**: vê e altera tudo, menos a Comissão.
+- **k7**: vê somente a aba K7 (fita cassete Goiânia Rock City 2026), sem acesso a nenhuma outra aba ou dado pessoal, e não altera nada.
 - Toda gravação fica na aba **acessos_log**.
 
 Sempre que o Painel do Claude mudar, gerar o `Painel.html` de novo e colar no projeto da entrada (Implantar > Gerenciar implantações > editar > Nova versão).
