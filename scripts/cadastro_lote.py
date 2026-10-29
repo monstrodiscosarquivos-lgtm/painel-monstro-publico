@@ -330,7 +330,135 @@ def _intersecao(v: tuple[float, float], hh: tuple[float, float]) -> list[float]:
     return [float(x), float(y)]
 
 
-def detectar_cantos_capa(rgb: np.ndarray, papel: str = 'capa') -> list | None:
+def ordenar_cantos(pts: np.ndarray) -> np.ndarray:
+    """Ordena 4 pontos 2D em: sup. esq., sup. dir., inf. dir., inf. esq."""
+    s = pts.sum(axis=1)
+    d = np.diff(pts, axis=1).ravel()
+    sup_esq = pts[np.argmin(s)]
+    inf_dir = pts[np.argmax(s)]
+    sup_dir = pts[np.argmin(d)]
+    inf_esq = pts[np.argmax(d)]
+    return np.array([sup_esq, sup_dir, inf_dir, inf_esq], dtype=float)
+
+
+def aplicar_margem_cantos(box_ordenado: np.ndarray, margem_pct: float, w_max: int, h_max: int) -> list[list[int]]:
+    """Expande 4 cantos para fora a partir do centro por margem_pct (ex.: 0.01 = 1%)."""
+    centro = box_ordenado.mean(axis=0)
+    exp = box_ordenado + (box_ordenado - centro) * margem_pct
+    exp[:, 0] = np.clip(exp[:, 0], 0, w_max)
+    exp[:, 1] = np.clip(exp[:, 1], 0, h_max)
+    return [[int(round(x)), int(round(y))] for x, y in exp]
+
+
+def detectar_cantos_fundo_branco_capa(rgb: np.ndarray, papel: str = 'capa') -> list | None:
+    """Detecção por fundo branco para capas/encartes (D-091)."""
+    H, W = rgb.shape[:2]
+    if W <= 0 or H <= 0:
+        return None
+    h_500 = max(1, int(round(500.0 * H / W)))
+    sm = cv2.resize(rgb, (500, h_500))
+    cinza = cv2.cvtColor(sm, cv2.COLOR_RGB2GRAY)
+
+    cantos_bg = np.concatenate([cinza[:15, :15].ravel(), cinza[:15, -15:].ravel(), cinza[-15:, :15].ravel(), cinza[-15:, -15:].ravel()])
+    bg_mean = float(np.mean(cantos_bg))
+    if bg_mean < 160:
+        return None
+
+    limiares = [235]
+    if bg_mean < 235:
+        limiares.extend([int(bg_mean - 10), int(bg_mean - 15), int(bg_mean - 20), int(bg_mean - 25), 200, 190, 180, 170, 160])
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
+    p_norm = papel.strip().lower()
+    papel_duplo = any(k in p_norm for k in ['encarte aberto', 'capa interna'])
+
+    for t in limiares:
+        if t <= 50:
+            continue
+        mask = (cinza < t).astype(np.uint8) * 255
+        mask_c = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        cnts, _ = cv2.findContours(mask_c, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not cnts:
+            continue
+        c = max(cnts, key=cv2.contourArea)
+        area = cv2.contourArea(c)
+        frac = area / (500 * h_500)
+        if frac > 0.88 or frac < 0.08:
+            continue
+        x, y, bw, bh = cv2.boundingRect(c)
+        if x <= 4 or y <= 4 or (x + bw) >= 496 or (y + bh) >= h_500 - 4:
+            continue
+        rect = cv2.minAreaRect(c)
+        rw, rh = rect[1]
+        if rw <= 0 or rh <= 0:
+            continue
+        prop = max(rw, rh) / min(rw, rh)
+
+        eh_duplo = False
+        if papel_duplo:
+            if not (0.80 <= prop <= 2.3):
+                continue
+            if prop >= 1.6:
+                eh_duplo = True
+        else:
+            limite_prop = 1.6 if 'encarte' in p_norm else 1.15
+            if not (0.85 <= prop <= limite_prop):
+                continue
+
+        box = cv2.boxPoints(rect)
+        ord_box = ordenar_cantos(box)
+        final_box = aplicar_margem_cantos(ord_box, 0.01, 500, h_500)
+        res = final_box + [2] if eh_duplo else final_box
+        if cantos_validos_na_imagem(res, W, H):
+            return res
+    return None
+
+
+def detectar_cantos_fundo_branco_disco(rgb: np.ndarray) -> list | None:
+    """Detecção de disco em quadrado com 2% de folga sobre fundo claro (D-091)."""
+    H, W = rgb.shape[:2]
+    if W <= 0 or H <= 0:
+        return None
+    h_500 = max(1, int(round(500.0 * H / W)))
+    sm = cv2.resize(rgb, (500, h_500))
+    cinza = cv2.cvtColor(sm, cv2.COLOR_RGB2GRAY)
+
+    cantos_bg = np.concatenate([cinza[:15, :15].ravel(), cinza[:15, -15:].ravel(), cinza[-15:, :15].ravel(), cinza[-15:, -15:].ravel()])
+    if np.mean(cantos_bg) < 160:
+        return None
+
+    menor_lado = min(500, h_500)
+    is_portrait = (h_500 > 550 or H > W * 1.1)
+    diam_min = 0.50 * menor_lado if is_portrait else 0.30 * menor_lado
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+    for t in [110, 125, 95, 80, 140, 160]:
+        mask = (cinza < t).astype(np.uint8) * 255
+        mask_c = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        cnts, _ = cv2.findContours(mask_c, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not cnts:
+            continue
+        c = max(cnts, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(c)
+        diam = max(w, h)
+        if diam < diam_min:
+            continue
+        if min(w, h) / max(w, h) < 0.75:
+            continue
+        cx = x + w / 2.0
+        cy = y + h / 2.0
+        lado = max(w, h) * 1.02
+        x0 = max(0, int(round(cx - lado / 2.0)))
+        y0 = max(0, int(round(cy - lado / 2.0)))
+        x1 = min(500, int(round(cx + lado / 2.0)))
+        y1 = min(h_500, int(round(cy + lado / 2.0)))
+        can = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+        if cantos_validos_na_imagem(can, W, H):
+            return can
+    return None
+
+
+def _hough_cantos_capa(rgb: np.ndarray, papel: str = 'capa') -> list | None:
     H, W = rgb.shape[:2]
     if W <= 0 or H <= 0:
         return None
@@ -401,7 +529,22 @@ def detectar_cantos_capa(rgb: np.ndarray, papel: str = 'capa') -> list | None:
     return can
 
 
-def detectar_cantos_disco(rgb: np.ndarray) -> list | None:
+def detectar_cantos_capa(rgb: np.ndarray, papel: str = 'capa') -> list | None:
+    # D-091: em fotos em pé (H > W) ou fundo claro, detecção por fundo branco usada primeiro
+    H, W = rgb.shape[:2]
+    if H > W:
+        can_fb = detectar_cantos_fundo_branco_capa(rgb, papel)
+        if can_fb is not None:
+            return can_fb
+        return _hough_cantos_capa(rgb, papel)
+    else:
+        can_h = _hough_cantos_capa(rgb, papel)
+        if can_h is not None:
+            return can_h
+        return detectar_cantos_fundo_branco_capa(rgb, papel)
+
+
+def _hough_cantos_disco(rgb: np.ndarray) -> list | None:
     H, W = rgb.shape[:2]
     if W <= 0 or H <= 0:
         return None
@@ -421,14 +564,34 @@ def detectar_cantos_disco(rgb: np.ndarray) -> list | None:
     if cs is None:
         return None
     cx, cy, r = cs[0][0] * (500.0 / 800.0)
-    d = r * 1.04
+    diam_escala = 2 * r
     h_500 = 500.0 * H / W
+    menor_lado = min(500.0, h_500)
+    if H > W and diam_escala < 0.50 * menor_lado:
+        return None
+
+    d = r * 1.04
     x0 = max(0, int(round(cx - d)))
     y0 = max(0, int(round(cy - d)))
     x1 = min(int(500), int(round(cx + d)))
     y1 = min(int(h_500), int(round(cy + d)))
     can = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
     return can if cantos_validos_na_imagem(can, W, H) else None
+
+
+def detectar_cantos_disco(rgb: np.ndarray) -> list | None:
+    # D-091: em fotos em pé (H > W), detecção por fundo branco usada primeiro
+    H, W = rgb.shape[:2]
+    if H > W:
+        can_fb = detectar_cantos_fundo_branco_disco(rgb)
+        if can_fb is not None:
+            return can_fb
+        return _hough_cantos_disco(rgb)
+    else:
+        can_h = _hough_cantos_disco(rgb)
+        if can_h is not None:
+            return can_h
+        return detectar_cantos_fundo_branco_disco(rgb)
 
 
 def cantos_validos_na_imagem(pontos: Any, w: int, h: int) -> bool:
@@ -1249,6 +1412,212 @@ def renomear_lote_antigo(
 
 
 # ----------------------------------------------------------------------------
+# Comando extra: `recortar-lote LOTE [--confirmar]` (D-091)
+# ----------------------------------------------------------------------------
+def _gerar_folhas_previas(
+    arquivos_previas: list[tuple[str, Path]],
+    pasta_folhas: Path,
+    lote: str,
+) -> list[Path]:
+    pasta_folhas.mkdir(parents=True, exist_ok=True)
+    cols, rows = 3, 4
+    por_folha = cols * rows
+    w_folha = 1800
+    w_cel = w_folha // cols
+    h_cel = 350
+    h_folha = 60 + h_cel * rows
+
+    arquivos: list[Path] = []
+    total = len(arquivos_previas)
+    total_folhas = math.ceil(total / por_folha) if total > 0 else 1
+    fonte_tit = _fonte_padrao(18)
+
+    for f_idx, inicio in enumerate(range(0, total, por_folha), 1):
+        bloco = arquivos_previas[inicio:inicio + por_folha]
+        folha = Image.new('RGB', (w_folha, h_folha), (240, 240, 240))
+        draw = ImageDraw.Draw(folha)
+
+        draw.rectangle([0, 0, w_folha, 50], fill=(20, 20, 20))
+        tit = f'Lote {lote} · Folha de prévias {f_idx} de {total_folhas} (discos {bloco[0][0]} a {bloco[-1][0]})'
+        draw.text((20, 15), tit, fill=(255, 255, 255), font=fonte_tit)
+
+        for pos, (id_disco, arq_previa) in enumerate(bloco):
+            col = pos % cols
+            row = pos // cols
+            x0, y0 = col * w_cel, 60 + row * h_cel
+            x1, y1 = x0 + w_cel, y0 + h_cel
+            draw.rectangle([x0 + 4, y0 + 4, x1 - 4, y1 - 4], outline=(200, 200, 200), width=1)
+            try:
+                with Image.open(arq_previa) as im:
+                    im_rgb = im.convert('RGB')
+                im_rgb.thumbnail((w_cel - 16, h_cel - 16), Image.LANCZOS)
+                px = x0 + (w_cel - im_rgb.width) // 2
+                py = y0 + (h_cel - im_rgb.height) // 2
+                folha.paste(im_rgb, (px, py))
+            except Exception:
+                draw.text((x0 + 10, y0 + 10), f'Erro ao abrir {id_disco}', fill=(200, 0, 0))
+
+        caminho_folha = pasta_folhas / f'folha_previa_{f_idx:02d}.jpg'
+        folha.save(caminho_folha, 'JPEG', quality=88)
+        arquivos.append(caminho_folha)
+    return arquivos
+
+
+def recortar_lote_fotos(
+    lote: str,
+    pasta_local: Path,
+    planilha: PlanilhaGoogle,
+    confirmar: bool = False,
+    base_trabalho: Path | str | None = None,
+) -> dict[str, Any]:
+    linhas_fotos = ler(planilha, 'cadastro_fotos')
+    if not linhas_fotos or linhas_fotos[0] != FOTOS:
+        raise ErroLote('Cabeçalho de cadastro_fotos inválido ou ausente.')
+
+    linhas_rasc = ler(planilha, ABA)
+    titulos_por_id: dict[str, str] = {}
+    if linhas_rasc:
+        cab_r = linhas_rasc[0]
+        idx_id = cab_r.index('id') if 'id' in cab_r else 0
+        idx_tit = cab_r.index('titulo') if 'titulo' in cab_r else 4
+        for r in linhas_rasc[1:]:
+            if len(r) > max(idx_id, idx_tit):
+                titulos_por_id[str(r[idx_id]).strip()] = str(r[idx_tit]).strip()
+
+    prefixo = f'{lote}-'
+    fotos_recalculadas: list[dict[str, Any]] = []
+    discos_agrupados: dict[str, list[dict[str, Any]]] = {}
+
+    for num_linha, r in enumerate(linhas_fotos[1:], 2):
+        d = dict(zip(FOTOS, r))
+        id_disco = str(d.get('id_disco', '')).strip()
+        if not id_disco.startswith(prefixo):
+            continue
+        ordem_str = str(d.get('ordem', '')).strip()
+        papel = str(d.get('papel', '')).strip().lower()
+        if ordem_str == '0' or papel in ('etiqueta', 'descartar'):
+            continue
+
+        obs = str(d.get('observacao', '')).strip()
+        caminho_arq = pasta_local / obs if obs else None
+        cantos_atuais_str = str(d.get('cantos', '')).strip()
+
+        cantos_novos = None
+        falhou = True
+        if caminho_arq and caminho_arq.is_file():
+            cantos_novos, falhou = calcular_cantos_foto(caminho_arq, papel, {'arquivo': obs, 'papel': papel})
+
+        info_foto = {
+            'linha': num_linha,
+            'id_disco': id_disco,
+            'ordem': int(float(ordem_str or 1)),
+            'papel': papel,
+            'arquivo': obs,
+            'cantos_antigos': cantos_atuais_str,
+            'cantos_novos': cantos_novos,
+            'falhou': falhou,
+        }
+        fotos_recalculadas.append(info_foto)
+        if id_disco not in discos_agrupados:
+            discos_agrupados[id_disco] = []
+        discos_agrupados[id_disco].append(info_foto)
+
+    pasta_lote_dir = pasta_do_lote(lote, base_trabalho)
+    pasta_previas = pasta_lote_dir / 'previas'
+    pasta_previas.mkdir(parents=True, exist_ok=True)
+    previas_discos: list[tuple[str, Path]] = []
+
+    for id_disco, f_lista in sorted(discos_agrupados.items()):
+        f_lista.sort(key=lambda x: x['ordem'])
+        detalhes = {
+            'disco': id_disco,
+            'id': id_disco,
+            'titulo': titulos_por_id.get(id_disco, id_disco),
+            'fotos_site': [
+                {
+                    'ordem': f['ordem'],
+                    'papel': f['papel'],
+                    'arquivo': f['arquivo'],
+                    'cantos': f['cantos_novos'],
+                }
+                for f in f_lista
+            ],
+        }
+        arq_previa = _gerar_previa_disco(detalhes, pasta_local, pasta_previas)
+        if arq_previa:
+            previas_discos.append((id_disco, arq_previa))
+
+    pasta_folhas = pasta_lote_dir / 'folhas_previas'
+    arquivos_folhas = _gerar_folhas_previas(previas_discos, pasta_folhas, lote)
+
+    n_recortados = sum(1 for f in fotos_recalculadas if f['cantos_novos'] is not None)
+    n_inteiras = sum(1 for f in fotos_recalculadas if f['cantos_novos'] is None)
+
+    if confirmar:
+        linhas_fotos_atuais = ler(planilha, 'cadastro_fotos')
+        if not linhas_fotos_atuais or linhas_fotos_atuais[0] != FOTOS:
+            raise ErroLote('Cabeçalho de cadastro_fotos inválido ao gravar cantos.')
+
+        mudancas_fotos = []
+        for item in fotos_recalculadas:
+            lin = item['linha']
+            if lin > len(linhas_fotos_atuais):
+                raise ErroLote(f'Linha {lin} fora do alcance em cadastro_fotos.')
+            atual = dict(zip(FOTOS, linhas_fotos_atuais[lin - 1]))
+            if (
+                atual.get('id_disco', '').strip() != item['id_disco']
+                or str(atual.get('ordem', '')).strip() != str(item['ordem'])
+                or atual.get('observacao', '').strip() != item['arquivo']
+            ):
+                raise ErroLote(
+                    f'Concorrência: linha {lin} em cadastro_fotos não corresponde a '
+                    f'{item["id_disco"]} ordem {item["ordem"]}. Abortando gravação.'
+                )
+            valor_cantos = json.dumps(item['cantos_novos']) if item['cantos_novos'] else ''
+            mudancas_fotos.append({'range': f'E{lin}', 'values': [[valor_cantos]]})
+
+        aba_fotos = planilha._ss.worksheet('cadastro_fotos')
+        if hasattr(aba_fotos, 'batch_update'):
+            aba_fotos.batch_update(mudancas_fotos, raw=True)
+        else:
+            for m in mudancas_fotos:
+                aba_fotos.update(m['values'], m['range'], raw=True)
+
+        mudancas_rasc = []
+        if linhas_rasc:
+            cab_rasc = linhas_rasc[0]
+            if 'fotos_ajustadas' not in cab_rasc:
+                raise ErroLote('Coluna fotos_ajustadas não encontrada em cadastro_rascunhos.')
+            idx_ajustadas = cab_rasc.index('fotos_ajustadas')
+            letra_ajustadas = _letra(idx_ajustadas + 1)
+            for num_lin, r in enumerate(linhas_rasc[1:], 2):
+                if r and str(r[0]).strip().startswith(prefixo):
+                    mudancas_rasc.append({'range': f'{letra_ajustadas}{num_lin}', 'values': [['']]})
+
+            if mudancas_rasc:
+                aba_rasc = planilha._ss.worksheet(ABA)
+                if hasattr(aba_rasc, 'batch_update'):
+                    aba_rasc.batch_update(mudancas_rasc, raw=True)
+                else:
+                    for m in mudancas_rasc:
+                        aba_rasc.update(m['values'], m['range'], raw=True)
+
+    return {
+        'lote': lote,
+        'modo': 'confirmado' if confirmar else 'simulacao',
+        'discos': len(discos_agrupados),
+        'fotos_processadas': len(fotos_recalculadas),
+        'recortadas': n_recortados,
+        'inteiras': n_inteiras,
+        'previas': len(previas_discos),
+        'folhas_previas': len(arquivos_folhas),
+        'pasta_previas': pasta_previas,
+        'pasta_folhas': pasta_folhas,
+        'arquivos_folhas': arquivos_folhas,
+    }
+
+
+# ----------------------------------------------------------------------------
 # CLI
 # ----------------------------------------------------------------------------
 @comando_seguro
@@ -1277,6 +1646,10 @@ def main(argv: list[str] | None = None) -> int:
     p_ren = sub.add_parser('renomear-lote')
     p_ren.add_argument('lote')
     p_ren.add_argument('--confirmar', action='store_true')
+
+    p_rec_lote = sub.add_parser('recortar-lote')
+    p_rec_lote.add_argument('lote')
+    p_rec_lote.add_argument('--confirmar', action='store_true')
 
     args = parser.parse_args(argv)
     cfg = carregar()
@@ -1322,6 +1695,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.comando == 'renomear-lote':
         res = renomear_lote_antigo(args.lote, pasta, planilha, confirmar=args.confirmar)
         print(f'{res["modo"]}: {len(res["itens"])} foto(s) do lote {res["lote"]}.')
+        return 0
+
+    if args.comando == 'recortar-lote':
+        res = recortar_lote_fotos(args.lote, pasta, planilha, confirmar=args.confirmar)
+        if res['modo'] == 'simulacao':
+            print(
+                f'Simulação recortar-lote: {res["discos"]} disco(s), {res["fotos_processadas"]} foto(s) processada(s) '
+                f'({res["recortadas"]} com recorte novo, {res["inteiras"]} inteiras). '
+                f'{res["previas"]} prévias e {res["folhas_previas"]} folha(s) de prévias geradas em {res["pasta_folhas"]}. '
+                'Nenhuma alteração gravada na planilha. Use --confirmar após revisão.'
+            )
+        else:
+            print(
+                f'Gravado recortar-lote: cantos de {res["fotos_processadas"]} foto(s) atualizados em cadastro_fotos '
+                f'e coluna fotos_ajustadas limpa em cadastro_rascunhos para o lote {res["lote"]}.'
+            )
         return 0
 
     return 0

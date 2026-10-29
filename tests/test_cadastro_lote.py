@@ -41,7 +41,11 @@ def _criar_foto_sintetica_capa(caminho: Path, tamanho=(800, 800)) -> None:
     """Cria uma imagem de capa retangular com borda escura sobre fundo branco."""
     img = Image.new('RGB', tamanho, (250, 250, 250))
     draw = ImageDraw.Draw(img)
-    x0, y0, x1, y1 = 120, 110, 680, 690
+    w, h = tamanho
+    lado = int(min(w, h) * 0.7)
+    x0 = (w - lado) // 2
+    y0 = (h - lado) // 2
+    x1, y1 = x0 + lado, y0 + lado
     draw.rectangle([x0, y0, x1, y1], fill=(225, 220, 210), outline=(35, 35, 35), width=6)
     draw.rectangle([x0 + 40, y0 + 40, x1 - 40, y1 - 40], fill=(80, 110, 150), outline=(25, 25, 25), width=3)
     img.save(caminho, 'JPEG', quality=92)
@@ -51,7 +55,12 @@ def _criar_foto_sintetica_disco(caminho: Path, tamanho=(800, 800)) -> None:
     """Cria uma imagem de vinil circular escuro sobre fundo claro (raio dentro de 10%-22% da largura)."""
     img = Image.new('RGB', tamanho, (240, 240, 240))
     draw = ImageDraw.Draw(img)
-    cx, cy, r = 400, 400, 140
+    w, h = tamanho
+    cx, cy = w // 2, h // 2
+    if h > w:
+        r = int(w * 0.40)
+    else:
+        r = 140
     draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(20, 20, 22), outline=(10, 10, 10), width=4)
     draw.ellipse([cx - 45, cy - 45, cx + 45, cy + 45], fill=(200, 60, 50))
     img.save(caminho, 'JPEG', quality=92)
@@ -577,6 +586,130 @@ def test_comandos_folhas_e_recorte(tmp_path):
         base_trabalho=tmp_path / 'out',
     )
     assert res_recorte.exists()
+
+
+def test_sintetico_foto_em_pe_fundo_branco_disco_grande():
+    """D-091: foto em pé (portrait), fundo branco, disco grande com rótulo central."""
+    w, h = 500, 900
+    im = Image.new('RGB', (w, h), (255, 255, 255))
+    draw = ImageDraw.Draw(im)
+    # Disco escuro grande (400x400 px, diâmetro 80% da largura)
+    draw.ellipse([50, 250, 450, 650], fill=(22, 22, 25))
+    # Rótulo central vermelho pequeno (100x100 px, diâmetro 20% da largura)
+    draw.ellipse([200, 400, 300, 500], fill=(205, 50, 40))
+    rgb = np.array(im)
+
+    cantos = cl.detectar_cantos_disco(rgb)
+    assert cantos is not None
+    assert cl.cantos_validos_na_imagem(cantos, w, h)
+    # Quadrado com 2% de folga em volta do disco (400 * 1.02 ~ 408 px)
+    assert 40 <= cantos[0][0] <= 52
+    assert 240 <= cantos[0][1] <= 252
+    assert 448 <= cantos[2][0] <= 460
+    assert 648 <= cantos[2][1] <= 660
+
+
+def test_sintetico_capa_clara_fundo_branco_sombra_leve():
+    """D-091: capa clara sobre fundo branco com sombra leve em foto em pé."""
+    w, h = 500, 900
+    im = Image.new('RGB', (w, h), (255, 255, 255))
+    draw = ImageDraw.Draw(im)
+    # Sombra leve deslocada (cinza ~230)
+    draw.rectangle([54, 254, 446, 646], fill=(230, 230, 230))
+    # Capa clara (cinza ~215)
+    draw.rectangle([50, 250, 440, 640], fill=(215, 215, 210))
+    draw.text((100, 300), 'TITULO DO DISCO', fill=(50, 50, 50))
+    rgb = np.array(im)
+
+    cantos = cl.detectar_cantos_capa(rgb, 'capa')
+    assert cantos is not None
+    assert cl.cantos_validos_na_imagem(cantos, w, h)
+    # Ordem: sup. esq., sup. dir., inf. dir., inf. esq.
+    assert cantos[0][0] < cantos[1][0]  # x sup esq < x sup dir
+    assert cantos[0][1] < cantos[3][1]  # y sup esq < y inf esq
+    assert cantos[3][0] < cantos[2][0]  # x inf esq < x inf dir
+    assert cantos[1][1] < cantos[2][1]  # y sup dir < y inf dir
+    # Margem de 1% aplicada em volta do retângulo de 390x390 px (~394 px)
+    assert 44 <= cantos[0][0] <= 52
+    assert 244 <= cantos[0][1] <= 252
+    assert 440 <= cantos[2][0] <= 452
+    assert 640 <= cantos[2][1] <= 652
+
+
+def test_sintetico_disco_pequeno_rotulo_rejeitado():
+    """D-091: nunca aceitar círculo com diâmetro menor que 50% do menor lado."""
+    w, h = 500, 900
+    im = Image.new('RGB', (w, h), (255, 255, 255))
+    draw = ImageDraw.Draw(im)
+    # Apenas um círculo pequeno escuro (120x120 px, 24% do menor lado)
+    draw.ellipse([190, 390, 310, 510], fill=(30, 30, 30))
+    rgb = np.array(im)
+
+    cantos = cl.detectar_cantos_disco(rgb)
+    assert cantos is None
+
+
+def test_comando_recortar_lote_simulacao_e_confirmado(tmp_path):
+    """D-091: recortar-lote gera prévias e só grava cantos e limpa fotos_ajustadas com --confirmar."""
+    pasta_fotos = tmp_path / 'entrada'
+    pasta_fotos.mkdir()
+
+    # Cria uma foto de capa e uma de disco em pé
+    arq_capa = pasta_fotos / '2026-10-28-03 01 capa.jpg'
+    arq_disco = pasta_fotos / '2026-10-28-03 02 disco.jpg'
+    _criar_foto_sintetica_capa(arq_capa, tamanho=(500, 800))
+    _criar_foto_sintetica_disco(arq_disco, tamanho=(500, 800))
+
+    planilha = _nova_planilha(
+        rascunhos=[
+            list(cl.COLUNAS),
+            ['2026-10-28-03', '2026-10-28', '03 Teste', 'rascunho', 'LP Teste', 'Marca', 'LP', 'Ficha', 'Desc', 'VG+', 'VG+', '100', '0,5', '2,5', '32', '32', '', '01 capa.jpg | 02 disco.jpg', 'SEO', 'SEO D', 'Tags', '2026-10-28 10:00', 'etiqueta', '', '', '', '', '', '', '', '', '', '', '', '', '', 'sim', ''],
+        ],
+        fotos=[
+            list(COLUNAS_FOTOS),
+            ['2026-10-28-03', '1', 'capa', 'drv1', '', '2026-10-28-03 01 capa.jpg'],
+            ['2026-10-28-03', '2', 'disco', 'drv2', '', '2026-10-28-03 02 disco.jpg'],
+            ['2026-10-28-03', '0', 'etiqueta', 'drv3', '', '2026-10-28-03 00 etiqueta.jpg'],
+        ]
+    )
+
+    # 1. Simulação
+    res_sim = cl.recortar_lote_fotos(
+        '2026-10-28',
+        pasta_fotos,
+        planilha,
+        confirmar=False,
+        base_trabalho=tmp_path / 'out',
+    )
+    assert res_sim['modo'] == 'simulacao'
+    assert res_sim['discos'] == 1
+    assert res_sim['fotos_processadas'] == 2
+    assert res_sim['previas'] == 1
+    assert res_sim['folhas_previas'] >= 1
+    assert (tmp_path / 'out' / '2026-10-28' / 'previas' / '2026-10-28-03.jpg').exists()
+    assert (tmp_path / 'out' / '2026-10-28' / 'folhas_previas' / 'folha_previa_01.jpg').exists()
+    # Planilha intacta em simulação
+    assert planilha._ss.abas['cadastro_fotos'].chamadas_update == []
+    assert planilha._ss.abas[cl.ABA].chamadas_update == []
+
+    # 2. Confirmado
+    res_conf = cl.recortar_lote_fotos(
+        '2026-10-28',
+        pasta_fotos,
+        planilha,
+        confirmar=True,
+        base_trabalho=tmp_path / 'out',
+    )
+    assert res_conf['modo'] == 'confirmado'
+    linhas_f = ler(planilha, 'cadastro_fotos')
+    # Linha da capa atualizada na coluna cantos (índice 4)
+    assert linhas_f[1][4] != ''
+    # Linha da etiqueta não tocada
+    assert linhas_f[3][4] == ''
+    # fotos_ajustadas limpa em cadastro_rascunhos
+    linhas_r = ler(planilha, cl.ABA)
+    idx_aj = cl.COLUNAS.index('fotos_ajustadas')
+    assert linhas_r[1][idx_aj] == ''
 
 
 # ----------------------------------------------------------------------------

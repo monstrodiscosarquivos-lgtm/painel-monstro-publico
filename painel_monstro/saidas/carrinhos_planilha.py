@@ -61,6 +61,7 @@ MENSAGENS_QUANDO = {
     'T2_LEMBRETE': 'Lembrete sem benefício, sem afirmar exemplar único',
     'ESGOTADO': 'Algum disco do carrinho esgotou (não manda o link)',
     'G45': 'WhatsApp de garimpo aos 45 dias (sem cupom)',
+    'G45_GERAL': 'WhatsApp aos 45 dias sem recomendação específica (quando o produto comprado não tem gênero confiável)',
     'VIP': 'WhatsApp pessoal para cliente VIP aos 75 dias (sem cupom)',
     'ALERTA_GARIMPO': 'Aviso de que chegou o disco que o cliente pediu',
 }
@@ -198,6 +199,8 @@ def garantir_abas(planilha: PlanilhaGoogle) -> list[Gravacao]:
         atuais = {str(l[0]).strip() for l in _valores(aba) if l}
         if 'T2_LEMBRETE' not in atuais:
             aba.append_rows([['T2_LEMBRETE', MENSAGENS_QUANDO['T2_LEMBRETE'], c.MODELOS_PADRAO['T2_LEMBRETE']]], value_input_option='RAW')
+        if 'G45_GERAL' not in atuais:
+            aba.append_rows([['G45_GERAL', MENSAGENS_QUANDO['G45_GERAL'], c.MODELOS_PADRAO['G45_GERAL']]], value_input_option='RAW')
     feitos.append(Gravacao(ABA_MENSAGENS, len(c.MODELOS_PADRAO), 3, 'criada' if criada else 'mantida'))
 
     feitos.append(planilha.garantir_cabecalho(ABA_BLOQUEIO, BLOQUEIO_COLUNAS, {

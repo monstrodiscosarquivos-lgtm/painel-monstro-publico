@@ -67,7 +67,7 @@ def sorteio_45(email: str, teste: Teste45) -> str:
 def disponiveis(produtos: pd.DataFrame) -> pd.DataFrame:
     """Produtos à venda agora (exibidos e com estoque) com as famílias de gênero de cada um."""
     if produtos is None or len(produtos) == 0:
-        return pd.DataFrame(columns=['id', 'nome', 'url', 'familias', 'criado_em'])
+        return pd.DataFrame(columns=['id', 'nome', 'url', 'familias', 'subcategorias', 'artista', 'criado_em'])
     p = produtos
     estoque = pd.to_numeric(p['estoque'], errors='coerce').fillna(0)
     ilimitado = p['estoque_ilimitado'].fillna(False).astype(bool) if 'estoque_ilimitado' in p.columns else False
@@ -77,13 +77,36 @@ def disponiveis(produtos: pd.DataFrame) -> pd.DataFrame:
     d['criado_em'] = pd.to_datetime(p.loc[ok, 'criado_em'], errors='coerce', utc=True) if 'criado_em' in p.columns else pd.NaT
     d['no_estoque_desde'] = p.loc[ok, 'no_estoque_desde'].fillna('').astype(str) if 'no_estoque_desde' in p.columns else ''
     d['familias'] = [generos.familias(cat, nome) for cat, nome in zip(d['categorias'], d['nome'])]
+    d['subcategorias'] = [generos.subcategorias(cat) for cat in d['categorias']]
+    d['artista'] = [generos.artista_do_disco(nome) for nome in d['nome']]
     return d
 
 
-def escolher_sugestoes(pool: pd.DataFrame, familia: str | None, ja_comprados: set[str], email: str, quantas: int = 1,
-                       api: Any = None, site: str = 'https://lojamonstro.com.br') -> list[dict]:
-    """Um disco em estoque da família do cliente, entre os mais recentes e que ele ainda não comprou.
+def coocorrencias_de_artistas(itens: pd.DataFrame) -> dict[str, set[str]]:
+    """Mapeia cada artista para os outros artistas que já foram comprados juntos no mesmo pedido."""
+    if itens is None or len(itens) == 0:
+        return {}
+    it = itens[itens['valido'].astype(bool)].copy()
+    if 'numero' not in it.columns or 'produto' not in it.columns:
+        return {}
+    it['artista'] = [generos.artista_do_disco(p) for p in it['produto']]
+    it = it[it['artista'] != '']
+    cooc: dict[str, set[str]] = {}
+    for _, g in it.groupby('numero'):
+        arts = set(g['artista'])
+        if len(arts) > 1:
+            for a in arts:
+                cooc.setdefault(a, set()).update(arts - {a})
+    return cooc
 
+
+def escolher_sugestoes(pool: pd.DataFrame, familia: str | None, ja_comprados: set[str], email: str, quantas: int = 1,
+                       api: Any = None, site: str = 'https://lojamonstro.com.br',
+                       subcategoria: str | None = None, artista: str | None = None,
+                       artistas_relacionados: set[str] | None = None) -> list[dict]:
+    """Um disco em estoque da subcategoria do cliente (ou família), entre os mais recentes e que ele ainda não comprou.
+
+    Desempate / bônus: prioriza mesmo artista ou artistas que aparecem juntos nos pedidos de outros clientes.
     Dentro dos mais recentes a escolha é fixa por cliente (espalha o mesmo disco entre pessoas diferentes).
     Se `api` for dado, o estoque é conferido na API; sem estoque, tenta o seguinte.
     """
@@ -91,7 +114,15 @@ def escolher_sugestoes(pool: pd.DataFrame, familia: str | None, ja_comprados: se
         return []
     ids = pool['id'].astype('Int64').astype(str)
     candidatos = pool[~ids.isin(ja_comprados)]
-    if familia:
+    # 1. Gênero fino primeiro: use a subcategoria da loja do disco comprado
+    if subcategoria and 'subcategorias' in candidatos.columns:
+        da_subcategoria = candidatos[[subcategoria in s for s in candidatos['subcategorias']]]
+        if len(da_subcategoria):
+            candidatos = da_subcategoria
+        elif familia:
+            do_genero = candidatos[[familia in f for f in candidatos['familias']]]
+            candidatos = do_genero if len(do_genero) else candidatos
+    elif familia:
         do_genero = candidatos[[familia in f for f in candidatos['familias']]]
         candidatos = do_genero if len(do_genero) else candidatos
     else:  # família desconhecida: só discos que a loja sabe classificar (nada de trilha sonora ou item sem gênero)
@@ -99,31 +130,61 @@ def escolher_sugestoes(pool: pd.DataFrame, familia: str | None, ja_comprados: se
         candidatos = com_genero if len(com_genero) else candidatos
     if len(candidatos) == 0:
         return []
-    candidatos = candidatos.sort_values('criado_em', ascending=False, na_position='last').head(TENTATIVAS_DE_SUGESTAO * 2 + quantas)
-    inicio = int(_pct(f'sugestao:{email}') * 100) % len(candidatos)
-    ordem = list(range(inicio, len(candidatos))) + list(range(0, inicio))
+
+    # 2. Desempate / bônus: mesmo artista ou artistas que aparecem juntos
+    artistas_rel = artistas_relacionados or set()
+    scores = []
+    for _, r in candidatos.iterrows():
+        cand_art = r['artista'] if 'artista' in r else generos.artista_do_disco(r['nome'])
+        if artista and cand_art == artista:
+            s = 2
+        elif cand_art in artistas_rel:
+            s = 1
+        else:
+            s = 0
+        scores.append(s)
+    candidatos = candidatos.assign(_score=scores)
+    candidatos = candidatos.sort_values(['_score', 'criado_em'], ascending=[False, False], na_position='last')
+
+    max_score = candidatos['_score'].max()
+    if max_score > 0:
+        melhores = candidatos[candidatos['_score'] == max_score]
+        outros = candidatos[candidatos['_score'] < max_score]
+        n_melhores = min(len(melhores), TENTATIVAS_DE_SUGESTAO * 2 + quantas)
+        melhores_top = melhores.head(n_melhores)
+        inicio = int(_pct(f'sugestao:{email}') * 100) % len(melhores_top)
+        ordem_melhores = list(range(inicio, len(melhores_top))) + list(range(0, inicio))
+        candidatos_ordenados = [melhores_top.iloc[i] for i in ordem_melhores]
+        for _, r in outros.iterrows():
+            candidatos_ordenados.append(r)
+    else:
+        candidatos_top = candidatos.head(TENTATIVAS_DE_SUGESTAO * 2 + quantas)
+        inicio = int(_pct(f'sugestao:{email}') * 100) % len(candidatos_top)
+        ordem = list(range(inicio, len(candidatos_top))) + list(range(0, inicio))
+        candidatos_ordenados = [candidatos_top.iloc[i] for i in ordem]
+
     achados: list[dict] = []
-    for k in ordem:
-        r = candidatos.iloc[k]
+    for r in candidatos_ordenados:
         if api is not None:
             tem, _ = c.estoque_do_produto(api, int(r['id']))
             if not tem:
                 continue
-        achados.append({'id': str(int(r['id'])), 'nome': c.nome_do_disco(str(r['nome'])), 'link': f'{site}/produtos/{r["url"]}/'})
+        achados.append({'id': str(int(r['id'])), 'nome': c.nome_do_disco_mensagem(str(r['nome'])), 'link': f'{site}/produtos/{r["url"]}/'})
         if len(achados) >= quantas:
             break
     return achados
 
 
 def escolher_sugestao(pool: pd.DataFrame, familia: str | None, ja_comprados: set[str], email: str, api: Any = None,
-                      site: str = 'https://lojamonstro.com.br') -> dict | None:
+                      site: str = 'https://lojamonstro.com.br', subcategoria: str | None = None,
+                      artista: str | None = None, artistas_relacionados: set[str] | None = None) -> dict | None:
     """Uma sugestão só (ou None). Ver `escolher_sugestoes`."""
-    achadas = escolher_sugestoes(pool, familia, ja_comprados, email, 1, api, site)
+    achadas = escolher_sugestoes(pool, familia, ja_comprados, email, 1, api, site, subcategoria, artista, artistas_relacionados)
     return achadas[0] if achadas else None
 
 
 def _dados_do_cliente(tabelas: Tabelas, emails: list[str]) -> dict[str, dict]:
-    """Último disco, discos já comprados e família de gênero de cada cliente."""
+    """Último disco, discos já comprados, subcategoria e família de gênero de cada cliente."""
     it = tabelas.itens
     it = it[it['valido'].astype(bool) & it['email'].isin(emails)].copy()
     if len(it) == 0:
@@ -136,8 +197,24 @@ def _dados_do_cliente(tabelas: Tabelas, emails: list[str]) -> dict[str, dict]:
         g = g.sort_values(['momento', 'valor'], ascending=[False, False])
         fams = [generos.familias(cat, nome) for cat, nome in zip(g['categorias'], g['produto'])]
         comprados = {str(int(x)) for x in pd.to_numeric(g['produto_id'], errors='coerce').dropna()} if 'produto_id' in g.columns else set()
-        saida[str(email)] = {'ultimo_disco': c.nome_do_disco(str(g['produto'].iloc[0])), 'familia': generos.familia_principal(fams),
-                             'comprados': comprados}
+
+        sub_ultimo = generos.subcategorias(g['categorias'].iloc[0])
+        subcategoria = next(iter(sub_ultimo)) if sub_ultimo else None
+        if not subcategoria:
+            todas_subs = [generos.subcategorias(cat) for cat in g['categorias']]
+            subcategoria = generos.subcategoria_principal(todas_subs)
+
+        artista = generos.artista_do_disco(str(g['produto'].iloc[0]))
+        confiavel = any(generos.tem_genero_confiavel(cat, nome) for cat, nome in zip(g['categorias'], g['produto']))
+
+        saida[str(email)] = {
+            'ultimo_disco': c.nome_do_disco_mensagem(str(g['produto'].iloc[0])),
+            'familia': generos.familia_principal(fams),
+            'subcategoria': subcategoria,
+            'artista': artista,
+            'genero_confiavel': confiavel,
+            'comprados': comprados,
+        }
     return saida
 
 
@@ -203,6 +280,7 @@ def gerar(tabelas: Tabelas, params: c.Parametros, regua: motor_regua.ParametrosR
 
     pool = disponiveis(tabelas.produtos)
     dados = _dados_do_cliente(tabelas, [str(r[2].name) for r in candidatos])
+    cooc = coocorrencias_de_artistas(tabelas.itens)
     for origem, id_, r, gatilho, grupo in candidatos:
         email = str(r.name)
         previo = ja_na_fila.get(id_, {})
@@ -214,11 +292,23 @@ def gerar(tabelas: Tabelas, params: c.Parametros, regua: motor_regua.ParametrosR
             continue
         d = dados.get(email, {})
         quantas = 3 if origem == ORIGEM_VIP else 1
-        sugs = escolher_sugestoes(pool, d.get('familia'), d.get('comprados', set()), email, quantas, api, params.site)
+        confiavel = d.get('genero_confiavel', True)
+        if not confiavel:
+            sugs = []
+        else:
+            art = d.get('artista')
+            rel = cooc.get(art, set()) if art else set()
+            sugs = escolher_sugestoes(pool, d.get('familia'), d.get('comprados', set()), email, quantas, api, params.site,
+                                      subcategoria=d.get('subcategoria'), artista=art, artistas_relacionados=rel)
         sug = sugs[0] if sugs else None
         if sug is None:
             resumo['sem sugestão em estoque'] += 1
-        modelo = 'G45' if origem == ORIGEM_45 else 'VIP'
+
+        if origem == ORIGEM_45 and not confiavel:
+            modelo = 'G45_GERAL'
+        else:
+            modelo = 'G45' if origem == ORIGEM_45 else 'VIP'
+
         primeiro = str(r.get('primeiro_nome') or '').strip().title()
         dados_msg = {'nome': primeiro or 'tudo bem', 'itens': d.get('ultimo_disco', ''), 'valor': '', 'link_carrinho': '', 'cupom': '',
                      'prazo': '', 'assinatura': params.assinatura, 'loja': params.site,
@@ -236,7 +326,9 @@ def gerar(tabelas: Tabelas, params: c.Parametros, regua: motor_regua.ParametrosR
             situacao = 'Telefone inválido'
             obs.append('telefone inválido: sem link do WhatsApp')
             resumo['sem telefone válido'] += 1
-        if sug is None:
+        if not confiavel:
+            obs.append('sem gênero confiável: a mensagem usa o modelo geral sem recomendação')
+        elif sug is None:
             obs.append('sem disco em estoque da família do cliente: a mensagem usa o texto geral')
         ger.linhas.append(c.LinhaDaFila(
             carrinho=id_, abandonado_em=_momento_do_gatilho(gatilho), cliente=str(r.get('primeiro_nome') or ''), primeiro_nome=primeiro,

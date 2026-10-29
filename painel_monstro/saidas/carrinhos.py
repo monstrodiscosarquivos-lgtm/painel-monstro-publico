@@ -41,6 +41,7 @@ MODELOS_PADRAO = {
     'ESGOTADO': 'Oi, {nome}! Aqui é a {assinatura}. Vi que ficou um carrinho seu por aqui, mas um dos discos ({itens}) acabou de sair: era exemplar único. Se quiser, separo outros parecidos pra você. Posso te mandar uns?',
     'G45': 'Oi, {nome}! Aqui é a {assinatura}. Faz um tempinho que você levou {ultimo_disco} aqui na Monstro. Chegou um que tem tudo a ver com o seu gosto: {sugestao}. Dá uma olhada: {link_sugestao}\n\nE me conta: tem algum disco que você anda caçando? Se aparecer, te aviso primeiro.',
     'VIP': 'Oi, {nome}! Aqui é a {assinatura}. Passando pra agradecer por você ser cliente de casa aqui na Monstro. Separei três discos que lembram o que você costuma levar:\n{sugestoes}\nSe quiser que eu guarde algum ou procure um disco específico, é só me falar.',
+    'G45_GERAL': 'Oi, {nome}! Aqui é o {assinatura}. Faz um tempinho que você levou {ultimo_disco} aqui na Monstro. Chegou muita coisa nova esta semana, dá uma olhada: {loja}/novidades/ E se estiver procurando algum disco, é só me falar que eu te aviso quando chegar.',
     'ALERTA_GARIMPO': 'Oi, {nome}! Aqui é a {assinatura}. Chegou o disco que você pediu pra gente procurar: {sugestao}. Te aviso primeiro, como combinado: {link_sugestao}',
 }
 MODELOS_COM_CUPOM = ('T2_FRETE', 'T3_CUPOM')
@@ -169,6 +170,35 @@ def nome_do_disco(nome: Any) -> str:
     if not artista or not album:
         return _sem_ano_no_fim(n) or n
     return f'{album} ({artista})'
+
+
+def nome_do_disco_mensagem(nome: Any) -> str:
+    """Nome do disco para mensagem de WhatsApp: "Álbum, do Artista".
+
+    Exemplo: "LP Pepeu Gomes: Rasta - (1982) - (Vinil Usado)" -> "Rasta, do Pepeu Gomes".
+    Sem separador entre artista e álbum, devolve o nome limpo.
+    """
+    disco = nome_do_disco(nome)
+    m = re.match(r'^(.*?)\s*\((.*?)\)$', str(disco).strip())
+    if not m:
+        return str(disco).strip()
+    album, artista = m.group(1).strip(), m.group(2).strip()
+    if not artista:
+        return album
+    if not album:
+        return artista
+    art_lower = artista.lower()
+    if art_lower.startswith('os '):
+        prep = 'dos ' + artista[3:]
+    elif art_lower.startswith('as '):
+        prep = 'das ' + artista[3:]
+    elif art_lower.startswith('a ') and not art_lower.startswith('a-ha'):
+        prep = 'da ' + artista[2:]
+    elif art_lower.startswith('o '):
+        prep = 'do ' + artista[2:]
+    else:
+        prep = f'do {artista}'
+    return f'{album}, {prep}'
 
 
 def _sem_ano_no_fim(texto: str) -> str:

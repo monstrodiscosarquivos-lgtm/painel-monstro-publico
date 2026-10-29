@@ -51,7 +51,7 @@ CONFIG_NOVA = [
     ('Prefixo de cupom de indicação', '', 'Pedidos com cupom que começa com este texto entram sozinhos como Indicação em "Indicações e contatos manuais". Vazio = ninguém entra sozinho'),
 ]
 
-MODELOS_NOVOS = {m: (cp.MENSAGENS_QUANDO[m], c.MODELOS_PADRAO[m]) for m in ('G45', 'VIP', 'ALERTA_GARIMPO')}  # textos em carrinhos.py
+MODELOS_NOVOS = {m: (cp.MENSAGENS_QUANDO[m], c.MODELOS_PADRAO[m]) for m in ('G45', 'G45_GERAL', 'VIP', 'ALERTA_GARIMPO')}  # textos em carrinhos.py
 MARCADORES_NOVOS = [
     ('{ultimo_disco}', 'Último disco que o cliente comprou (G45)'),
     ('{sugestao}', 'Um disco em estoque da família de gênero do cliente'),

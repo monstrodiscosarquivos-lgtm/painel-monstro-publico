@@ -160,6 +160,24 @@ Sem `--confirmar`, o comando só mostra o que faria. Com `--confirmar`, ele:
 
 Não grave duas vezes o mesmo lote: o script recusa fotos que já estão em algum rascunho.
 
+### 6b. Recortar fotos de lote já gravado (`recortar-lote`, D-091)
+
+Se os recortes automáticos de um lote gravado precisarem ser refeitos com a detecção nova (ou ajustados):
+
+```
+.venv\Scripts\python scripts\cadastro_lote.py recortar-lote <lote>
+```
+
+O comando recalcula os cantos de todas as fotos do lote em `cadastro_fotos` (exceto etiqueta) usando detecção de fundo branco e fallback Hough, gerando as prévias em `dados/cadastro_ia/<lote>/previas/` e as folhas de prévias em `dados/cadastro_ia/<lote>/folhas_previas/`.
+
+Para aplicar na planilha após conferir as folhas:
+
+```
+.venv\Scripts\python scripts\cadastro_lote.py recortar-lote <lote> --confirmar
+```
+
+Com `--confirmar`, atualiza em lote apenas a coluna `cantos` em `cadastro_fotos` e limpa a coluna `fotos_ajustadas` em `cadastro_rascunhos` para o Painel recriar as miniaturas.
+
 ### 7. Avisar o Túlio
 
 Responda em português simples, sem jargão, com:

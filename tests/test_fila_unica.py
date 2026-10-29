@@ -83,7 +83,7 @@ def test_quem_completa_45_dias_hoje_entra_no_sorteio_e_recebe_sugestao_do_genero
     assert len(g.linhas) == 1 and len(g.sorteios_novos) == 1
     l = g.linhas[0]
     assert l.origem == '45 dias' and l.modelo == 'G45' and l.cupom == '' and l.situacao == 'Contatar'
-    assert 'Refazenda (Gilberto Gil)' in l.mensagem and '{' not in l.mensagem
+    assert 'Refazenda, do Gilberto Gil' in l.mensagem and '{' not in l.mensagem
     # família "Brasil": sugere um dos MPB em estoque, nunca o Iron Maiden nem o esgotado
     assert ('Jorge Ben' in l.mensagem) or ('Caetano Veloso' in l.mensagem)
     assert 'Iron Maiden' not in l.mensagem and 'Esgotado' not in l.mensagem
@@ -147,7 +147,7 @@ def test_nao_aceita_marketing_e_bloqueio_ficam_de_fora():
 
 
 def test_sem_estoque_na_familia_usa_texto_geral_e_telefone_invalido_avisa():
-    t = mundo([('a@exemplo.com', 'Ana', '123', True)], [('a@exemplo.com', '2026-09-04', 'LP X', 900, 80.0)], [])
+    t = mundo([('a@exemplo.com', 'Ana', '123', True)], [('a@exemplo.com', '2026-09-04', 'LP Gilberto Gil: Refazenda - (Vinil Usado)', 900, 80.0)], [])
     g = gerar(t, com_whatsapp(None))
     l = g.linhas[0]
     assert l.situacao == 'Telefone inválido' and l.link_whatsapp == '' and 'sem disco em estoque' in l.observacoes
@@ -351,3 +351,81 @@ def test_ciclo_grava_origem_sorteio_e_nao_toca_na_mariana(pg_):
     assert celula(aba, 'Situação', linha_45) == 'Encerrado'
     assert len([l for l in aba.get_all_values()[1:] if l[0]]) == 3  # carrinho + 45 dias + VIP
     assert len(pg_._ss.abas['regua'].get_all_values()) == 2  # só um sorteio gravado
+
+
+# ----------------------------------------------------------------------------
+# D-089: Gênero fino, mesmo artista/coocorrência, G45_GERAL, KW Metal e formato do nome
+# ----------------------------------------------------------------------------
+def test_violator_nunca_recebe_mpb():
+    # Violator é banda de metal nacional cadastrada em KW (D-089)
+    # Loja tem MPB e Metal (Iron Maiden). Violator deve receber Iron Maiden, nunca MPB.
+    t = mundo([('v@exemplo.com', 'Vitor Metal', '62999990000', True)],
+              [('v@exemplo.com', '2026-09-04', 'LP Violator: Unholy Retribution - (Vinil Usado)', 900, 80.0)],
+              loja_padrao())
+    g = gerar(t, com_whatsapp(None))
+    assert len(g.linhas) == 1
+    l = g.linhas[0]
+    assert l.modelo == 'G45'
+    assert 'Unholy Retribution, do Violator' in l.mensagem
+    assert 'Iron Maiden' in l.mensagem
+    assert 'Jorge Ben' not in l.mensagem and 'Caetano' not in l.mensagem
+
+
+def test_cliente_de_mpb_recebe_mpb_nao_sertanejo():
+    # Cliente comprou MPB. Loja tem MPB e Sertanejo (ambos na família larga 'Brasil').
+    # A recomendação deve ser MPB (gênero fino primeiro), e não Sertanejo.
+    produtos = [
+        ['lp-sert', 'LP Chitaozinho e Xororo: Evidencias - (Vinil Usado)', 'LP > Usado > Sertanejo', 1, False, True, 10.0, 601, '2026-10-15T10:00:00+0000'],
+        ['lp-mpb', 'LP Gal Costa: Gal - (Vinil Usado)', 'LP > Usado > MPB - Música Popular Brasileira', 1, False, True, 10.0, 602, '2026-10-01T10:00:00+0000'],
+    ]
+    t = mundo([('m@exemplo.com', 'Maria MPB', '62999990000', True)],
+              [('m@exemplo.com', '2026-09-04', 'LP Gilberto Gil: Refazenda - (Vinil Usado)', 900, 80.0)],
+              produtos)
+    api = ApiFalsa({601: produto(1), 602: produto(1)})
+    g = gerar(t, com_whatsapp(None), api=api)
+    assert len(g.linhas) == 1
+    l = g.linhas[0]
+    assert 'Gal Costa' in l.mensagem
+    assert 'Chitaozinho' not in l.mensagem and 'Evidencias' not in l.mensagem
+
+
+def test_sem_genero_confiavel_usa_g45_geral_sem_indicacao_especifica():
+    # Produto sem subcategoria de gênero e artista fora de KW (ex.: trilha sonora internacional)
+    # Não indica disco específico, usa modelo G45_GERAL
+    t = mundo([('d@exemplo.com', 'Dora', '62999990000', True)],
+              [('d@exemplo.com', '2026-09-04', 'LP Deadpool Trilha Sonora - (Vinil Usado)', 900, 80.0)],
+              loja_padrao())
+    g = gerar(t, com_whatsapp(None))
+    assert len(g.linhas) == 1
+    l = g.linhas[0]
+    assert l.modelo == 'G45_GERAL'
+    assert l.link == ''
+    assert 'Deadpool Trilha Sonora' in l.mensagem
+    assert '/novidades/' in l.mensagem
+    assert 'Jorge Ben' not in l.mensagem and 'Iron Maiden' not in l.mensagem
+
+
+def test_formato_do_nome_mensagem():
+    # Formato natural para WhatsApp: "Álbum, do Artista"
+    assert c.nome_do_disco_mensagem('LP Pepeu Gomes: Rasta - (1982) - (Vinil Usado)') == 'Rasta, do Pepeu Gomes'
+    assert c.nome_do_disco_mensagem('LP Gilberto Gil: Refazenda - (1975) - (Vinil Usado)') == 'Refazenda, do Gilberto Gil'
+    assert c.nome_do_disco_mensagem('LP Violator: Unholy Retribution - (Vinil Usado)') == 'Unholy Retribution, do Violator'
+    assert c.nome_do_disco_mensagem('LP Os Mutantes: Mutantes - (1969)') == 'Mutantes, dos Mutantes'
+    assert c.nome_do_disco_mensagem('LP Jay-Z') == 'Jay-Z'
+    assert c.nome_do_disco_mensagem('LP Rita Lee 1980 (Vinil Usado)') == 'Rita Lee'
+
+
+def test_desempate_por_mesmo_artista():
+    # Loja tem 2 discos de MPB: Caetano e Jorge Ben.
+    # Cliente comprou Jorge Ben no passado: o desempate prioriza Jorge Ben (mesmo artista).
+    produtos = [
+        ['lp-caetano', 'LP Caetano Veloso: Transa', 'LP > Usado > MPB', 1, False, True, 10.0, 701, '2026-10-15T10:00:00+0000'],
+        ['lp-jorge', 'LP Jorge Ben: Tabua de Esmeralda', 'LP > Usado > MPB', 1, False, True, 10.0, 702, '2026-10-01T10:00:00+0000'],
+    ]
+    t = mundo([('j@exemplo.com', 'Joao Ben', '62999990000', True)],
+              [('j@exemplo.com', '2026-09-04', 'LP Jorge Ben: Africa Brasil', 900, 80.0)],
+              produtos)
+    api = ApiFalsa({701: produto(1), 702: produto(1)})
+    g = gerar(t, com_whatsapp(None), api=api)
+    l = g.linhas[0]
+    assert 'Jorge Ben' in l.mensagem
