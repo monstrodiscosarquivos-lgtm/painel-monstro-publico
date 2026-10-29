@@ -549,3 +549,12 @@ def test_put_so_aceita_published_true_em_products_id():
     with pytest.raises(c.ErroCadastro,match='bloqueado'):
         loja._put('products/12/variants/1',{'published':True})
 
+
+
+def test_previas_prontas_d090():
+    from painel_monstro.saidas.cadastro import previas_prontas
+    fs=[{'papel':'etiqueta'},{'papel':'capa'},{'papel':'disco'}]
+    assert previas_prontas({'fotos_ajustadas':'[{"ordem":1},{"ordem":2}]'},fs)
+    assert not previas_prontas({'fotos_ajustadas':''},fs)
+    assert not previas_prontas({'fotos_ajustadas':'[{"ordem":1}]'},fs)
+    assert not previas_prontas({'fotos_ajustadas':'xx'},fs)

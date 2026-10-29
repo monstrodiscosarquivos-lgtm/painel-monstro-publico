@@ -379,6 +379,21 @@ def resolver_fotos(planilha,drive,fs):
     return [{**f,'arquivo_drive_id':ids[id(f)]} if id(f) in ids else f for f in fs]
 
 
+LIMITE_PREVIAS_POR_RODADA=20
+
+
+def previas_prontas(linha,fs):
+    """D-090: rascunho que já teve as fotos ajustadas uma vez não refaz a cada rodada.
+
+    A prévia só serve para a revisão; o produto recebe as fotos de novo na criação. Refaz se a quantidade de
+    fotos do site mudou (foto trocada, incluída ou retirada).
+    """
+    try: refs=json.loads(linha.get('fotos_ajustadas') or '[]')
+    except ValueError: return False
+    site=[f for f in fs if not str(f.get('papel','')).strip().lower().startswith('etiqueta')]
+    return isinstance(refs,list) and len(refs)>0 and len(refs)==len(site)
+
+
 def ajustar_fotos(id_disco,fs,drive):
     fotos_site=sorted([f for f in fs if not f.get('papel','').strip().lower().startswith('etiqueta')],key=lambda f:float(f['ordem']))
     if not fotos_site: raise ErroCadastro('sem fotos do disco')
@@ -496,6 +511,7 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                 aba.update([[val]],f'{_letra(atuais[0].index(k)+1)}{n}',raw=True)
         return gravar
     cliente_discogs=discogs or Discogs(config.discogs_token)
+    previas_feitas=0  # D-090: prévias (baixar e ajustar fotos) por rodada têm limite
     for r in v[1:]:
         l=dict(zip(cab,r)); did=str(l.get('id',''))
         if not did or l.get('status') not in ('rascunho','aprovado','criado'): continue
@@ -528,7 +544,8 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                     cat=re.search(r'(?:cat[aá]logo|catno)\s*[:=]\s*([^\n;]+)',l.get('ficha',''),re.I)
                     try: dados.update(cliente_discogs.buscar(l.get('titulo',''),cat[1] if cat else '',l.get('discogs_url','')))
                     except ErroDiscogs: dados['discogs_confianca']='baixa'
-                if minhas_fotos:
+                if minhas_fotos and not previas_prontas(l,minhas_fotos) and previas_feitas<LIMITE_PREVIAS_POR_RODADA:
+                    previas_feitas+=1
                     atual=dados.get('pendencias',l.get('pendencias',''))
                     try:
                         drive=drive or DriveFotos(config,c.get('Cadastro: pasta de entrada Drive (ID)',''))

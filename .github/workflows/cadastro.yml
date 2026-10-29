@@ -20,7 +20,7 @@ concurrency:
 jobs:
   cadastro:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
     steps:
       - name: Baixar o código
         uses: actions/checkout@v4
