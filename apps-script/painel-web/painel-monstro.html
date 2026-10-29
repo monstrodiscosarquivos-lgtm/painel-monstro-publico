@@ -2427,13 +2427,14 @@ function renderK7(){
       const labels = dias.map(o => diaLabel(o.chave));
       const vFitas = dias.map(o => num(o.valor_1) || 0);
       const vSess = dias.map(o => num(o.valor_3) || 0);
-      barChart(gEl, {
+      try { barChart(gEl, {
         labels,
         bars: [{ name: "Fitas", values: vFitas, color: "var(--accent,#d97706)" }],
         line: { name: "Visitas (GA4)", values: vSess, color: "var(--muted,#64748b)" },
+        axis: v => int(v),
         aria: "Vendas da fita e visitas por dia",
         tip: i => `<b>${diaLabel(dias[i].chave)}</b><br>${int(vFitas[i])} fitas vendidas (${brl(num(dias[i].valor_2) || 0)})<br>${int(vSess[i])} visitas (GA4)`
-      });
+      }); } catch(e){ gEl.innerHTML = '<div class="empty">Não consegui desenhar o gráfico.</div>'; }
     }
   }
 
