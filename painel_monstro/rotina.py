@@ -130,9 +130,16 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
             raw_links = _ler_aba(planilha, 'ga4_links')
             if raw_links and len(raw_links) > 1:
                 df_links = pd.DataFrame(raw_links[1:], columns=raw_links[0])
-        df_k7 = k7.montar_resumo(tabelas, df_diario, df_links)
+        df_trans = None
+        try:  # D-093: origem de cada venda da fita pelo GA4; sem isso as vendas ficam "sem registro"
+            df_trans = ga4.transacoes(config, prop_ga4 if 'prop_ga4' in locals() else '')
+        except Exception as erro_t:  # noqa: BLE001
+            print(f'      K7: origem das vendas indisponível ({_resumo_do_erro(erro_t)})')
+        df_k7 = k7.montar_resumo(tabelas, df_diario, df_links, df_trans)
         pagina_dos_resumos.append(('k7_resumo', df_k7))
-        print(f'      K7: {len(df_k7)} linhas no resumo da fita')
+        origens = df_k7[df_k7['bloco'] == 'origem_vendas']
+        sem = origens[origens['chave'] == 'Sem registro no Google Analytics']['valor_1']
+        print(f'      K7: {len(df_k7)} linhas no resumo da fita; vendas sem origem no GA4: {sem.iloc[0] if len(sem) else 0}')
     except Exception as erro:  # noqa: BLE001
         print(f'      K7: indisponível ({_resumo_do_erro(erro)}); a aba k7_resumo fica como estava.')
     print('[3/5] Tudo calculado; gravando na Planilha Google')

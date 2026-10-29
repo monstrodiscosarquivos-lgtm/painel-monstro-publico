@@ -117,3 +117,29 @@ def test_privacidade_lanca_erro_se_houver_email():
     )
     with pytest.raises(ValueError, match='Dado pessoal detectado'):
         k7.montar_resumo(tabelas)
+
+
+def test_origem_das_vendas_soma_o_total_d093():
+    pedidos = pd.DataFrame([
+        {'numero': '201', 'data': '2026-10-22 10:00', 'valido': True, 'total': 89.9},
+        {'numero': '202', 'data': '2026-10-22 18:00', 'valido': True, 'total': 120.0},
+        {'numero': '203', 'data': '2026-10-29 09:00', 'valido': True, 'total': 89.9},
+    ])
+    k7_item = {'produto': 'Fita K7 Goiânia Rock City 2026', 'valor': 89.9, 'quantidade': 1, 'sku': '', 'produto_id': 375734821, 'valido': True}
+    itens = pd.DataFrame([{**k7_item, 'numero': '201', 'data': '2026-10-22 10:00'},
+                          {**k7_item, 'numero': '202', 'data': '2026-10-22 18:00'},
+                          {'numero': '202', 'data': '2026-10-22 18:00', 'produto': 'LP Outro', 'valor': 30.1, 'quantidade': 1,
+                           'sku': '', 'produto_id': 1, 'valido': True},
+                          {**k7_item, 'numero': '203', 'data': '2026-10-29 09:00'}])
+    tabelas = Tabelas(clientes=pd.DataFrame(), pedidos=pedidos, itens=itens, produtos=pd.DataFrame(columns=['id', 'estoque']))
+    trans = pd.DataFrame([
+        {'transacao': '201', 'data': '2026-10-22', 'origem': 'can-sad', 'meio': 'link-banda', 'campanha': 'grc2026', 'receita': 89.9},
+        {'transacao': 'X9', 'data': '2026-10-22', 'origem': 'ig', 'meio': 'social', 'campanha': '(not set)', 'receita': 120.0},  # casa por data e valor
+    ])
+    df = k7.montar_resumo(tabelas, None, None, trans)
+    o = df[df['bloco'] == 'origem_vendas']
+    vendas = dict(zip(o['chave'], o['valor_1']))
+    assert vendas == {'banda:can-sad': '1', 'Instagram (sem anúncio)': '1', 'Sem registro no Google Analytics': '1'}
+    assert sum(int(v) for v in vendas.values()) == 3
+    assert o.iloc[-1]['chave'] == 'Sem registro no Google Analytics'
+    assert '203' not in ' '.join(df.astype(str).values.ravel())  # número do pedido não vai para a aba

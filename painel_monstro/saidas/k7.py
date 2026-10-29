@@ -79,8 +79,40 @@ def _eh_item_k7(item: pd.Series) -> bool:
     return 'goiânia rock city 2026' in nome or 'goiania rock city 2026' in nome
 
 
+def origem_do_pedido(transacao: dict | None) -> str:
+    """Rótulo da origem de uma venda da fita (D-093). `banda:<codigo>` quando veio pelo link de uma banda."""
+    if transacao is None:
+        return 'Sem registro no Google Analytics'
+    if str(transacao.get('meio', '')).strip().lower() == 'link-banda':
+        return 'banda:' + str(transacao.get('origem', '')).strip()
+    return classificar_canal(transacao.get('origem'), transacao.get('meio'))
+
+
+def _casar_transacoes(pedidos_k7: pd.DataFrame, df_transacoes: pd.DataFrame | None) -> dict[str, dict]:
+    """Liga cada pedido da fita à compra registrada no GA4: pelo número do pedido (ou id) e,
+    se não houver, pela mesma data e mesmo valor total (cada compra do GA4 só é usada uma vez)."""
+    if df_transacoes is None or not len(df_transacoes) or not len(pedidos_k7):
+        return {}
+    trans = df_transacoes.to_dict('records')
+    usadas: set[int] = set()
+    saida: dict[str, dict] = {}
+    for _, ped in pedidos_k7.iterrows():
+        chaves = {str(ped.get(c, '')).split('.')[0].strip() for c in ('numero', 'id')} - {'', 'nan', 'None'}
+        achou = next((i for i, t in enumerate(trans) if i not in usadas and str(t.get('transacao', '')).strip() in chaves), None)
+        if achou is None:
+            dia = str(ped.get('data', ''))[:10]
+            total = pd.to_numeric(ped.get('total'), errors='coerce')
+            if pd.notna(total):
+                achou = next((i for i, t in enumerate(trans) if i not in usadas and str(t.get('data', ''))[:10] == dia
+                              and abs(float(pd.to_numeric(t.get('receita'), errors='coerce') or 0) - float(total)) < 0.05), None)
+        if achou is not None:
+            usadas.add(achou)
+            saida[str(ped['numero'])] = trans[achou]
+    return saida
+
+
 def montar_resumo(tabelas: Tabelas, df_diario: pd.DataFrame | None = None,
-                  df_links: pd.DataFrame | None = None) -> pd.DataFrame:
+                  df_links: pd.DataFrame | None = None, df_transacoes: pd.DataFrame | None = None) -> pd.DataFrame:
     """Monta a tabela `k7_resumo` no formato longo."""
     linhas: list[list[str]] = []
 
@@ -193,6 +225,25 @@ def montar_resumo(tabelas: Tabelas, df_diario: pd.DataFrame | None = None,
     canais_ord = sorted(dados_canais.items(), key=lambda x: (x[1]['compras'], x[1]['sessoes']), reverse=True)
     for c, vals in canais_ord:
         linhas.append(['canais', c, str(int(vals['sessoes'])), str(int(vals['compras'])), str(round(vals['receita'], 2)), ''])
+
+    # 4b. Origem de cada venda da fita (D-093): soma igual ao total de fitas vendidas
+    if len(itens_k7):
+        por_pedido = itens_k7.assign(_q=pd.to_numeric(itens_k7['quantidade'], errors='coerce').fillna(0),
+                                     _v=pd.to_numeric(itens_k7['valor'], errors='coerce').fillna(0) * pd.to_numeric(itens_k7['quantidade'], errors='coerce').fillna(0)
+                                     ).groupby(itens_k7['numero'].astype(str)).agg(fitas=('_q', 'sum'), receita=('_v', 'sum'))
+        peds = tabelas.pedidos.copy() if len(tabelas.pedidos) else pd.DataFrame(columns=['numero'])
+        peds['numero'] = peds['numero'].astype(str).str.split('.').str[0].str.strip()
+        peds = peds[peds['numero'].isin(set(por_pedido.index))]
+        casados = _casar_transacoes(peds, df_transacoes)
+        origens: dict[str, dict[str, float]] = {}
+        for numero, v in por_pedido.iterrows():
+            rot = origem_do_pedido(casados.get(str(numero)))
+            o = origens.setdefault(rot, {'fitas': 0, 'pedidos': 0, 'receita': 0.0})
+            o['fitas'] += int(v['fitas'])
+            o['pedidos'] += 1
+            o['receita'] = round(o['receita'] + float(v['receita']), 2)
+        for rot, v in sorted(origens.items(), key=lambda x: (x[0] == 'Sem registro no Google Analytics', -x[1]['fitas'])):
+            linhas.append(['origem_vendas', rot, str(int(v['fitas'])), str(int(v['pedidos'])), str(round(v['receita'], 2)), ''])
 
     # 5. Junto com (os 10 produtos mais comprados no mesmo pedido da fita)
     if len(itens_k7):

@@ -110,3 +110,21 @@ def passo_rotina(config, propriedade: str = '', sessao=None) -> list[tuple[str, 
         'metrics': _metricas(),
         'dimensionFilter': {'filter': {'fieldName': 'sessionMedium', 'stringFilter': {'matchType': 'EXACT', 'value': MEIO_LINKS}}}})
     return [(ABA_DIARIO, montar_diario(diario)), (ABA_LINKS, montar_links(links))]
+
+
+def transacoes(config, propriedade: str = '', sessao=None, desde: str = '2026-10-01') -> pd.DataFrame:
+    """Compras do GA4 por pedido (D-093): de onde veio a sessão em que cada pedido foi feito.
+
+    Usado só no cálculo da aba k7_resumo (não vira aba: tem o número dos pedidos).
+    Colunas: transacao, data, origem, meio, campanha, receita.
+    """
+    propriedade = str(propriedade or PROPRIEDADE_PADRAO).strip()
+    sessao = sessao or sessao_ga4(config)
+    linhas = relatorio(sessao, propriedade, {
+        'dateRanges': [{'startDate': desde, 'endDate': 'today'}],
+        'dimensions': [{'name': n} for n in ('transactionId', 'date', 'sessionSource', 'sessionMedium', 'sessionCampaignName')],
+        'metrics': [{'name': 'purchaseRevenue'}], 'keepEmptyRows': False})
+    return pd.DataFrame([{'transacao': str(o['transactionId']).strip(), 'data': _data(o['date']), 'origem': o['sessionSource'],
+                          'meio': o['sessionMedium'], 'campanha': o['sessionCampaignName'], 'receita': o['purchaseRevenue']}
+                         for o in linhas if str(o.get('transactionId', '')).strip() not in ('', '(not set)')],
+                        columns=['transacao', 'data', 'origem', 'meio', 'campanha', 'receita'])

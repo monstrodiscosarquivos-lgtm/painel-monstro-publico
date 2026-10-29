@@ -419,8 +419,15 @@ footer a{color:var(--muted)}
       <div class="tile"><div class="l">Período de vendas</div><div class="v" id="k7-periodo" style="font-size:18px;margin-top:6px">–</div><div class="s">primeira e última venda</div></div>
     </div>
 
+    <div style="margin:20px 0">
+      <h3>De onde vieram as vendas da fita</h3>
+      <p class="sub">Cada fita vendida aparece uma vez só, na origem da visita em que o pedido foi feito (Google Analytics). A soma bate com o total de fitas vendidas.</p>
+      <div class="tbl" id="k7-origem"><div class="empty">Carregando…</div></div>
+    </div>
+
     <div class="chart" style="margin:20px 0">
       <h3>Vendas por dia</h3>
+      <div class="legend"><span><i class="sw" style="background:var(--s1)"></i>fitas vendidas</span><span><i class="ln" style="border-color:var(--s2)"></i>visitas pelos links das bandas</span></div>
       <div id="k7-grafico" style="min-height:220px"></div>
     </div>
 
@@ -430,10 +437,6 @@ footer a{color:var(--muted)}
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;margin:24px 0">
-      <div>
-        <h3>Canais de venda da fita</h3>
-        <div class="tbl" id="k7-canais"><div class="empty">Carregando…</div></div>
-      </div>
       <div>
         <h3>Comprado junto com a fita</h3>
         <div class="tbl" id="k7-junto"><div class="empty">Carregando…</div></div>
@@ -2374,6 +2377,9 @@ function htmlRankingBandas(campanhaAlvo){
     }
     return '<div class="empty">Carregando…</div>';
   }
+  const fitasPorBanda = {};
+  if (campanhaAlvo === "grc2026" && D.k7) rows(D.k7).filter(o => o.bloco === "origem_vendas" && o.chave.startsWith("banda:")).forEach(o => fitasPorBanda[o.chave.slice(6)] = num(o.valor_1) || 0);
+  const comFitas = campanhaAlvo === "grc2026" && D.k7 && rows(D.k7).some(o => o.bloco === "origem_vendas");
   const LK = rows(D.g4l).map(o => { const x = {campanha: o.campanha, banda: o.banda, de: o.primeira_visita, ate: o.ultima_visita}; G4_MET.forEach(k => x[k] = num(o[k]) || 0); return x; });
   let camps = [...new Set([...Object.keys(G4_BANDAS), ...LK.map(o => o.campanha)])];
   if (campanhaAlvo) camps = camps.filter(c => c === campanhaAlvo);
@@ -2385,15 +2391,15 @@ function htmlRankingBandas(campanhaAlvo){
       .sort((a, b) => b.compras - a.compras || b.sessoes - a.sessoes || a.nome.localeCompare(b.nome));
     const t = {}; G4_MET.forEach(k => t[k] = L2.reduce((s, o) => s + o[k], 0));
     return `${camps.length > 1 ? `<h3 style="margin:${camps.indexOf(c) ? "18px" : "0"} 0 6px">${esc(cfg.nome)}</h3>` : ""}
-      <table><thead><tr><th>Banda</th><th class="n">Visitas</th><th class="n hm">Carrinhos</th><th class="n">Compras</th><th class="n">Receita</th><th class="hm">Último clique</th></tr></thead><tbody>
-      ${L2.map(o => `<tr><td>${esc(o.nome)}<div class="s">lojamonstro.com.br/${esc(o.banda)}</div></td><td class="n">${int(o.sessoes)}</td><td class="n hm">${int(o.carrinhos)}</td><td class="n"><b>${int(o.compras)}</b></td><td class="n">${brl(o.receita)}</td><td class="hm s">${o.ate ? brDiaC(o.ate) : "ainda sem cliques"}</td></tr>`).join("")}
-      <tr class="tot"><td>Total</td><td class="n">${int(t.sessoes)}</td><td class="n hm">${int(t.carrinhos)}</td><td class="n">${int(t.compras)}</td><td class="n">${brl(t.receita)}</td><td class="hm"></td></tr></tbody></table>`; }).join("")
+      <table><thead><tr><th>Banda</th><th class="n">Visitas</th><th class="n hm">Carrinhos</th><th class="n">Compras</th>${comFitas ? '<th class="n">Fitas</th>' : ""}<th class="n">Receita</th><th class="hm">Último clique</th></tr></thead><tbody>
+      ${L2.map(o => `<tr><td>${esc(o.nome)}<div class="s">lojamonstro.com.br/${esc(o.banda)}</div></td><td class="n">${int(o.sessoes)}</td><td class="n hm">${int(o.carrinhos)}</td><td class="n"><b>${int(o.compras)}</b></td>${comFitas ? `<td class="n">${int(fitasPorBanda[o.banda] || 0)}</td>` : ""}<td class="n">${brl(o.receita)}</td><td class="hm s">${o.ate ? brDiaC(o.ate) : "ainda sem cliques"}</td></tr>`).join("")}
+      <tr class="tot"><td>Total</td><td class="n">${int(t.sessoes)}</td><td class="n hm">${int(t.carrinhos)}</td><td class="n">${int(t.compras)}</td>${comFitas ? `<td class="n">${int(Object.values(fitasPorBanda).reduce((a, b) => a + b, 0))}</td>` : ""}<td class="n">${brl(t.receita)}</td><td class="hm"></td></tr></tbody></table>`; }).join("")
     + `<p class="fl-note">Receita é o valor do pedido inteiro, não só da fita. Se a pessoa clicou no link e comprou outro dia, vindo por outro caminho, a compra não aparece aqui.</p>`;
 }
 
 /* ---------- Aba K7 (D-092) ---------- */
 function k7Vazio(msg){
-  ["k7-bandas","k7-canais","k7-junto","k7-grafico"].forEach(id => { const el = $(id); if (el) el.innerHTML = `<div class="empty">${esc(msg)}</div>`; });
+  ["k7-bandas","k7-origem","k7-junto","k7-grafico"].forEach(id => { const el = $(id); if (el) el.innerHTML = `<div class="empty">${esc(msg)}</div>`; });
   ["k7-fitas","k7-receita","k7-estoque","k7-periodo"].forEach(id => { const el = $(id); if (el) el.textContent = "–"; });
   ["k7-pedidos","k7-ticket"].forEach(id => { const el = $(id); if (el) el.textContent = ""; });
 }
@@ -2429,11 +2435,11 @@ function renderK7(){
       const vSess = dias.map(o => num(o.valor_3) || 0);
       try { barChart(gEl, {
         labels,
-        bars: [{ name: "Fitas", values: vFitas, color: "var(--accent,#d97706)" }],
-        line: { name: "Visitas (GA4)", values: vSess, color: "var(--muted,#64748b)" },
+        bars: [{ name: "Fitas", values: vFitas, color: "var(--s1)" }],
+        line: { name: "Visitas pelos links das bandas", values: vSess, color: "var(--s2)" },
         axis: v => int(v),
         aria: "Vendas da fita e visitas por dia",
-        tip: i => `<b>${diaLabel(dias[i].chave)}</b><br>${int(vFitas[i])} fitas vendidas (${brl(num(dias[i].valor_2) || 0)})<br>${int(vSess[i])} visitas (GA4)`
+        tip: i => `<b>${diaLabel(dias[i].chave)}</b><br>${int(vFitas[i])} fitas vendidas (${brl(num(dias[i].valor_2) || 0)})<br>${int(vSess[i])} visitas pelos links das bandas`
       }); } catch(e){ gEl.innerHTML = '<div class="empty">Não consegui desenhar o gráfico.</div>'; }
     }
   }
@@ -2441,18 +2447,21 @@ function renderK7(){
   const bEl = $("k7-bandas");
   if (bEl) bEl.innerHTML = htmlRankingBandas("grc2026");
 
-  const cEl = $("k7-canais");
-  if (cEl){
-    const canais = r.filter(o => o.bloco === "canais");
-    if (!canais.length){ cEl.innerHTML = '<div class="empty">Sem dados de canais ainda.</div>'; }
+  const oEl = $("k7-origem");
+  if (oEl){
+    const org = r.filter(o => o.bloco === "origem_vendas");
+    if (!org.length){ oEl.innerHTML = '<div class="empty">A origem das vendas aparece depois da próxima rodada da rotina.</div>'; }
     else {
-      const cab = `<thead><tr><th>Canal</th><th class="n">Visitas</th><th class="n">Compras</th><th class="n">Receita</th></tr></thead>`;
-      const corpo = canais.map(o => `<tr><td>${esc(o.chave)}</td><td class="n">${int(num(o.valor_1))}</td><td class="n"><b>${int(num(o.valor_2))}</b></td><td class="n">${brl(num(o.valor_3))}</td></tr>`).join("");
-      const totSess = canais.reduce((s,o) => s + (num(o.valor_1) || 0), 0);
-      const totComp = canais.reduce((s,o) => s + (num(o.valor_2) || 0), 0);
-      const totRec = canais.reduce((s,o) => s + (num(o.valor_3) || 0), 0);
-      const totL = `<tr class="tot"><td>Total</td><td class="n">${int(totSess)}</td><td class="n">${int(totComp)}</td><td class="n">${brl(totRec)}</td></tr>`;
-      cEl.innerHTML = `<table>${cab}<tbody>${corpo}${totL}</tbody></table>`;
+      const nomes = Object.fromEntries((G4_BANDAS.grc2026 || {bandas: []}).bandas);
+      const rot = c => c.startsWith("banda:") ? `Link da banda ${nomes[c.slice(6)] || c.slice(6)}` : c;
+      const nota = c => c.startsWith("banda:") ? "clicou no link da banda e comprou na mesma visita"
+        : c === "Sem registro no Google Analytics" ? "o GA4 não registrou a compra (bloqueador de anúncios, cookies recusados, compra pelo app ou por fora)"
+        : c === "Direto (sem origem)" ? "digitou o endereço, favorito, ou app que não informa de onde veio" : "";
+      const ord = [...org.filter(o => o.chave.startsWith("banda:")), ...org.filter(o => !o.chave.startsWith("banda:"))];
+      const t = k => ord.reduce((s, o) => s + (num(o[k]) || 0), 0);
+      oEl.innerHTML = `<table><thead><tr><th>Origem</th><th class="n">Fitas</th><th class="n hm">Pedidos</th><th class="n">Receita da fita</th></tr></thead><tbody>
+        ${ord.map(o => `<tr><td>${esc(rot(o.chave))}${nota(o.chave) ? `<div class="s">${esc(nota(o.chave))}</div>` : ""}</td><td class="n"><b>${int(num(o.valor_1))}</b></td><td class="n hm">${int(num(o.valor_2))}</td><td class="n">${brl(num(o.valor_3))}</td></tr>`).join("")}
+        <tr class="tot"><td>Total</td><td class="n">${int(t("valor_1"))}</td><td class="n hm">${int(t("valor_2"))}</td><td class="n">${brl(t("valor_3"))}</td></tr></tbody></table>`;
     }
   }
 
