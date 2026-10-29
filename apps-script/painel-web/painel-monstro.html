@@ -2392,10 +2392,16 @@ function htmlRankingBandas(campanhaAlvo){
 }
 
 /* ---------- Aba K7 (D-092) ---------- */
+function k7Vazio(msg){
+  ["k7-bandas","k7-canais","k7-junto","k7-grafico"].forEach(id => { const el = $(id); if (el) el.innerHTML = `<div class="empty">${esc(msg)}</div>`; });
+  ["k7-fitas","k7-receita","k7-estoque","k7-periodo"].forEach(id => { const el = $(id); if (el) el.textContent = "–"; });
+  ["k7-pedidos","k7-ticket"].forEach(id => { const el = $(id); if (el) el.textContent = ""; });
+}
+const K7_SEM_ABA = "Ainda sem dados da fita. A aba k7_resumo é criada na próxima rodada da rotina.";
 function renderK7(){
   if (!D.k7){ return; }
   const r = rows(D.k7);
-  if (!r.length){ return; }
+  if (!r.length){ k7Vazio(K7_SEM_ABA); return; }
 
   const tot = Object.fromEntries(r.filter(o => o.bloco === "totais").map(o => [o.chave, o.valor_1]));
   const fitas = num(tot.fitas_vendidas) || 0;
@@ -3163,7 +3169,7 @@ function novaTentativa(key, range, depois){
       try { RENDER[key](); } catch(e){ (SEC_OF[key]||[]).forEach(s=>setErr(s,"Não consegui desenhar esta parte: o formato da aba mudou.")); }
     } catch(e){
       if (e && e.retryable && TENT[key] < 3) return novaTentativa(key, range, e.retryAfterMs);
-      (SEC_OF[key]||[]).forEach(s=>setErr(s, D[key] ? "Não consegui atualizar esta parte agora; mostrando a última leitura." : "Esta parte não carregou. Tente atualizar."));
+      (SEC_OF[key]||[]).forEach(s=>setErr(s, D[key] ? "Não consegui atualizar esta parte agora; mostrando a última leitura." : "Esta parte não carregou. Tente atualizar.")); if (key === "k7" && !D.k7) k7Vazio(K7_SEM_ABA);
     }
   }, espera);
 }
@@ -3187,7 +3193,7 @@ async function start(){
           // falha passageira (o Google limita leituras por minuto): tenta de novo sozinho, espaçado, sem aviso na tela
           novaTentativa(key, range, ev.error.retryAfterMs);
         } else {
-          (SEC_OF[key]||[]).forEach(s=>setErr(s, D[key] ? "Não consegui atualizar esta parte agora; mostrando a última leitura." : "Esta parte não carregou. Tente atualizar."));
+          (SEC_OF[key]||[]).forEach(s=>setErr(s, D[key] ? "Não consegui atualizar esta parte agora; mostrando a última leitura." : "Esta parte não carregou. Tente atualizar.")); if (key === "k7" && !D.k7) k7Vazio(K7_SEM_ABA);
         }
       }
     }, { cache:{ staleTime:60000, gcTime:3600000 }, refetchInterval:600000 });

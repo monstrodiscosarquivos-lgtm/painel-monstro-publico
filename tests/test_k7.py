@@ -7,22 +7,22 @@ from painel_monstro.saidas import k7
 
 def test_montar_resumo_k7_totais_e_privacidade():
     pedidos = pd.DataFrame([
-        {'numero': '101', 'email': 'cliente1@exemplo.com', 'data': '2026-10-25 10:00', 'valido': True, 'subtotal': 50.0, 'desconto': 0.0, 'total': 50.0},
-        {'numero': '102', 'email': 'cliente2@exemplo.com', 'data': '2026-10-26 15:30', 'valido': True, 'subtotal': 180.0, 'desconto': 0.0, 'total': 180.0},
-        {'numero': '103', 'email': 'cliente3@exemplo.com', 'data': '2026-10-27 12:00', 'valido': False, 'subtotal': 50.0, 'desconto': 0.0, 'total': 50.0},  # cancelado/inválido
+        {'numero': '101', 'email': 'cliente1@example.com', 'data': '2026-10-25 10:00', 'valido': True, 'subtotal': 50.0, 'desconto': 0.0, 'total': 50.0},
+        {'numero': '102', 'email': 'cliente2@example.com', 'data': '2026-10-26 15:30', 'valido': True, 'subtotal': 180.0, 'desconto': 0.0, 'total': 180.0},
+        {'numero': '103', 'email': 'cliente3@example.com', 'data': '2026-10-27 12:00', 'valido': False, 'subtotal': 50.0, 'desconto': 0.0, 'total': 50.0},  # cancelado/inválido
     ])
 
     itens = pd.DataFrame([
         # Pedido 101: 1 fita K7
-        {'numero': '101', 'email': 'cliente1@exemplo.com', 'data': '2026-10-25 10:00', 'valido': True,
+        {'numero': '101', 'email': 'cliente1@example.com', 'data': '2026-10-25 10:00', 'valido': True,
          'produto': 'Fita K7 Goiânia Rock City 2026', 'valor': 50.0, 'quantidade': 1, 'sku': 'K7-GRC26', 'produto_id': 375734821},
         # Pedido 102: 2 fitas K7 + 1 LP Violator
-        {'numero': '102', 'email': 'cliente2@exemplo.com', 'data': '2026-10-26 15:30', 'valido': True,
+        {'numero': '102', 'email': 'cliente2@example.com', 'data': '2026-10-26 15:30', 'valido': True,
          'produto': 'Fita K7 Goiânia Rock City 2026', 'valor': 50.0, 'quantidade': 2, 'sku': 'K7-GRC26', 'produto_id': 375734821},
-        {'numero': '102', 'email': 'cliente2@exemplo.com', 'data': '2026-10-26 15:30', 'valido': True,
+        {'numero': '102', 'email': 'cliente2@example.com', 'data': '2026-10-26 15:30', 'valido': True,
          'produto': 'LP Violator - Chemical Assault', 'valor': 80.0, 'quantidade': 1, 'sku': 'LP-VIO', 'produto_id': 99999},
         # Pedido 103 (inválido): 1 fita K7 - NÃO PODE CONTAR
-        {'numero': '103', 'email': 'cliente3@exemplo.com', 'data': '2026-10-27 12:00', 'valido': False,
+        {'numero': '103', 'email': 'cliente3@example.com', 'data': '2026-10-27 12:00', 'valido': False,
          'produto': 'Fita K7 Goiânia Rock City 2026', 'valor': 50.0, 'quantidade': 1, 'sku': 'K7-GRC26', 'produto_id': 375734821},
     ])
 
@@ -32,7 +32,7 @@ def test_montar_resumo_k7_totais_e_privacidade():
     ])
 
     clientes = pd.DataFrame([
-        {'email': 'cliente1@exemplo.com', 'nome': 'Cliente Um', 'telefone': '5562999991111'},
+        {'email': 'cliente1@example.com', 'nome': 'Cliente Um', 'telefone': 'TELEFONE_FICTICIO'},
     ])
 
     tabelas = Tabelas(clientes=clientes, pedidos=pedidos, itens=itens, produtos=produtos)
@@ -96,7 +96,7 @@ def test_montar_resumo_k7_totais_e_privacidade():
         assert '@' not in txt
         assert 'cliente' not in txt.lower()
         assert '5562' not in txt
-        assert '999991111' not in txt
+        assert 'TELEFONE_FICTICIO' not in txt
         # Nenhum número de pedido deve constar
         assert '101' not in df[col].values
         assert '102' not in df[col].values
@@ -106,12 +106,12 @@ def test_montar_resumo_k7_totais_e_privacidade():
 def test_privacidade_lanca_erro_se_houver_email():
     tabelas = Tabelas(
         clientes=pd.DataFrame(),
-        pedidos=pd.DataFrame([{'numero': '1', 'email': 'x@x.com', 'data': '2026-10-25', 'valido': True}]),
+        pedidos=pd.DataFrame([{'numero': '1', 'email': 'x@example.com', 'data': '2026-10-25', 'valido': True}]),
         itens=pd.DataFrame([
-            {'numero': '1', 'email': 'x@x.com', 'data': '2026-10-25', 'valido': True,
+            {'numero': '1', 'email': 'x@example.com', 'data': '2026-10-25', 'valido': True,
              'produto': 'Fita K7 Goiânia Rock City 2026', 'valor': 50.0, 'quantidade': 1, 'sku': '', 'produto_id': 375734821},
-            {'numero': '1', 'email': 'x@x.com', 'data': '2026-10-25', 'valido': True,
-             'produto': 'Disco Extra (comprador@email.com)', 'valor': 50.0, 'quantidade': 1, 'sku': '', 'produto_id': 12345},
+            {'numero': '1', 'email': 'x@example.com', 'data': '2026-10-25', 'valido': True,
+             'produto': 'Disco Extra (comprador@example.com)', 'valor': 50.0, 'quantidade': 1, 'sku': '', 'produto_id': 12345},
         ]),
         produtos=pd.DataFrame(),
     )
