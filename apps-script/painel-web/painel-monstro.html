@@ -402,6 +402,7 @@ footer a{color:var(--muted)}
     <p class="sub">Rascunhos feitos pelo Claude a partir das fotos. Confira o vinil e o preço, leia as pendências e aprove. A rotina cria o produto <b>oculto</b> na Nuvemshop, com as fotos na ordem; você confere no administrador da loja e publica.</p>
     <div class="seg" id="cd-filtro" role="group" aria-label="Situação"></div>
     <p class="fl-note" id="cd-nota"></p>
+    <div id="cd-lote" hidden style="position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0;border-bottom:1px solid var(--line);margin-bottom:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center"></div>
     <div class="fl-list" id="cd-lista"><div class="empty skel">Carregando…</div></div>
     <div class="secerr" id="e-cad" hidden></div>
   </section>
@@ -2938,6 +2939,36 @@ function rpForm(c){
 
 /* ---------- cadastro de discos: revisão e aprovação (a criação na loja é da rotina) ---------- */
 let CD_FILTRO = "rascunho";
+const CD_SEL = new Set(), CD_PEND = new Set();   // aprovação em lote (D-094): seleção e "conferi as pendências" sobrevivem às releituras
+const cdErro = e => e && e.message && !/^\{/.test(e.message) && !e.code ? e.message.charAt(0).toUpperCase() + e.message.slice(1) + "." : writeErr(e);
+function cdLote(){
+  const bar = $("cd-lote"); if (!bar) return;
+  const ids = cdLinhas().filter(o => cdGrupo(o.status) === "rascunho").map(o => o.id);
+  [...CD_SEL].forEach(id => { if (!ids.includes(id)) CD_SEL.delete(id); });
+  const n = CD_SEL.size;
+  bar.hidden = CD_FILTRO !== "rascunho" || !ids.length;
+  if (bar.hidden) return;
+  bar.innerHTML = `<b>${n ? n + (n === 1 ? " disco selecionado" : " discos selecionados") : "Nenhum disco selecionado"}</b>
+    <button type="button" class="primary" data-lote="aprovar"${n ? "" : " disabled"}>Aprovar ${n ? n + " " : ""}selecionado${n === 1 ? "" : "s"}</button>
+    ${n ? '<button type="button" data-lote="limpar">Limpar seleção</button>' : ""}
+    <span class="s" id="cd-lote-st">Marque "Conferi as pendências" ou "Selecionar para aprovar" em cada disco e aprove todos de uma vez.</span>`;
+  const st = $("cd-lote-st");
+  bar.querySelectorAll("[data-lote]").forEach(b => b.onclick = async () => {
+    if (b.dataset.lote === "limpar"){ CD_SEL.clear(); document.querySelectorAll("#cd-lista [data-sel]").forEach(x => x.checked = false); cdLote(); return; }
+    bar.querySelectorAll("button").forEach(x => x.disabled = true);
+    const fila = ids.filter(id => CD_SEL.has(id));
+    let ok = 0, falhas = 0;
+    for (const [i, id] of fila.entries()){
+      st.className = "s"; st.textContent = `Aprovando ${i + 1} de ${fila.length}…`;
+      const box = document.querySelector(`#cd-lista [data-cd="${CSS.escape(id)}"]`);
+      if (box && box._aprovar && await box._aprovar()){ ok++; CD_SEL.delete(id); CD_PEND.delete(id); } else falhas++;
+    }
+    st.className = falhas ? "status err" : "status ok";
+    st.textContent = `${ok} aprovado${ok === 1 ? "" : "s"}.` + (falhas ? ` ${falhas} com problema: veja a mensagem vermelha no card de cada um.` : " A rotina cria os produtos na próxima rodada (até 1 hora).");
+    bar.querySelectorAll("button").forEach(x => x.disabled = false);
+    if (ok) await afterSave();
+  });
+}
 const CD_GRADES = ["M","NM","VG+","VG","G+","G","P"];
 const CD_FILTROS = [["rascunho","Para revisar"],["aprovado","Aprovados"],["criado","Criados (ocultos)"],["erro","Com erro"],["publicado","Publicados"],["descartado","Descartados"],["todos","Todos"]];
 const cdGrupo = s => { s = String(s || "").trim().toLowerCase(); if (s.startsWith("erro")) return "erro"; if (s.startsWith("descartado")) return "descartado"; return ["rascunho","aprovado","criado","publicado"].includes(s) ? s : "rascunho"; };
@@ -2963,9 +2994,10 @@ function renderCad(){
   const lista = L.filter(o => CD_FILTRO === "todos" || cdGrupo(o.status) === CD_FILTRO);
   $("cd-nota").textContent = CD_FILTRO === "rascunho" ? "Disco usado é sempre exemplar único: cada rascunho vira um produto novo com estoque 1." :
     CD_FILTRO === "criado" ? "Produto oculto pode não abrir pelo link público. Confira no administrador da Nuvemshop, em Produtos, e publique por lá." : "";
-  if (document.querySelector("#cd-lista .changed")) return; // não apagar edição em andamento
+  if (document.querySelector("#cd-lista .changed")) { cdLote(); return; } // não apagar edição em andamento
   $("cd-lista").innerHTML = lista.length ? lista.map(cdCard).join("") : '<div class="empty">Nada nesta situação.</div>';
   $("cd-lista").querySelectorAll("[data-cd]").forEach(box => cdLigar(box, L.find(o => o.id === box.dataset.cd)));
+  cdLote();
 }
 // Novo/lacrado: sem estado de conservação, com quantidade (D-073). Usado continua exemplar único.
 const cdNovo = o => /novo|lacrad/i.test(String(o.categorias) + " " + String(o.titulo)) && !/usad/i.test(String(o.categorias) + " " + String(o.titulo));
@@ -2993,7 +3025,7 @@ function cdCard(o){
       <div><div class="k">Referência</div><span class="s">${esc(dref || "sem histórico")}</span></div>
     </div>
     ${(() => { const iq = cdIguais(o); return iq.length ? `<div class="fobs" style="margin-top:10px"><b>Já existe na loja:</b> ${iq.map(x => `<a href="https://lojamonstro.com.br/produtos/${esc(x.url)}/" target="_blank" rel="noopener">${esc(x.nome)}</a> (R$ ${esc(x.preco)}, ${x.estoque > 0 ? (x.exibir ? "à venda" : "em estoque, oculto") : "esgotado"})`).join("<br>")}. Confira se não é o mesmo exemplar antes de aprovar.</div>` : ""; })()}
-    ${pend.length ? `<div class="banner" style="margin:10px 0 0"><b>Pendências</b>${pend.map(p => "• " + esc(p)).join("<br>")}${edit ? '<label class="s" style="display:flex;gap:6px;margin-top:6px;align-items:center"><input type="checkbox" data-f="pendok" style="width:auto"> Conferi as pendências</label>' : ""}</div>` : ""}
+    ${pend.length ? `<div class="banner" style="margin:10px 0 0"><b>Pendências</b>${pend.map(p => "• " + esc(p)).join("<br>")}${edit ? '<label class="s" style="display:flex;gap:6px;margin-top:6px;align-items:center"><input type="checkbox" data-f="pendok" style="width:auto"${CD_PEND.has(o.id) ? " checked" : ""}> Conferi as pendências</label>' : ""}</div>` : ""}
     <div class="chips" style="margin-top:10px">${fotos.map(f => f.id ? `<a class="btn" style="font:500 12px var(--mono);padding:3px 8px" target="_blank" rel="noopener" href="https://drive.google.com/file/d/${esc(f.id)}/view">${String(f.ordem).padStart(2,"0")} ${esc(f.papel)}${f.ajustada ? " ✓" : ""}</a>` : `<span class="pill p-info">${String(f.ordem).padStart(2,"0")} ${esc(f.papel)}</span>`).join("")}</div>
     <div class="s">${fotos.some(f => f.ajustada) ? "✓ = foto já ajustada pela rotina. " : ""}As fotos abrem no Drive da conta da Monstro. A etiqueta de preço nunca vai para o site.</div>
     <details class="fmsg"><summary>Título, descrição e observação</summary>
@@ -3010,7 +3042,8 @@ function cdCard(o){
     ${edit ? `<div style="margin:10px 0 2px;display:flex;flex-wrap:wrap;gap:8px;align-items:center"><label class="s" style="display:flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" data-f="publicar" data-orig="${cdVaiPublicar(o) ? "sim" : "nao"}" style="width:auto"${cdVaiPublicar(o) ? " checked" : ""}> Mostrar na loja assim que for criado</label>${cdTemPendenciaAviso(o) ? `<span class="pill p-wait">Confira as pendências antes de deixar aparecer na loja.</span>` : ""}</div>` : ""}
     <div class="savebar">
       <button type="button" data-a="salvar">Salvar alterações</button>
-      ${edit ? `<button type="button" class="primary" data-a="aprovar">Aprovar para criar na loja</button>` : ""}
+      ${edit ? `<button type="button" class="primary" data-a="aprovar">Aprovar para criar na loja</button>
+      <label class="s" style="display:inline-flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" data-sel style="width:auto"${CD_SEL.has(o.id) ? " checked" : ""}> Selecionar para aprovar em lote</label>` : ""}
       ${g === "aprovado" && !o.produto_id ? `<button type="button" data-a="voltar">Voltar para revisão</button>` : ""}
       ${["rascunho","aprovado","criado","erro"].includes(g) ? `<button type="button" data-a="descartar">Descartar</button>` : ""}
       ${g === "descartado" ? `<button type="button" data-a="restaurar">Restaurar</button>` : ""}
@@ -3053,20 +3086,31 @@ function cdLigar(box, o){
     for (const [r, v] of w) await write(r, [[v]]);
     return w.length;
   }
+  async function aprovar(){
+    const pr = num(q("preco").value), vin = q("vinil").value, mudouPreco = q("preco").value.trim() !== o.preco;
+    if (!pr || pr <= 0) throw new Error("coloque o preço antes de aprovar");
+    if (/fict/i.test(o.preco_origem) && !mudouPreco) throw new Error("o preço de R$ 200 é fictício do piloto: digite o preço real (mesmo que seja 200) e aprove");
+    if (!vin) throw new Error("escolha o estado do vinil conferido na mão");
+    if (q("estoque") && !(num(q("estoque").value) >= 1)) throw new Error("coloque a quantidade em estoque antes de aprovar");
+    if (q("pendok") && !q("pendok").checked) throw new Error("marque que conferiu as pendências");
+    st.textContent = "Salvando…"; await salvar(true);
+    await write(cel("status"), [["aprovado"]]);
+    const vaiPub = q("publicar") ? q("publicar").checked : cdVaiPublicar(o);
+    st.className = "status ok"; st.textContent = vaiPub ? "Aprovado. A rotina cria e mostra o produto na loja na próxima rodada (até 1 hora)." : "Aprovado. A rotina cria o produto oculto na próxima rodada (até 1 hora).";
+  }
+  box._aprovar = async () => {
+    st.className = "status";
+    try { await aprovar(); box.querySelectorAll(".changed").forEach(x => x.classList.remove("changed")); const s2 = box.querySelector("[data-sel]"); if (s2) s2.checked = false; return true; }
+    catch(e){ st.className = "status err"; st.textContent = cdErro(e); return false; }
+  };
+  const sel = box.querySelector("[data-sel]"), pok = q("pendok");
+  if (sel) sel.onchange = () => { sel.checked ? CD_SEL.add(o.id) : CD_SEL.delete(o.id); cdLote(); };
+  if (pok) pok.addEventListener("change", () => { if (pok.checked){ CD_PEND.add(o.id); if (sel && !sel.checked){ sel.checked = true; CD_SEL.add(o.id); } } else CD_PEND.delete(o.id); cdLote(); });
   box.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
     const a = b.dataset.a; st.className = "status"; box.querySelectorAll("[data-a]").forEach(x => x.disabled = true);
     try {
       if (a === "aprovar"){
-        const pr = num(q("preco").value), vin = q("vinil").value, mudouPreco = q("preco").value.trim() !== o.preco;
-        if (!pr || pr <= 0) throw new Error("coloque o preço antes de aprovar");
-        if (/fict/i.test(o.preco_origem) && !mudouPreco) throw new Error("o preço de R$ 200 é fictício do piloto: digite o preço real (mesmo que seja 200) e aprove");
-        if (!vin) throw new Error("escolha o estado do vinil conferido na mão");
-        if (q("estoque") && !(num(q("estoque").value) >= 1)) throw new Error("coloque a quantidade em estoque antes de aprovar");
-        if (q("pendok") && !q("pendok").checked) throw new Error("marque que conferiu as pendências");
-        st.textContent = "Salvando…"; await salvar(true);
-        await write(cel("status"), [["aprovado"]]);
-        const vaiPub = q("publicar") ? q("publicar").checked : cdVaiPublicar(o);
-        st.className = "status ok"; st.textContent = vaiPub ? "Aprovado. A rotina cria e mostra o produto na loja na próxima rodada (até 1 hora)." : "Aprovado. A rotina cria o produto oculto na próxima rodada (até 1 hora).";
+        await aprovar(); CD_SEL.delete(o.id); CD_PEND.delete(o.id); cdLote();
       } else if (a === "descartar"){
         const d = box.querySelector(".cd-desc"); d.hidden = !d.hidden; st.textContent = d.hidden ? "" : "Escolha o motivo e confirme.";
         box.querySelectorAll("[data-a]").forEach(x => x.disabled = false); return;
@@ -3088,7 +3132,7 @@ function cdLigar(box, o){
       }
       box.querySelectorAll(".changed").forEach(x => x.classList.remove("changed"));
       await afterSave();
-    } catch(e){ st.className = "status err"; st.textContent = e && e.message && !/^\{/.test(e.message) && !e.code ? e.message.charAt(0).toUpperCase() + e.message.slice(1) + "." : writeErr(e); }
+    } catch(e){ st.className = "status err"; st.textContent = cdErro(e); }
     box.querySelectorAll("[data-a]").forEach(x => x.disabled = false);
   });
 }

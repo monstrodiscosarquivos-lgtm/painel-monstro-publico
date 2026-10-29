@@ -150,3 +150,10 @@ O vigia (`apps-script/vigia-cadastro.gs`, conta da Monstro) ganha `arquivarFotos
 - `k7_resumo` ganha o bloco `origem_vendas`: cada pedido da fita é ligado à compra registrada no GA4 (`transactionId` = número do pedido; se não houver, mesma data e mesmo valor). A origem é a da sessão em que o pedido foi feito: `banda:<codigo>` para utm_medium=link-banda, o canal amigável para o resto, e "Sem registro no Google Analytics" quando o GA4 não registrou. A soma das fitas bate com o total. O número do pedido não vai para a aba.
 - Painel, aba K7: tabela "De onde vieram as vendas da fita" no lugar de "Canais de venda" (que só olhava sessões da campanha), coluna "Fitas" no ranking das bandas e legenda no gráfico.
 - `scripts/lacrados_discogs.py`: busca lacrados no Discogs e baixa até 3 imagens para a pasta de entrada (decisão do Túlio em 28/10/2026: lacrado não pode ser aberto para foto). Não grava na planilha nem na loja.
+
+## D-094 · Aprovação em lote no Cadastro (29/10/2026)
+
+- Pedido do Túlio: conferir as pendências disco a disco e aprovar vários com um clique.
+- Cada rascunho ganha "Selecionar para aprovar em lote". Marcar "Conferi as pendências" já seleciona o disco.
+- Barra fixa no topo da lista "Para revisar": "Aprovar N selecionados". Aprova um por um com as mesmas travas do botão individual (preço, estado do vinil, quantidade, pendências). O que falhar fica selecionado, com a mensagem em vermelho no card.
+- A seleção sobrevive às releituras da planilha enquanto o Painel estiver aberto.
