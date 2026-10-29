@@ -2,19 +2,29 @@
 
 Atualize este arquivo ao fim de toda sessão. Ele responde a uma pergunta: onde o projeto está agora?
 
-**Última atualização:** 28/10/2026: D-086 (ajustes da Comissão passam do navegador para a aba `comissao_ajustes`). 46 testes em `apps-script/teste_local.js` e 755 testes Python passando.
+**Última atualização:** 29/10/2026: D-091 confirmado (recortes do lote 2026-10-28 gravados na planilha; cantos de 335 fotos atualizados em cadastro_fotos e fotos_ajustadas limpa em cadastro_rascunhos; push de D-089 e D-091 realizado na pasta pública). Suíte completa com 757 testes verdes.
 
-## D-086 · ajustes da Comissão na planilha (28/10/2026)
+## D-091 · recorte de fotos por detecção de fundo branco e comando recortar-lote (29/10/2026)
+- **Detecção de fundo branco:** para fotos em pé (H > W) e fundo claro, reduz para 500 px de largura, segmenta por limiar de cinza (< 235 e limiares adaptativos com fechamento morfológico) e contorno principal. Capas e encartes usam minAreaRect com 1% de margem; vinil usa quadrado com 2% de folga e rejeita diâmetros < 50% do menor lado (eliminando recortes falsos no rótulo central). Fallback transparente para o método Hough anterior e foto inteira em caso de falha dupla.
+- **Comando recortar-lote LOTE [--confirmar]:** recalcula cantos em lote para fotos já registradas em cadastro_fotos (exceto etiqueta), gera miniaturas individuais em dados/cadastro_ia/<lote>/previas/ e folhas de contato em dados/cadastro_ia/<lote>/folhas_previas/. Com --confirmar, atualiza em lote apenas a coluna cantos de cadastro_fotos e limpa fotos_ajustadas em cadastro_rascunhos.
+- **Lote 2026-10-28 gravado na planilha:** após OK do Túlio, executado `recortar-lote 2026-10-28 --confirmar`. Cantos de 335 fotos atualizados em `cadastro_fotos` e coluna `fotos_ajustadas` limpa em `cadastro_rascunhos`. Nas próximas 4 a 5 rodadas da rotina, as miniaturas ajustadas serão geradas na loja (20 discos por vez). Push de D-089 e D-091 enviado ao repositório público `painel-monstro-publico`.
+- **Testes sintéticos e regressão:** 4 testes novos em tests/test_cadastro_lote.py (foto em pé com disco grande, capa clara sobre fundo branco com sombra leve, rejeição de rótulo pequeno e simulação/confirmação do comando). Suíte completa com 757 testes passando.
 
-- Os ajustes de cada mês da aba Comissão (pedidos tirados da base, cupons, frete grátis, taxas reais, pedidos manuais, estornos digitados) agora ficam na aba `comissao_ajustes` da planilha, uma linha por mês, com o JSON em `ajustes`, data/hora e email de quem mexeu. Valem em qualquer navegador.
-- O Painel lê `comissao_ajustes!A1:D200`. A linha da planilha manda; sem ela, usa o que estiver no navegador. Grava 1,5 s depois da última mudança e mostra "salvando…" / "salvo às HH:MM" ao lado de "Ajustes deste mês". Se falhar, mostra o erro e o ajuste fica guardado no navegador.
-- Migração: ao abrir um mês que só tinha ajustes no navegador, o Painel grava na planilha uma vez e avisa "Ajustes deste navegador salvos na planilha". Abra cada mês com ajustes no navegador onde eles foram digitados.
-- `comCalc`, Registrar o mês e as outras abas não mudaram. O Cofre já tem `comissao_ajustes` nas abas restritas (feito pelo Cowork).
-- Falta: Túlio colar o `Painel.html` novo no projeto Entrada (Nova versão) e o Cowork republicar o Painel do claude.ai com o `painel-monstro.html` novo.
+**Última atualização:** 29/10/2026: D-089 (indicações da Fila mais certeiras: gênero fino primeiro, bônus para mesmo artista/coocorrência, modelo G45_GERAL sem recomendação quando sem gênero confiável, KW de Metal ampliado e formato natural "Álbum, do Artista"). Suíte completa com 753 testes verdes.
 
-### Avisar o Cowork: D-086
+## D-089 · indicações da fila (G45 e VIP) mais certeiras (29/10/2026)
+- **Gênero fino primeiro:** `generos.subcategorias` e `fila_unica.escolher_sugestoes` priorizam discos em estoque da mesma subcategoria da loja (ex.: "Hard Rock / Heavy Metal / Metal", "MPB - Música Popular Brasileira", "Rock / Pop Nacional", "Samba / Pagode", "Jazz / Blues", "Sertanejo", etc.). Só se não houver estoque na subcategoria cai para a família ampla. Cliente de MPB recebe MPB e não sertanejo; Violator nunca recebe MPB.
+- **Desempate e bônus:** desempate prioriza discos do mesmo artista (+2) e artistas que aparecem juntos nos pedidos de outros clientes (`coocorrencias_de_artistas`, +1).
+- **Sem gênero confiável:** produto sem subcategoria de gênero e artista fora de KW usa mensagem geral sem recomendação específica (`G45_GERAL`). Modelo adicionado aos padrões da aba `Mensagens`.
+- **Bandas de Metal nacional:** lista `KW['Metal']` ampliada com Violator, Korzus, Torture Squad, Dorsal Atlântica, Nervosa, Crypta e Shaman (Sepultura, Angra, Krisiun e Viper já existiam).
+- **Formato natural na mensagem:** `nome_do_disco_mensagem` gera formato de conversa "Álbum, do Artista" (ex.: "Rasta, do Pepeu Gomes" em vez de "Rasta (Pepeu)").
 
-- Republicar o Painel do claude.ai com `apps-script/painel-web/painel-monstro.html`. Ele passa a ler e gravar `comissao_ajustes!A1:D200` (permissão de leitura e gravação nessa faixa). Nenhuma aba lida pelo painel mudou de nome ou colunas.
+## Lote 2026-10-28 · cadastro de 93 discos por agente local (29/10/2026)
+- **Lote `2026-10-28` gravado:** 346 fotos na pasta `entrada`. 4 casos pulados (`d01` a `d03` de sobras antigas e `d84` de Country & Western 2 sem capa frontal). Gravados 93 rascunhos (`2026-10-28-03` a `2026-10-28-95`) em `cadastro_rascunhos` e 338 fotos em `cadastro_fotos`. 339 arquivos renomeados na pasta local de entrada. Preços mantidos em branco para preenchimento manual pelo Túlio no Painel.
+
+## D-085 · garimpo aceita nome de produto colado (27/10/2026)
+
+- `garimpo.palavras_do_pedido`: artista obrigatório; no disco ignora parênteses, anos, formato/estado e palavras curtas; com "/" ou ":" vale o primeiro trecho; cor do pedido obrigatória; disco só com ano mantém o ano. Nenhuma aba mudou. Disco de uma letra/sigla (Maglore "V", "D.O.L.L.") casa com qualquer disco do artista: Túlio confirmou que fica assim, ele confere na Fila se serve.
 
 ## D-078 · cadastro de discos por agente local (`scripts/cadastro_lote.py`, 27/10/2026)
 

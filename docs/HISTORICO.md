@@ -13,12 +13,40 @@ Modelo:
 - Próximo passo:
 ```
 
-## 2026-10-28 · Antigravity · ajustes da Comissão na planilha (D-086)
-- Feito: `comState`/`comSaveState` do Painel passam a usar a aba `comissao_ajustes` (prioridade da planilha, reserva no localStorage, gravação agrupada em 1,5 s com status "salvando…"/"salvo", erro mantém cópia local) e migram uma única vez os ajustes que só existiam no navegador. Faixa `comissao_ajustes!A1:D200` incluída nas leituras da Comissão. `Painel.html` regerado. Cofre não alterado nesta sessão (a restrição da aba foi feita pelo Cowork).
-- Arquivos alterados: `apps-script/painel-web/painel-monstro.html`, `apps-script/painel-web/Painel.html`, `apps-script/teste_local.js`, `docs/DECISOES.md`, `docs/ESTADO.md`, `docs/HISTORICO.md`.
-- Como conferir: `node apps-script/teste_local.js` (46 testes) e `..\..\.venv\Scripts\python -m pytest -q`. No Painel, mudar um ajuste da Comissão, esperar "salvo" e abrir o mesmo mês em outro navegador.
-- Problemas conhecidos: no Painel do claude.ai não há email do usuário, então `atualizado_por` fica vazio ali.
-- Próximo passo: Túlio atualizar `Painel.html` na Entrada (Nova versão) e o Cowork republicar o Painel do claude.ai.
+## 2026-10-29 · Antigravity · confirmação de recortes D-091 e push no repositório público
+- Feito: executado `recortar-lote 2026-10-28 --confirmar` com atualização dos cantos de 335 fotos em `cadastro_fotos` e limpeza da coluna `fotos_ajustadas` em `cadastro_rascunhos` para regeneração das prévias pelo Painel. Auditoria de segurança confirmada limpa no repositório público e executados `git add`, `git commit` ("Indicações da fila (D-089) e recorte por fundo branco (D-091)") e `git push` com sucesso em `migracao-publica/painel-monstro-publico`.
+- Arquivos alterados: planilha Google (`cadastro_fotos`, `cadastro_rascunhos`), `migracao-publica/painel-monstro-publico` (commit e push), `docs/ESTADO.md`, `docs/HISTORICO.md`.
+- Como conferir: conferir `cadastro_fotos` na planilha e commits no repositório público GitHub `monstrodiscosarquivos-lgtm/painel-monstro-publico`.
+- Problemas conhecidos: nenhum.
+- Próximo passo: acompanhar regeneração das prévias nas próximas rodadas da rotina (20 discos por vez).
+
+## 2026-10-29 · Antigravity · detecção de cantos por fundo branco e comando recortar-lote (D-091)
+- Feito: implementada detecção de cantos por fundo branco em fotos claras/em pé (capas com minAreaRect e 1% de margem; vinil com bounding box e 2% de folga, rejeitando diâmetros < 50% do menor lado para não recortar apenas o rótulo). Novo comando recortar-lote LOTE [--confirmar] para recalcular cantos e gerar folhas de prévias. Executado no lote 2026-10-28 em modo simulação: 95 discos processados, 298 fotos com novo recorte automático e 37 inteiras, 8 folhas de prévias geradas em dados/cadastro_ia/2026-10-28/folhas_previas/. Criados 4 testes sintéticos e suíte completa executada com 757 testes passando. Planilha não alterada (aguardando ok).
+- Arquivos alterados: scripts/cadastro_lote.py, tests/test_cadastro_lote.py, docs/DECISOES.md, docs/CADASTRO_IA.md, docs/ESTADO.md, docs/HISTORICO.md.
+- Como conferir: .venv\Scripts\python -m pytest tests/test_cadastro_lote.py -q (41 testes) e folhas de prévias em dados/cadastro_ia/2026-10-28/folhas_previas/.
+- Problemas conhecidos: nenhum.
+- Próximo passo: aguardar OK do Túlio para rodar recortar-lote 2026-10-28 --confirmar.
+
+## 2026-10-29 · Antigravity · indicações mais certeiras na fila G45 e VIP (D-089)
+- Feito: implementado gênero fino primeiro com base na subcategoria da loja (caindo para a família larga apenas se não houver estoque na subcategoria); desempate priorizando mesmo artista (+2) e artistas com coocorrência em pedidos de outros clientes (+1); fallback para modelo `G45_GERAL` sem recomendação específica para itens sem gênero confiável (adicionado à aba Mensagens); lista KW de Metal ampliada com bandas nacionais (Violator, Korzus, Torture Squad, Dorsal Atlântica, Nervosa, Crypta, Shaman); formato natural de nome na mensagem ("Álbum, do Artista"). Criados 5 testes específicos cobrindo todos os cenários exigidos e suíte completa executada com 753 testes passando.
+- Arquivos alterados: `painel_monstro/motor/generos.py`, `painel_monstro/saidas/carrinhos.py`, `painel_monstro/saidas/carrinhos_planilha.py`, `painel_monstro/saidas/fila_unica.py`, `painel_monstro/saidas/regua_planilha.py`, `tests/test_fila_unica.py`, `docs/DECISOES.md`, `docs/ESTADO.md`, `docs/HISTORICO.md`.
+- Como conferir: `.venv\Scripts\python -m pytest tests/test_fila_unica.py -q` (27 testes) e `.venv\Scripts\python -m pytest -q` (753 testes passando).
+- Problemas conhecidos: nenhum.
+- Próximo passo: commit das alterações da D-089.
+
+## 2026-10-29 · Antigravity · gravação do lote 2026-10-28 (93 rascunhos)
+- Feito: processado o lote `2026-10-28` com 346 fotos na pasta `entrada`. Geradas 29 folhas de contato, estruturado o lote com 93 discos para cadastrar e 4 pulados (d01 a d03 de sobras anteriores e d84 sem capa frontal). Rodada a conferência (0 erros, 101 avisos) e, após confirmação do Túlio, executado `gravar --confirmar`: gravados 93 rascunhos (`2026-10-28-03` a `2026-10-28-95`) em `cadastro_rascunhos`, inseridas 338 linhas em `cadastro_fotos` e renomeadas 339 fotos na pasta `entrada`. Preços mantidos em branco para preenchimento posterior no Painel.
+- Arquivos alterados: `dados/cadastro_ia/2026-10-28/lote.json`, `dados/cadastro_ia/2026-10-28/conferencia.md`, `dados/cadastro_ia/2026-10-28/plano.json`, `docs/HISTORICO.md`, `docs/ESTADO.md`.
+- Como conferir: aba Cadastro do Painel (`2026-10-28-03` a `2026-10-28-95`).
+- Problemas conhecidos: nenhum.
+- Próximo passo: Túlio definir os preços e revisar/aprovar os 93 rascunhos no Painel.
+
+## 2026-10-27 · Antigravity · garimpo aceita nome de produto colado (D-085)
+- Feito: nova `garimpo.palavras_do_pedido` (ignora parênteses, anos, formato/estado e palavras de 1 a 2 letras; com "/" ou ":" vale o primeiro trecho depois do artista; cor do pedido obrigatória; disco só com ano mantém o ano). `alertas_garimpo` passa a usar essa função; `juntar_desejos` guarda o artista do formulário (coluna interna `artista`). 4 testes novos (Bon Jovi casa, Coisa de Louco vermelho não casa com azul, Nenhum de Nós 1992 não casa com Cardume, palavras extraídas).
+- Arquivos alterados: `painel_monstro/saidas/garimpo.py`, `painel_monstro/saidas/fila_unica.py`, `tests/test_garimpo_e_meta.py`, `docs/DECISOES.md`, `docs/ESTADO.md`, `docs/HISTORICO.md`.
+- Como conferir: `.venv\Scripts\python -m pytest tests/test_garimpo_e_meta.py tests/test_fila_unica.py -q` (56 passando). Na próxima rodada, a aba `Fila` pode ganhar linhas Garimpo de pedidos antigos que passaram a casar.
+- Problemas conhecidos: pedidos cujo disco é uma letra ou sigla (Maglore "V", Heaven's Guardian "D.O.L.L.") ficam só com o artista obrigatório e casam com qualquer disco do artista que chegar.
+- Próximo passo: nenhum. Túlio confirmou que disco de uma letra/sigla pode casar com qualquer disco do artista; ele confere na Fila se o aviso serve.
 
 ## 2026-10-27 · Antigravity · script de cadastro por agente local (D-078) e gravação do lote 2026-10-27
 - Feito: implementado `scripts/cadastro_lote.py` (`folhas`, `recorte`, `conferir`, `gravar`, `renomear-lote`) conforme `docs/CADASTRO_IA_SCRIPT.md`, adicionado `CADASTRO_PASTA_LOCAL` em `painel_monstro/config.py` e `env-exemplo.txt`, e criada a suíte `tests/test_cadastro_lote.py` (37 testes cobrindo regressão exata do lote 2026-10-26, validações, numeração, colisões, retomada por `plano.json`, modo simulação, detecção sintética e 92,1% de acerto nas fotos reais). Conferido o lote antigo `2026-10-26` contra a planilha real (recusado com 142 erros de fotos já cadastradas). Geradas as folhas do lote `2026-10-27` (29 fotos na pasta `entrada`), montado `dados/cadastro_ia/2026-10-27/lote.json` (2 discos para cadastrar e 7 pulados), rodado `conferir` (0 erros, 0 avisos) e, após confirmação do Túlio, executado `gravar --confirmar` (gravados `2026-10-27-01` e `2026-10-27-02` em `cadastro_rascunhos` e 8 linhas em `cadastro_fotos`, com 12 fotos renomeadas na pasta `entrada`).
