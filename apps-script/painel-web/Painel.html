@@ -1206,7 +1206,7 @@ function renderBrevo(){
 
 
 /* ---------- Fila de WhatsApp: leitura ao vivo, marcação feita na planilha ---------- */
-const FILA_GID = 2122875977, FV_HIST = 101003;
+const FILA_GID = 2122875977, FV_HIST = 101003, FV_ENVIAR = 101001;   // filtro "Para enviar" da aba Fila
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/" + SHEET + "/edit";
 const ORIGEM_ORDEM = ["Carrinho","Garimpo","VIP","45 dias"];
 function ofertaLabel(m){
@@ -1257,7 +1257,7 @@ function fcard(o){
   const of = ofertaLabel(o["Modelo usado"]);
   const prox = num(o["Próximo toque"]);
   const antecipado = String(o["Modelo usado"]).toUpperCase().includes("T3_CUPOM") && prox === 2;
-  const linha = `${SHEET_URL}#gid=${FILA_GID}&fvid=${FV_HIST}&range=AK${o._row}:AN${o._row}`;
+  const linha = `${SHEET_URL}#gid=${FILA_GID}&fvid=${FV === "enviar" ? FV_ENVIAR : FV_HIST}&range=AK${o._row}:AN${o._row}`;
   const rec = String(o["Recuperado"]).trim() === "Sim";
   const m = (k, v) => v ? `<div><div class="k">${k}</div>${v}</div>` : "";
   return `<article class="fcard">
