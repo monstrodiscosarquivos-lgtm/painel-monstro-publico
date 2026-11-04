@@ -465,6 +465,44 @@ def test_estoque_lacrado_usa_coluna_e_usado_e_sempre_um(titulo, cats, estoque, e
     assert c.estoque_da_linha(l) == esperado
 
 
+@pytest.mark.parametrize('valor', ['infinito', 'Infinito', 'INFINITO', '∞', 'sob demanda', 'Sob Demanda', 'sob-demanda', 'SOB DEMANDA'])
+def test_estoque_infinito_valores_aceitos_em_lacrado(valor):
+    l = linha(titulo='LP Banda - Disco (Novo/Lacrado)', categorias='LP, Novo/Lacrado', estoque=valor)
+    assert c.eh_estoque_infinito(l) is True
+    assert c.estoque_da_linha(l) is None
+
+
+@pytest.mark.parametrize('valor', ['infinito', '∞', 'sob demanda'])
+def test_estoque_infinito_ignorado_para_usado(valor):
+    l = linha(titulo='LP Belchior - Alucinação (Vinil Usado)', categorias='LP, Usado, MPB', estoque=valor)
+    assert c.eh_estoque_infinito(l) is False
+    assert c.estoque_da_linha(l) == 1
+
+
+def test_corpo_produto_variante_estoque_infinito():
+    cats = categorias() + [dict(id=10, name={'pt': 'Novo/Lacrado'}, parent=1)]
+    # Lacrado com estoque infinito gera stock_management=False e sem stock
+    l_inf = linha(titulo='LP Banda - Disco (Novo/Lacrado)', categorias='LP, Novo/Lacrado', estoque='infinito')
+    r_inf = c.corpo_produto(l_inf, cats)
+    v_inf = r_inf['variants'][0]
+    assert v_inf['stock_management'] is False
+    assert 'stock' not in v_inf
+
+    # Lacrado normal gera stock_management=True e stock numérico
+    l_norm = linha(titulo='LP Banda - Disco (Novo/Lacrado)', categorias='LP, Novo/Lacrado', estoque='4')
+    r_norm = c.corpo_produto(l_norm, cats)
+    v_norm = r_norm['variants'][0]
+    assert v_norm['stock_management'] is True
+    assert v_norm['stock'] == 4
+
+    # Usado com 'infinito' continua exemplar único (stock_management=True, stock=1)
+    l_usd = linha(titulo='LP Belchior - Alucinação (Vinil Usado)', categorias='LP, Usado, MPB', estoque='infinito')
+    r_usd = c.corpo_produto(l_usd, cats)
+    v_usd = r_usd['variants'][0]
+    assert v_usd['stock_management'] is True
+    assert v_usd['stock'] == 1
+
+
 def test_novo_lacrado_repetido_vale_o_ramo_do_formato():
     # Erro real da fita Goiânia Rock City 2026 (21/10/2026): Novo/Lacrado existe em LP e em Fitas Cassete
     cats = [dict(id=1,name={'pt':'LP'},parent=None),dict(id=2,name={'pt':'Novo/Lacrado'},parent=1),

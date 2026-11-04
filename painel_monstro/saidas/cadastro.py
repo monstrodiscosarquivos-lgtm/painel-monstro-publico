@@ -29,7 +29,7 @@ from painel_monstro.saidas.planilha_google import _letra
 
 ABA='cadastro_rascunhos'
 BASE='id lote pasta status titulo marca categorias ficha descricao capa vinil preco preco_referencia peso_kg altura_cm largura_cm comprimento_cm discogs_url discogs_confianca pendencias fotos seo_titulo seo_descricao tags produto_id link_loja observacao_tulio atualizado_em'.split()
-EXTRAS='discogs_id faixas creditos discogs_menor_preco discogs_a_venda faixas_na_descricao preco_origem cadastro_execucao fotos_ajustadas estoque publicar'.split()
+EXTRAS='discogs_id faixas creditos discogs_menor_preco discogs_a_venda faixas_na_descricao preco_origem cadastro_execucao fotos_ajustadas estoque publicar marcado_vinil'.split()
 COLUNAS=BASE+EXTRAS
 FOTOS='id_disco ordem papel arquivo_drive_id cantos observacao'.split()
 
@@ -136,6 +136,7 @@ def preco_referencia(titulo, produtos, hoje):
 
 def peso_padrao(linha):
     n=texto_normal(' '.join(str(linha.get(k,'')) for k in ('titulo','ficha','descricao')))
+    if re.search(r'\blivro\b', n) or 'livros' in texto_normal(str(linha.get('categorias',''))): return .60
     if re.match(r'^cd\b',n): return .20
     if re.match(r'^(fita|k7)\b',n): return .17
     if re.match(r'^compacto\b',n): return .20
@@ -164,21 +165,35 @@ def corpo_produto(linha, categorias):
             m=re.match(r'^([A-Z])\d*\s+(.+)',faixa)
             if m: lados.setdefault(m[1],[]).append(m[2])
         if lados: descricao+='\n\n'+' / '.join('Lado '+l+': '+'; '.join(fs) for l,fs in lados.items())
+    variante={'price':f'{preco:.2f}','sku':sku_da_linha(linha['id']),
+              'weight':numero(linha.get('peso_kg')) or peso_padrao(linha),
+              'height':numero(linha.get('altura_cm')) or 2.5,
+              'width':numero(linha.get('largura_cm')) or 32,
+              'depth':numero(linha.get('comprimento_cm')) or 32}
+    if eh_estoque_infinito(linha):
+        variante['stock_management']=False
+    else:
+        variante['stock_management']=True
+        variante['stock']=estoque_da_linha(linha)
     return {'name':{'pt':linha['titulo']},'brand':linha.get('marca',''),
             'description':{'pt':descricao_html(descricao)},'published':False,
             'categories':mapa_categorias(categorias,linha.get('categorias','')),
             'seo_title':{'pt':str(linha.get('seo_titulo',''))[:70]},
             'seo_description':{'pt':str(linha.get('seo_descricao',''))[:320]},'tags':linha.get('tags',''),
-            'variants':[{'price':f'{preco:.2f}','stock_management':True,'stock':estoque_da_linha(linha),'sku':sku_da_linha(linha['id']),
-                         'weight':numero(linha.get('peso_kg')) or peso_padrao(linha),
-                         'height':numero(linha.get('altura_cm')) or 2.5,
-                         'width':numero(linha.get('largura_cm')) or 32,
-                         'depth':numero(linha.get('comprimento_cm')) or 32}]}
+            'variants':[variante]}
+
+
+def eh_estoque_infinito(linha):
+    """Retorna True se for novo/lacrado/sob demanda com estoque infinito. Usado é sempre 1 (D-073, D-096)."""
+    if re.search(r'usad', str(linha.get('categorias',''))+' '+str(linha.get('titulo','')), re.I): return False
+    val=str(linha.get('estoque','')).strip().lower()
+    return bool(re.search(r'^(infinito|∞|sob[- ]?demanda)$', val, re.I))
 
 
 def estoque_da_linha(linha):
-    """Usado é sempre exemplar único (1). Lacrado/novo usa a coluna `estoque` (vazio = 1, máximo 999). D-073."""
+    """Usado é sempre exemplar único (1). Lacrado/novo usa a coluna `estoque` (vazio = 1, máximo 999). D-073, D-096."""
     if re.search(r'usad', str(linha.get('categorias',''))+' '+str(linha.get('titulo','')), re.I): return 1
+    if eh_estoque_infinito(linha): return None
     n=numero(linha.get('estoque'))
     return max(1,min(int(n),999)) if n else 1
 

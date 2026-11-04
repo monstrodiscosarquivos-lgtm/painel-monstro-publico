@@ -157,3 +157,41 @@ O vigia (`apps-script/vigia-cadastro.gs`, conta da Monstro) ganha `arquivarFotos
 - Cada rascunho ganha "Selecionar para aprovar em lote". Marcar "Conferi as pendências" já seleciona o disco.
 - Barra fixa no topo da lista "Para revisar": "Aprovar N selecionados". Aprova um por um com as mesmas travas do botão individual (preço, estado do vinil, quantidade, pendências). O que falhar fica selecionado, com a mensagem em vermelho no card.
 - A seleção sobrevive às releituras da planilha enquanto o Painel estiver aberto.
+
+## D-095 · Conversão HEIC e cadastro de discos lacrados no agente local (03/11/2026)
+
+- Comando novo `converter-heic` em `scripts/cadastro_lote.py`: converte fotos `.HEIC` para `.jpg` na raiz da entrada (qualidade 92, preservando metadados EXIF com DateTimeOriginal e pulando arquivos existentes sem apagar nem mover os originais).
+- Suporte a `formato: "lacrado"` no lote JSON: o comando `conferir` dispensa notas Goldmine de capa e vinil, não exige tópicos de estado na descrição e valida tags com `LP, LP Novo, Vinil Lacrado`. Título gerado no padrão `LP <Artista> - <Álbum> (<Ano>) - (Novo/Lacrado)` (com detalhes de cor, duplo e importado quando aplicável) e categorias no padrão `LP, Novo/Lacrado, Nacionais/Importados, Novidades`. Preço e quantidade lidos do CSV e release do Discogs preservado com pendência `sem Discogs` quando ausente.
+
+## D-096 · Edição completa de rascunhos e estoque infinito no Cadastro (04/11/2026)
+
+- Parte 1: Edição mais completa do rascunho na aba Cadastro do Painel Web (`apps-script/painel-web/painel-monstro.html`).
+  - O bloco "Editar cadastro" (antigo "Título, descrição e observação") passa a abrir por padrão para rascunhos (`<details class="fmsg" open>`).
+  - Campos adicionais tornados editáveis com padrão `data-f/data-orig/changed` e gravação apenas do que mudou:
+    - `categorias`: texto separado por vírgula, com sugestões das categorias usadas em produtos parecidos da aba `produtos`.
+    - `capa`: select com `M NM VG+ VG G+ G F` (atualiza em tempo real o tópico "• Capa" da descrição, simétrico ao vinil, e omitido para novo/lacrado).
+    - `tags`: texto.
+    - `peso_kg`: número decimal, com ajuda exibindo os padrões de peso (`LP simples 0,50 kg · capa dupla/encarte 0,55 kg · duplo 0,80 kg · compacto/CD 0,20 kg · K7 0,17 kg`).
+    - `discogs_url`: texto.
+  - Fotos: editor com reordenação por setas subir/descer e papel configurável (`capa`, `contracapa`, `encarte frente`, `encarte verso`, `encarte aberto`, `capa interna`, `disco`, `rótulo`, `etiqueta`). Opção "não usar" atribui papel `etiqueta` (que nunca vai para a loja). Gravação pontual na aba `cadastro_fotos` nas linhas do disco mantendo ordem 1..N. Se `fotos_ajustadas` estiver preenchido em `cadastro_rascunhos`, a célula é limpa para a rotina refazer as prévias.
+  - Validações antes de salvar: título sem travessão, preço positivo quando preenchido, peso entre 0,1 e 2 kg quando preenchido, categorias não vazias.
+  - Discos já criados ou publicados na loja permanecem bloqueados para edição direta, exibindo aviso claro com link para o administrador da Nuvemshop: `https://monstrodiscos.lojavirtualnuvem.com.br/admin/products/<produto_id>`.
+- Parte 2: Estoque infinito (sob demanda e pré-venda).
+  - No card de novo/lacrado e em rascunhos com categoria Pré Venda / Pré-Venda, adicionada caixa "Sob demanda (estoque infinito)" ao lado da quantidade. Marcada, grava `estoque = "infinito"` e desabilita o campo numérico de quantidade. O botão aprovar aceita "infinito" sem exigir número.
+  - Na API da Nuvemshop (`painel_monstro/saidas/cadastro.py`), conforme a documentação oficial da Nuvemshop para variantes (`https://tiendanube.github.io/api-documentation/resources/product-variant`), produtos com estoque infinito (valores "infinito", "∞", "sob demanda", case-insensitive) geram variante com `stock_management: False` e sem o campo `stock`. Disco usado continua sempre exemplar único (1), ignorando qualquer tentativa de infinito e sem exibir a opção na interface.
+
+## D-097 · Livros na loja, categorias fora da comissão e lista de marcar vinil (04/11/2026)
+
+Três mudanças integradas para o catálogo da loja e relacionamento com a equipe:
+- PARTE 1 · Livros na loja (formato "livro"):
+  - Implementado formato `livro` em `scripts/cadastro_lote.py` e `painel_monstro/saidas/cadastro.py`: título no padrão `Livro <Título> - <Autor>`, categoria principal `Livros`, tags contendo `Livro, Livro de Música`, descrição autoral com tópicos técnicos e tópico `• Novo`. Dispensa notas de conservação Goldmine e etiqueta de preço. Fotos com recorte padrão `inteira` sem cantos manuais/automáticos.
+  - Lote `2026-11-04-livros` criado com 23 livros novos (Paul McCartney esgotado ficou de fora) do catálogo da editora Garota FM Books, com metadados completos pesquisados (autores, páginas, ISBNs, dimensões e pesos exatos) e imagens de capa em alta resolução salvas em `J:\Meu Drive\Cadastro de Discos\entrada\livro-<slug>.jpg`.
+  - A categoria `Livros` deve ser criada pelo Túlio no administrador da Nuvemshop antes da sincronização na loja.
+- PARTE 2 · Categorias inteiras sem comissão:
+  - Parâmetro na aba `Configuração`: `Comissão: categorias sem comissão` (padrão inicial: `Livros`), editável na interface em "Percentual e taxas".
+  - No cálculo da comissão (`comCalc` em `apps-script/painel-web/painel-monstro.html`), produtos que pertencem a essas categorias são identificados via mapa de categorias da aba `produtos` e deduzidos proporcionalmente da base líquida do pedido, sem duplicar com produtos que já tenham sido excluídos individualmente em `comissao_produtos`.
+  - No quadro da comissão (`cm-wf`), exibida a linha `Categorias sem comissão (Livros) (N pedidos): R$ X`. Registrado no histórico de critérios ao gravar.
+- PARTE 3 · Lista para marcar o vinil na loja física:
+  - Nova coluna `marcado_vinil` ao final de `cadastro_rascunhos` (criada automaticamente pela rotina em `cadastro.py` ou pelo painel web).
+  - Aba Cadastro do Painel: novo filtro "Marcar no vinil" exibindo contador de discos em situação `criado` ou `publicado` que ainda não tenham sido marcados (`marcado_vinil` vazio), excluindo livros. Ordenados do mais antigo ao mais novo.
+  - Layout otimizado para celular com botões grandes e checkbox "Marcar no vinil" que grava data e hora na planilha e remove o card da lista, com banner temporário de desfazer por 10 segundos. Botão "Imprimir lista" com estilos limpos em `@media print`.

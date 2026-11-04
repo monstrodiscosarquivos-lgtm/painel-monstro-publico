@@ -2,7 +2,67 @@
 
 Atualize este arquivo ao fim de toda sessão. Ele responde a uma pergunta: onde o projeto está agora?
 
-**Última atualização:** 29/10/2026: D-092 implementado (aba K7 e nível de acesso restrito k7 no Cofre e no Painel web, gerando k7_resumo na rotina com proteção estrita de privacidade). Suíte completa com 767 testes Python e 48 testes JS verdes.
+**Última atualização:** 04/11/2026: D-097 implementada (Parte 1: 23 livros novos pesquisados com metadados técnicos e capas da Garota FM Books, formato "livro" no cadastro_lote.py, lote 2026-11-04-livros conferido com 0 erros; Parte 2: categorias sem comissão no cálculo e quadro da comissão com teste de pedido misto; Parte 3: coluna marcado_vinil e filtro "Marcar no vinil" para loja física no painel web com layout para celular e botão de impressão). Painel.html recompilado, 757 testes pytest verdes, 53 testes JS verdes e auditoria de publicação com 0 problemas.
+
+## D-097 · Livros na loja, categorias fora da comissão e lista de marcar vinil (04/11/2026)
+- **Parte 1 · Livros na loja (formato "livro"):**
+  - Implementado suporte a formato `livro` em `scripts/cadastro_lote.py` e `painel_monstro/saidas/cadastro.py`: título `Livro <Título> - <Autor>`, categoria `Livros`, tags `Livro, Livro de Música`, descrição autoral com tópicos técnicos e tópico `• Novo`. Dispensa notas de capa/vinil e etiqueta. Fotos com recorte padrão `inteira` sem cantos.
+  - Coletados metadados de 23 livros da editora Garota FM Books (autores, páginas, ISBNs, dimensões, pesos reais e capas originais em alta resolução salvas em `J:\Meu Drive\Cadastro de Discos\entrada\livro-<slug>.jpg`). Paul McCartney esgotado ficou de fora.
+  - Lote `2026-11-04-livros` criado e conferido com 0 erros e 0 avisos em `conferencia.md`.
+  - Pendência do Túlio: criar a categoria `Livros` no administrador da Nuvemshop antes da sincronização na loja.
+- **Parte 2 · Categorias inteiras sem comissão:**
+  - Configuração `Comissão: categorias sem comissão` (padrão inicial: `Livros`), editável na interface em "Percentual e taxas".
+  - `comCalc` deduz proporcionalmente da base líquida do pedido os itens pertencentes a essas categorias (mapeados da aba `produtos`), sem duplicar com produtos individuais de `comissao_produtos`.
+  - Quadro de comissão (`cm-wf`) exibe linha dedicada `Categorias sem comissão (Livros) (N pedidos): R$ X`. Critérios gravados no histórico.
+  - Teste JS em `teste_local.js` cobrindo pedido misto (disco + livro) com dedução exata e não duplicidade.
+- **Parte 3 · Lista para marcar o vinil na loja física:**
+  - Coluna `marcado_vinil` adicionada a `cadastro_rascunhos`.
+  - Painel Web: filtro "Marcar no vinil" mostrando total pendente de discos `criado` ou `publicado` sem marcação, excluindo livros (`cdEhLivro`).
+  - Cards grandes para celular com ID, preço, quantidade, status e checkbox "Marcar no vinil" com gravação imediata na planilha e banner de desfazer (10s).
+  - Botão "Imprimir lista" com estilos específicos em `@media print`.
+- **Testes e compilação:**
+  - `Painel.html` recompilado com sucesso via `montar_painel_web.py`.
+  - 53 testes JS verdes em `apps-script/teste_local.js`.
+  - Teste unitário Python verde em `tests/test_cadastro_lote.py`.
+  - Auditoria de publicação (`scripts/auditar_publicacao.py`) com 136 arquivos e 0 problemas.
+- **Painel Web (`apps-script/painel-web/painel-monstro.html` e `Painel.html`):**
+  - O bloco "Editar cadastro" (antigo "Título, descrição e observação") abre por padrão para rascunhos (`<details class="fmsg" open>`).
+  - Novos campos editáveis com gravação seletiva do que mudou:
+    - `categorias`: campo texto com sugestões automáticas baseadas em produtos similares da aba `produtos`.
+    - `capa`: select com notas Goldmine (`M NM VG+ VG G+ G F`) para usados, sincronizando em tempo real com a linha "• Capa" da descrição e omitido para novo/lacrado.
+    - `tags`: campo texto livre.
+    - `peso_kg`: campo numérico decimal com texto de ajuda dos padrões de peso da loja.
+    - `discogs_url`: campo texto URL.
+  - Editor interativo de fotos: reordenação com setas subir/descer (▲/▼), dropdown com todos os papéis aceitos e checkbox "Não usar" (atribui papel etiqueta). Gravação pontual em `cadastro_fotos` e limpeza de `fotos_ajustadas` em `cadastro_rascunhos` para reprocessamento de prévias pela rotina.
+  - Validações antes de salvar: título sem travessão, preço positivo quando preenchido, peso entre 0,1 e 2 kg quando preenchido, categorias obrigatórias.
+  - Produtos já criados ou publicados: permanecem sem edição direta e exibem aviso com link para o administrador da Nuvemshop (`https://monstrodiscos.lojavirtualnuvem.com.br/admin/products/<produto_id>`).
+  - Estoque infinito (sob demanda e pré-venda): caixa "Sob demanda (estoque infinito)" ao lado da quantidade em cards de novo/lacrado e pré-venda. Quando marcada, grava `estoque = "infinito"` e desabilita a quantidade. Botão aprovar aceita "infinito" sem exigir número. Usado continua exemplar único (1), ignorando infinito e sem a caixa na interface.
+- **Motor Nuvemshop (`painel_monstro/saidas/cadastro.py`):**
+  - `eh_estoque_infinito(linha)`: reconhece `infinito`, `∞` e `sob demanda` (case-insensitive) para novos/lacrados/pré-venda e sempre `False` para usados.
+  - `corpo_produto`: monta variante com `stock_management: False` e sem o campo `stock` quando for estoque infinito, conforme documentação oficial da API da Nuvemshop para variantes (`https://tiendanube.github.io/api-documentation/resources/product-variant`).
+  - `estoque_da_linha`: retorna `None` para infinito e 1 para usados.
+- **Testes e compilação:**
+  - 12 testes novos em Python (`tests/test_cadastro.py`) cobrindo `eh_estoque_infinito`, `estoque_da_linha` e montagem de variantes.
+  - 3 testes novos em JS (`apps-script/teste_local.js`) cobrindo funções de infinito, renderização de cards e validações de salvar.
+  - `Painel.html` recompilado com sucesso via `montar_painel_web.py`.
+  - Suíte completa: 782 testes pytest verdes, 51 testes JS verdes e auditoria de publicação com 0 problemas.
+
+## Lote 2026-11-03 · Gravação de 30 discos (1 usado Belchior e 29 lacrados) e correção Baby Consuelo (04/11/2026)
+- **Correção Baby Consuelo (linha 118, ID 2026-10-28-68):** corrigido título para `LP Baby Consuelo - Kryshna Baby (1984) - (Vinil Usado)`, pasta para `68 Baby Consuelo - Kryshna Baby (1984)`, ficha para CBS 138.261 Brasil 1984, descrição e tags atualizadas com Kryshna Baby, release Discogs 4886376 vinculado e pendência de conferir título na capa removida.
+- **Lote 2026-11-03 gravado na Planilha Google:**
+  - 30 rascunhos adicionados a `cadastro_rascunhos` (`2026-11-03-02` a `2026-11-03-31`) com status `rascunho`, estoque 1, preços das etiquetas, tags completas e links/IDs do Discogs.
+  - Subcategorias de gênero oficiais da loja atribuídas aos lacrados (`MPB - Música Popular Brasileira`, `Rock / Pop Nacional`, `Hard Rock / Heavy Metal / Metal`, `Pop`, `Rock Progressivo / Psicodelico`, `Indie / Rock Alternativo`, `Samba / Pagode`, `Rock / Pop Internacional`).
+  - Ficha técnica oficial (gravadora, catálogo, país) e faixas (tracklist) preenchidas a partir do Discogs para os 24 títulos catalogados.
+  - Duplos configurados com peso 0,80 kg (Juli Manzi, Pink Floyd The Endless River, Pink Floyd The Wall, Black Sabbath).
+  - 4 casos pulados: `d05` Forfun "Nu" (somar estoque no produto existente ID 378148677), `p01` expositor da loja física, `p02` sobras antigas e `p03` 79 fotos HEIC de discos usados da loja física pertencentes a lotes de usados.
+  - 97 fotos registradas em `cadastro_fotos` e renomeadas na pasta de entrada local.
+- **Testes e auditoria:** 770 testes passando no pytest e `scripts/auditar_publicacao.py` com 0 problemas.
+
+## D-095 · Conversão HEIC e formato lacrado no agente local (03/11/2026)
+- **Comando `converter-heic`:** adicionado a `scripts/cadastro_lote.py` com `pillow-heif` (qualidade 92, preservando metadados EXIF com DateTimeOriginal e pulando arquivos já convertidos). Executado com sucesso convertendo 79 fotos HEIC da pasta `Discos Monstro` para `.jpg` na raiz da entrada.
+- **Suporte a `formato: "lacrado"`:** implementado em `derivar_lote` e `validar_lote`, dispensando notas Goldmine e tópicos de estado na descrição, validando tags com `LP, LP Novo, Vinil Lacrado`, títulos no formato `LP <Artista> - <Álbum> (<Ano>) - (Novo/Lacrado)` (com detalhes de cor, duplo e importado quando houver) e categorias `LP, Novo/Lacrado, Nacionais/Importados, Novidades`.
+- **Lote 2026-11-03 estruturado e conferido:** 31 discos para cadastrar (Belchior com fotos completas e 30 discos lacrados com fotos da capa e imagens complementares do Discogs) e 3 grupos pulados (loja, sobras antigas e fotos avulsas). Conferência executada com 0 erros e 84 avisos informativos, gerando `conferencia.md` e prévias. Aguardando aprovação do Túlio para gravação real com `--confirmar`.
+- **Testes e auditoria:** 2 testes novos em `tests/test_cadastro_lote.py` (770 testes passando) e `scripts/auditar_publicacao.py` com 0 problemas.
 
 ## D-092 · aba K7 e nível de acesso restrito "k7" no Cofre e no Painel (29/10/2026)
 - **Rotina e módulo k7.py:** a cada rodada, gera a aba `k7_resumo` (formato `bloco, chave, valor_1, valor_2, valor_3, valor_4`) com métricas da fita K7 Goiânia Rock City 2026 (produto 375734821, campanha `grc2026`): blocos `totais`, `por_dia`, `por_banda`, `canais` e `junto_com`.

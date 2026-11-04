@@ -510,11 +510,15 @@ function extrairFuncoesPainel() {
   const rows = v => { if (!v || v.length < 2) return []; const h = v[0]; return v.slice(1).map(r => { const o = {}; h.forEach((k, j) => o[k] = r && r[j] != null ? String(r[j]) : ''); return o; }); };
   const trechoRp = htmlPainel.slice(htmlPainel.indexOf('function rpJogadas(c){'), htmlPainel.indexOf('async function rpSalvarCamp'));
   const trechoApag = htmlPainel.slice(htmlPainel.indexOf('const rpPodeApagarStatus ='), htmlPainel.indexOf('async function rpApagar(linhas){'));
-  const trechoCd = htmlPainel.slice(htmlPainel.indexOf('const cdVaiPublicar ='), htmlPainel.indexOf('function cdCard(o){'));
+  const trechoEsc = htmlPainel.slice(htmlPainel.indexOf('const esc ='), htmlPainel.indexOf('function num(x){'));
+  const trechoCd = htmlPainel.slice(htmlPainel.indexOf('const CD_GRADES ='), htmlPainel.indexOf('function cdLigar(box, o){'));
+  const trechoIguais = htmlPainel.slice(htmlPainel.indexOf('const cdNorm ='), htmlPainel.indexOf('const cdR ='));
   const hojeSP = () => '2026-10-27';
-  const ctx = { String, Array, JSON, RegExp, Math, Number, Object, parseFloat, isFinite, brl2, brl, int, brDiaC, rpDia, rows, hojeSP, D: {} };
+  const CD_PEND = new Set(), CD_SEL = new Set();
+  const ctx = { String, Array, Set, JSON, RegExp, Math, Number, Object, parseFloat, isFinite, brl2, brl, int, brDiaC, rpDia, rows, hojeSP, CD_PEND, CD_SEL, D: {} };
   vm.createContext(ctx);
-  vm.runInContext(trechoNum + '\n' + trechoPm + '\n' + trecho + '\n' + trechoRp + '\n' + trechoApag + '\n' + trechoCd + '\nthis.exports = { D, num, pmAddMes, pmDividirParcelas, pmValidarCronograma, pmLerCronograma, pmRateioNoMes, rpCodigoOrigem, rpOrigensLista, rpCanalDe, rpCanalJogada, rpNomeCanal, rpJogadas, rpEstado, rpStats, rpPodeApagarStatus, rpTextoConfirmarExclusao, cdVaiPublicar, cdTemPendenciaAviso };', ctx);
+  vm.runInContext(trechoEsc + '\n' + trechoNum + '\n' + trechoPm + '\n' + trecho + '\n' + trechoRp + '\n' + trechoApag + '\n' + trechoCd + '\n' + trechoIguais + '\nthis.exports = { D, num, esc, pmAddMes, pmDividirParcelas, pmValidarCronograma, pmLerCronograma, pmRateioNoMes, rpCodigoOrigem, rpOrigensLista, rpCanalDe, rpCanalJogada, rpNomeCanal, rpJogadas, rpEstado, rpStats, rpPodeApagarStatus, rpTextoConfirmarExclusao, cdEhLivro, cdNovo, cdPreVenda, cdPodeInfinito, cdEhInfinito, cdVaiPublicar, cdTemPendenciaAviso, cdCard, cdCardMarcarVinil, cdSugestoesCategorias, cdFotosLinhas, cdFotosEditor, cdIguais, CD_CAPA_GRADES, CD_PAPEIS, CD_FILTROS };', ctx);
+  return ctx.exports;
   return ctx.exports;
 }
 
@@ -1031,6 +1035,189 @@ teste('Painel (D-092): com PM.nivel === "k7", mostra só a aba K7 e pede só k7 
   const htmlBuild = fs.readFileSync(path.join(__dirname, 'painel-web', 'Painel.html'), 'utf8');
   assert.ok(htmlBuild.includes("PM.nivel === 'k7'"), 'Painel.html deve conter tratamento para k7');
   assert.ok(htmlBuild.includes(".tabs{display:none!important}"), 'Painel.html deve ocultar .tabs no nível k7');
+});
+
+teste('cadastro (D-096): cdPodeInfinito e cdEhInfinito para estoque infinito', () => {
+  const p = extrairFuncoesPainel();
+  assert.strictEqual(p.cdPodeInfinito({ categorias: 'LP, Novo/Lacrado', titulo: 'LP Banda - Disco (Novo/Lacrado)' }), true);
+  assert.strictEqual(p.cdPodeInfinito({ categorias: 'LP, Pré-Venda', titulo: 'LP Banda - Disco' }), true);
+  assert.strictEqual(p.cdPodeInfinito({ categorias: 'Pré Venda', titulo: 'LP Banda - Disco' }), true);
+  assert.strictEqual(p.cdPodeInfinito({ categorias: 'LP, Usado, Rock', titulo: 'LP Banda - Disco (Vinil Usado)' }), false);
+  assert.strictEqual(p.cdPodeInfinito({ categorias: 'LP, Usado, Pré-Venda', titulo: 'LP Banda - Disco (Vinil Usado)' }), false);
+
+  assert.strictEqual(p.cdEhInfinito('infinito'), true);
+  assert.strictEqual(p.cdEhInfinito('Infinito'), true);
+  assert.strictEqual(p.cdEhInfinito('INFINITO'), true);
+  assert.strictEqual(p.cdEhInfinito('∞'), true);
+  assert.strictEqual(p.cdEhInfinito('sob demanda'), true);
+  assert.strictEqual(p.cdEhInfinito('Sob Demanda'), true);
+  assert.strictEqual(p.cdEhInfinito('sob-demanda'), true);
+  assert.strictEqual(p.cdEhInfinito('SOB DEMANDA'), true);
+  assert.strictEqual(p.cdEhInfinito('1'), false);
+  assert.strictEqual(p.cdEhInfinito('10'), false);
+  assert.strictEqual(p.cdEhInfinito(''), false);
+});
+
+teste('cadastro (D-096): cdCard rascunho com detalhes aberto, categorias, tags, peso, discogs, capa e estoque infinito', () => {
+  const p = extrairFuncoesPainel();
+  p.D.cadf = [
+    ['id_disco', 'ordem', 'papel', 'arquivo_drive_id', 'cantos', 'observacao'],
+    ['disco-1', '1', 'capa', 'drive-123', '', ''],
+    ['disco-1', '2', 'contracapa', 'drive-456', '', ''],
+  ];
+
+  // 1. Rascunho Usado
+  const cardUsado = p.cdCard({
+    id: 'disco-1', status: 'rascunho', titulo: 'LP Belchior - Alucinação (Vinil Usado)',
+    categorias: 'LP, Usado, MPB', preco: '150', vinil: 'VG+', capa: 'VG', peso_kg: '0,50',
+    tags: 'belchior, mpb', discogs_url: 'https://discogs.com/release/123',
+    descricao: 'Disco clássico.\n\n• Capa VG\n• Vinil VG+',
+  });
+  assert.ok(cardUsado.includes('<details class="fmsg" open><summary>Editar cadastro</summary>'), 'detalhes aberto por padrão em rascunho');
+  assert.ok(cardUsado.includes('data-f="categorias"'), 'categorias editável');
+  assert.ok(cardUsado.includes('data-f="tags"'), 'tags editável');
+  assert.ok(cardUsado.includes('data-f="peso_kg"'), 'peso editável');
+  assert.ok(cardUsado.includes('Padrão: LP simples 0,50 kg'), 'ajuda de peso presente');
+  assert.ok(cardUsado.includes('data-f="discogs_url"'), 'discogs_url editável');
+  assert.ok(cardUsado.includes('data-f="capa"'), 'select de capa presente em usado');
+  assert.ok(cardUsado.includes('data-fpapel="2"'), 'editor de fotos presente com linhas do disco');
+  assert.ok(cardUsado.includes('data-foto-move="up"'), 'setas de reordenação de foto presentes');
+  assert.ok(!cardUsado.includes('data-f="infinito"'), 'usado não tem estoque infinito');
+
+  // 2. Rascunho Lacrado
+  const cardLacrado = p.cdCard({
+    id: 'disco-2', status: 'rascunho', titulo: 'LP Green Day - Dookie (Novo/Lacrado)',
+    categorias: 'LP, Novo/Lacrado, Rock', preco: '220', estoque: 'infinito', peso_kg: '0,50',
+    descricao: 'Disco novo e lacrado.',
+  });
+  assert.ok(cardLacrado.includes('data-f="infinito"'), 'lacrado tem checkbox de estoque infinito');
+  assert.ok(cardLacrado.includes('Sob demanda (estoque infinito)'), 'texto do estoque infinito');
+  assert.ok(!cardLacrado.includes('data-f="capa"'), 'lacrado não tem select de capa');
+
+  // 3. Criado na loja
+  const cardCriado = p.cdCard({
+    id: 'disco-3', status: 'criado', titulo: 'LP Criado - Álbum',
+    produto_id: '998877', link_loja: 'https://lojamonstro.com.br/produtos/lp-criado/',
+    categorias: 'LP, Usado', preco: '100',
+  });
+  assert.ok(cardCriado.includes('Já está na loja: corrija pelo <a href="https://monstrodiscos.lojavirtualnuvem.com.br/admin/products/998877"'), 'aviso de produto criado com link do admin');
+});
+
+teste('cadastro (D-096): validações de salvar rascunho', () => {
+  assert.ok(htmlPainel.includes('o título não pode conter travessão; use hífen (-)'), 'validação de travessão no título');
+  assert.ok(htmlPainel.includes('preço deve ser maior que zero'), 'validação de preço positivo');
+  assert.ok(htmlPainel.includes('peso deve estar entre 0,1 e 2 kg'), 'validação de peso entre 0,1 e 2');
+  assert.ok(htmlPainel.includes('categorias não podem ficar vazias'), 'validação de categorias não vazias');
+});
+
+function carregarComissaoPainel(dados = {}) {
+  const trechoNum = htmlPainel.slice(htmlPainel.indexOf('function num(x){'), htmlPainel.indexOf('const nf0 ='));
+  const trechoPm = htmlPainel.slice(htmlPainel.indexOf('const PM_CAB ='), htmlPainel.indexOf('let COM_PM_FORM ='));
+  const trechoAtrib = htmlPainel.slice(htmlPainel.indexOf('const normNum ='), htmlPainel.indexOf('function atribRows(){'));
+  const trechoCom = htmlPainel.slice(htmlPainel.indexOf('const MEIO_NOME ='), htmlPainel.indexOf('function comMeses(){'));
+  const trechoSemCom = htmlPainel.slice(htmlPainel.indexOf('function comForaMap(){'), htmlPainel.indexOf('const texto ='));
+  const brl2 = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
+  const rows = v => { if (!v || v.length < 2) return []; const h = v[0]; return v.slice(1).map(r => { const o = {}; h.forEach((k, j) => o[k] = r && r[j] != null ? String(r[j]) : ''); return o; }); };
+  const CFG = dados.CFG || [];
+  const COSTS = dados.COSTS || [];
+  const D = dados.D || {};
+  const ctx = {
+    String, Array, Set, Map, JSON, RegExp, Math, Number, Object, parseFloat, isFinite,
+    brl2, rows, CFG, COSTS, D, console
+  };
+  vm.createContext(ctx);
+  vm.runInContext(trechoNum + '\n' + trechoAtrib + '\n' + trechoPm + '\n' + trechoSemCom + '\n' + trechoCom + '\nthis.exports = { comCfg, comCalc, comProdutosCategoriasMap, comForaMap, comItensPorPedido, pedidosRows };', ctx);
+  return { ctx, ...ctx.exports };
+}
+
+teste('comissão (D-097): categorias sem comissão (Livros) com pedido misto de disco e livro', () => {
+  const CFG = [
+    { label: 'Comissão: percentual', value: 10, row: 2 },
+    { label: 'Comissão: taxa do Pix', value: 0.99, row: 3 },
+    { label: 'Comissão: taxa do cartão', value: 3.65, row: 4 },
+    { label: 'Comissão: taxa do boleto', value: 1.34, row: 5 },
+    { label: 'Comissão: categorias sem comissão', value: 'Livros', row: 6 },
+  ];
+  const D = {
+    ped: [
+      ['data', 'total', 'forma_pagamento', 'status_pagamento', 'frete', 'taxas', 'desconto', 'forma_entrega', 'valido'],
+      ['2026-10-15', '250', 'Pix', 'Confirmado', '0', '2.50', '0', 'Sedex', 'true'],
+    ],
+    pedNum: [['numero'], ['5001']],
+    itens: [
+      ['pedido_numero', 'produto_id', 'produto', 'valor', 'quantidade', 'valido', 'data'],
+      ['5001', '101', 'LP Disco Rock', '150', '1', 'true', '2026-10-15'],
+      ['5001', '102', 'Livro Disco É Cultura', '100', '1', 'true', '2026-10-15'],
+    ],
+    itNum: [['pedido_numero'], ['5001'], ['5001']],
+    prodA: [
+      ['nome', 'categorias', 'preco'],
+      ['LP Disco Rock', 'LP, Rock', '150'],
+      ['Livro Disco É Cultura', 'Livros', '100'],
+    ],
+    prodId: [['produto_id'], ['101'], ['102']],
+    cprod: [['produto_id', 'nome', 'motivo', 'incluido_em']],
+    pman: [],
+  };
+
+  const com = carregarComissaoPainel({ CFG, D });
+  const cfg = com.comCfg();
+  assert.strictEqual(cfg.catSemCom.v, 'Livros');
+
+  const r = com.comCalc('2026-10', { excl: [], cupons: [], frete: false, freteValor: '', taxasReais: '', outros: false, est: {} }, cfg);
+  assert.strictEqual(r.ped.length, 1);
+  assert.strictEqual(r.semComCatL.length, 1, 'o pedido misto deve ter dedução por categoria sem comissão');
+  // Total 250, taxa 2.50 -> liq 247.50. Livro é 100/250 = 40% -> 99.00
+  assert.strictEqual(Math.round(r.semComCatV * 100) / 100, 99);
+  // Base = 250 - 2.50 (taxa) - 99 (livro) = 148.50
+  assert.strictEqual(Math.round(r.base * 100) / 100, 148.50);
+  assert.strictEqual(Math.round(r.comissao * 100) / 100, 14.85);
+
+  // Sem duplicar com produto já abatido em cprod (comForaMap)
+  D.cprod = [
+    ['produto_id', 'nome', 'motivo', 'incluido_em'],
+    ['102', 'Livro Disco É Cultura', 'Ação', '2026-10-01'],
+  ];
+  const r2 = com.comCalc('2026-10', { excl: [], cupons: [], frete: false, freteValor: '', taxasReais: '', outros: false, est: {} }, cfg);
+  assert.strictEqual(r2.semComL.length, 1, 'produto individual abatido em semCom');
+  assert.strictEqual(r2.semComCatL.length, 0, 'não duplica em semComCat');
+  assert.strictEqual(Math.round(r2.semComV * 100) / 100, 99);
+  assert.strictEqual(Math.round(r2.base * 100) / 100, 148.50);
+});
+
+teste('cadastro e lista de marcar vinil (D-097): cdEhLivro, cdNovo e filtro marcar_vinil', () => {
+  const p = extrairFuncoesPainel();
+
+  // 1. cdEhLivro reconhece livros por título ou categorias
+  assert.strictEqual(p.cdEhLivro({ titulo: 'Livro Disco É Cultura - Almir Chediak', categorias: 'Livros' }), true);
+  assert.strictEqual(p.cdEhLivro({ titulo: 'LP Belchior - Alucinação', categorias: 'LP, Usado, MPB' }), false);
+  assert.strictEqual(p.cdEhLivro({ titulo: 'Livro Rita Lee Mora Ao Lado', categorias: '' }), true);
+  assert.strictEqual(p.cdEhLivro({ titulo: 'Qualquer', categorias: 'Livros, Música' }), true);
+
+  // 2. cdNovo reconhece livros como novos
+  assert.strictEqual(p.cdNovo({ titulo: 'Livro 1979 - Ciro Pessoa', categorias: 'Livros' }), true);
+  assert.strictEqual(p.cdNovo({ titulo: 'LP Belchior (Vinil Usado)', categorias: 'LP, Usado' }), false);
+
+  // 3. Filtro marcar_vinil: apenas criado ou publicado, sem marcado_vinil, e exclui livros
+  const discos = [
+    { id: '2026-10-29-01', status: 'criado', titulo: 'LP A', categorias: 'LP, Usado', marcado_vinil: '' },
+    { id: '2026-10-29-02', status: 'publicado', titulo: 'LP B', categorias: 'LP, Usado', marcado_vinil: '' },
+    { id: '2026-10-29-03', status: 'publicado', titulo: 'LP C', categorias: 'LP, Usado', marcado_vinil: '2026-11-04 10:00' },
+    { id: '2026-10-29-04', status: 'rascunho', titulo: 'LP D', categorias: 'LP, Usado', marcado_vinil: '' },
+    { id: '2026-11-04-01', status: 'criado', titulo: 'Livro Disco É Cultura', categorias: 'Livros', marcado_vinil: '' },
+  ];
+
+  const cdGrupo = s => { s = String(s || '').trim().toLowerCase(); return ['rascunho','aprovado','criado','publicado'].includes(s) ? s : 'rascunho'; };
+  const pendentesVinil = discos.filter(o => !p.cdEhLivro(o) && ['criado', 'publicado'].includes(cdGrupo(o.status)) && !String(o.marcado_vinil || '').trim());
+  assert.strictEqual(pendentesVinil.length, 2);
+  assert.deepStrictEqual(pendentesVinil.map(o => o.id), ['2026-10-29-01', '2026-10-29-02']);
+
+  // 4. cdCardMarcarVinil renderiza layout esperado com ID e checkbox
+  const cardHtml = p.cdCardMarcarVinil(pendentesVinil[0]);
+  assert.ok(cardHtml.includes('LP A'), 'contém título do disco');
+  assert.ok(cardHtml.includes('data-marcar-vinil="2026-10-29-01"'), 'contém checkbox de marcar no vinil');
+  assert.ok(cardHtml.includes('cd-marcar-card'), 'contém classe de estilo');
+  assert.ok(cardHtml.includes('Marcar no vinil'), 'texto do checkbox presente');
 });
 
 (async () => {

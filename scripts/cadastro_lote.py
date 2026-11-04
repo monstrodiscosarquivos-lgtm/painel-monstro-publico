@@ -107,6 +107,60 @@ def pasta_do_lote(lote: str, base_trabalho: Path | str | None = None) -> Path:
 
 
 # ----------------------------------------------------------------------------
+# Conversão de fotos HEIC para JPG (Passo 1 / D-095)
+# ----------------------------------------------------------------------------
+def converter_heic(
+    pasta_origem: Path,
+    pasta_destino: Path,
+    confirmar: bool = False,
+    qualidade: int = 92,
+) -> dict[str, Any]:
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+    except ImportError:
+        pass
+
+    arquivos_heic = sorted(
+        [p for p in pasta_origem.iterdir() if p.is_file() and p.suffix.lower() == '.heic'],
+        key=lambda p: p.name,
+    )
+    para_converter: list[Path] = []
+    pulados: list[Path] = []
+    for arq in arquivos_heic:
+        alvo = pasta_destino / f'{arq.stem}.jpg'
+        if alvo.exists():
+            pulados.append(arq)
+        else:
+            para_converter.append(arq)
+
+    convertidos: list[str] = []
+    if confirmar:
+        pasta_destino.mkdir(parents=True, exist_ok=True)
+        for arq in para_converter:
+            alvo = pasta_destino / f'{arq.stem}.jpg'
+            with Image.open(arq) as im:
+                exif_bytes = im.info.get('exif')
+                if exif_bytes:
+                    im.save(alvo, 'JPEG', quality=qualidade, exif=exif_bytes)
+                else:
+                    im.save(alvo, 'JPEG', quality=qualidade, exif=im.getexif())
+            convertidos.append(alvo.name)
+
+    return {
+        'modo': 'gravado' if confirmar else 'simulacao',
+        'origem': str(pasta_origem),
+        'destino': str(pasta_destino),
+        'total_heic': len(arquivos_heic),
+        'para_converter': len(para_converter),
+        'convertidos': len(convertidos),
+        'pulados': len(pulados),
+        'arquivos_para_converter': [p.name for p in para_converter],
+        'arquivos_pulados': [p.name for p in pulados],
+    }
+
+
+# ----------------------------------------------------------------------------
 # Leitura de EXIF / horário e comando `folhas`
 # ----------------------------------------------------------------------------
 def extrair_data_foto(caminho: Path) -> datetime:
@@ -745,8 +799,29 @@ def derivar_lote(
         alb = str(o.get('album', '')).strip()
         ano = o.get('ano')
         anos = f' ({ano})' if ano else ''
-        sufixo = '(Vinil Usado, Duplo)' if o.get('duplo') else '(Vinil Usado)'
-        titulo = f'LP {art} - {alb}{anos} - {sufixo}'
+
+        formato = str(o.get('formato') or 'usado').strip().lower()
+        if formato not in ('usado', 'lacrado', 'livro'):
+            formato = 'usado'
+
+        if o.get('titulo'):
+            titulo = str(o['titulo']).strip()
+        elif formato == 'livro':
+            titulo = f'Livro {alb} - {art}'
+        elif formato == 'lacrado':
+            detalhes_sufixo = []
+            if o.get('cor'):
+                detalhes_sufixo.append(f"(Vinil {str(o['cor']).strip()})")
+            if o.get('duplo'):
+                detalhes_sufixo.append('(Duplo)')
+            if o.get('importado'):
+                detalhes_sufixo.append('(Importado)')
+            detalhes_sufixo.append('(Novo/Lacrado)')
+            sufixo = ' '.join(detalhes_sufixo)
+            titulo = f'LP {art} - {alb}{anos} - {sufixo}'
+        else:
+            sufixo = '(Vinil Usado, Duplo)' if o.get('duplo') else '(Vinil Usado)'
+            titulo = f'LP {art} - {alb}{anos} - {sufixo}'
 
         fotos_brutas = o.get('fotos')
         todas_fotos = [dict(f) for f in (fotos_brutas if isinstance(fotos_brutas, list) else []) if isinstance(f, dict)]
@@ -762,10 +837,21 @@ def derivar_lote(
                 if PENDENCIA_SEM_CAPA not in pend:
                     pend.append(PENDENCIA_SEM_CAPA)
 
-        preco_val = o.get('preco_etiqueta')
+        preco_val = o.get('preco') if o.get('preco') is not None else o.get('preco_etiqueta')
         tem_preco = preco_val not in (None, '', 0) and not isinstance(preco_val, bool)
-        if not tem_preco and PENDENCIA_SEM_PRECO not in pend:
-            pend.append(PENDENCIA_SEM_PRECO)
+        if not tem_preco:
+            pend_preco = 'conferir preço' if formato in ('lacrado', 'livro') else PENDENCIA_SEM_PRECO
+            if pend_preco not in pend:
+                pend.append(pend_preco)
+
+        if formato == 'livro' and not (o.get('estoque') or o.get('qtd')):
+            if 'quantidade' not in pend:
+                pend.append('quantidade')
+
+        discogs_url = str(o.get('discogs_url') or '').strip()
+        if formato == 'lacrado' and not discogs_url:
+            if 'sem Discogs' not in pend:
+                pend.append('sem Discogs')
 
         repetidos_loja = _produtos_repetidos(titulo, linhas_produtos)
         for rep in repetidos_loja:
@@ -804,7 +890,10 @@ def derivar_lote(
             can = None
             falhou_auto = False
             if detectar_recortes and pasta_local is not None:
-                can, falhou_auto = calcular_cantos_foto(pasta_local / arq_orig, p, f)
+                if formato == 'livro' or str(f.get('recorte', '')).lower() == 'inteira':
+                    can, falhou_auto = None, False
+                else:
+                    can, falhou_auto = calcular_cantos_foto(pasta_local / arq_orig, p, f)
             elif 'cantos' in f and f['cantos'] is not None:
                 can = f['cantos']
 
@@ -825,14 +914,32 @@ def derivar_lote(
             nome_novo = f'{id_} descartada {idx_d}.jpg'
             renomeacoes.append({'disco': o.get('disco', ''), 'id_disco': id_, 'antigo': arq_orig, 'novo': nome_novo, 'feito': False})
 
-        if o.get('duplo'):
+        if o.get('peso_kg'):
+            peso = str(o['peso_kg']).strip().replace('.', ',')
+        elif formato == 'livro':
+            peso = '0,6'
+            if 'conferir peso' not in pend:
+                pend.append('conferir peso')
+        elif o.get('duplo'):
             peso = '0,8'
         elif o.get('gatefold') or any(str(f.get('papel', '')).startswith(('encarte', 'capa interna')) for f in site):
             peso = '0,55'
         else:
             peso = '0,5'
 
-        cat = f'LP, Usado, {str(o.get("genero", "")).strip()}, Novidades'
+        if o.get('categorias'):
+            cat = str(o['categorias']).strip()
+        elif formato == 'livro':
+            cat = 'Livros'
+        elif formato == 'lacrado':
+            subcat = str(o.get('genero') or '').strip()
+            origem_cat = 'Importados' if o.get('importado') else 'Nacionais'
+            if subcat:
+                cat = f'LP, Novo/Lacrado, {origem_cat}, {subcat}, Novidades'
+            else:
+                cat = f'LP, Novo/Lacrado, {origem_cat}, Novidades'
+        else:
+            cat = f'LP, Usado, {str(o.get("genero", "")).strip()}, Novidades'
         partes_ficha = [
             str(x).strip()
             for x in [o.get('gravadora', ''), o.get('catalogo', ''), o.get('pais', ''), str(ano) if ano else '']
@@ -857,36 +964,53 @@ def derivar_lote(
 
         desc = str(o.get('descricao', '')).strip()
         primeira = re.split(r'(?<=\.)\s', desc.split('\n')[0])[0] if desc else ''
-        seo_t = f'LP {art} {alb}{anos} - Vinil Usado' + (' Duplo' if o.get('duplo') else '')
-        seo_d = (primeira if len(primeira) <= 120 else primeira[:117].rsplit(' ', 1)[0] + '…') + ' Vinil usado, exemplar único.'
+        if formato == 'livro':
+            seo_t = titulo[:70]
+            seo_d = (primeira if len(primeira) <= 120 else primeira[:117].rsplit(' ', 1)[0] + '…') + ' Livro novo.'
+        elif formato == 'lacrado':
+            seo_t = f'LP {art} {alb}{anos} - Novo Lacrado'
+            seo_d = (primeira if len(primeira) <= 120 else primeira[:117].rsplit(' ', 1)[0] + '…') + ' Vinil novo, lacrado.'
+        else:
+            seo_t = f'LP {art} {alb}{anos} - Vinil Usado' + (' Duplo' if o.get('duplo') else '')
+            seo_d = (primeira if len(primeira) <= 120 else primeira[:117].rsplit(' ', 1)[0] + '…') + ' Vinil usado, exemplar único.'
         preco_str = str(preco_val) if tem_preco else ''
+
+        alt_cm = str(o.get('altura_cm') or ('3' if formato == 'livro' else '2,5')).strip().replace('.', ',')
+        larg_cm = str(o.get('largura_cm') or ('16' if formato == 'livro' else '32')).strip().replace('.', ',')
+        comp_cm = str(o.get('comprimento_cm') or ('23' if formato == 'livro' else '32')).strip().replace('.', ',')
+        estoque_linha = '' if (formato == 'livro' and not o.get('estoque') and not o.get('qtd')) else str(o.get('estoque') or o.get('qtd') or '1').strip()
+        preco_orig = ('preço informado' if formato == 'livro' else ('planilha' if formato == 'lacrado' else 'etiqueta')) if preco_str else ''
 
         linha_dict = {col: '' for col in COLUNAS}
         linha_dict.update({
             'id': id_,
             'lote': lote,
-            'pasta': f'{n:02d} {art} - {alb}{anos}',
+            'pasta': f'{n:02d} {art} - {alb}{anos}' if formato != 'livro' else f'{n:02d} Livro {alb} - {art}',
             'status': 'rascunho',
             'titulo': titulo,
             'marca': art,
             'categorias': cat,
             'ficha': ficha,
             'descricao': desc,
-            'capa': str(o.get('capa', '')).strip(),
-            'vinil': str(o.get('vinil', '')).strip(),
+            'capa': '' if formato in ('lacrado', 'livro') else str(o.get('capa', '')).strip(),
+            'vinil': '' if formato in ('lacrado', 'livro') else str(o.get('vinil', '')).strip(),
             'preco': preco_str,
             'peso_kg': peso,
-            'altura_cm': '2,5',
-            'largura_cm': '32',
-            'comprimento_cm': '32',
+            'altura_cm': alt_cm,
+            'largura_cm': larg_cm,
+            'comprimento_cm': comp_cm,
+            'discogs_url': discogs_url,
+            'discogs_id': str(o.get('discogs_id') or '').strip(),
+            'faixas': str(o.get('faixas') or '').strip(),
             'pendencias': ' | '.join(pend),
             'fotos': ' | '.join(nomes_site),
             'seo_titulo': seo_t,
             'seo_descricao': seo_d,
             'tags': str(o.get('tags', '')).strip(),
             'atualizado_em': agora_str,
-            'preco_origem': 'etiqueta' if preco_str else '',
-            'estoque': '1',
+            'preco_origem': preco_orig,
+            'estoque': estoque_linha,
+            'publicar': str(o.get('publicar') or '').strip(),
         })
         rascunhos_dicts.append(linha_dict)
         rascunhos_rows.append([linha_dict.get(c, '') for c in COLUNAS])
@@ -924,6 +1048,10 @@ def validar_lote(
     base_trabalho: Path | str | None = None,
 ) -> dict[str, Any]:
     caminho_json = Path(caminho_json)
+    if caminho_json.is_dir():
+        caminho_json = caminho_json / 'lote.json'
+    elif not caminho_json.exists() and (Path(RAIZ_PROJETO) / 'dados' / 'cadastro_ia' / caminho_json / 'lote.json').exists():
+        caminho_json = Path(RAIZ_PROJETO) / 'dados' / 'cadastro_ia' / caminho_json / 'lote.json'
     erros: list[tuple[str, str]] = []
     avisos: list[tuple[str, str]] = []
 
@@ -1023,25 +1151,31 @@ def validar_lote(
         if not any(p in ('capa', 'contracapa', 'etiqueta') for p in papeis_uteis):
             erros.append((rotulo_d, 'Disco a cadastrar sem nenhuma foto de capa, contracapa ou etiqueta.'))
 
-        if 'prata' in str(o.get('bolinha') or '').lower():
+        formato = str(o.get('formato') or 'usado').strip().lower()
+        if formato not in ('usado', 'lacrado', 'livro'):
+            erros.append((rotulo_d, f'Formato inválido: {formato!r} (use usado, lacrado ou livro).'))
+
+        if formato not in ('lacrado', 'livro') and 'prata' in str(o.get('bolinha') or '').lower():
             erros.append((rotulo_d, 'Bolinha prata (disco consignado) não pode ter ação cadastrar.'))
 
         genero = str(o.get('genero') or '').strip()
-        if genero not in GENEROS_ACEITOS:
+        if genero and genero not in GENEROS_ACEITOS and formato != 'livro':
             erros.append((rotulo_d, f'Gênero fora da lista do manual: {genero!r}.'))
+        elif formato not in ('lacrado', 'livro') and not genero:
+            erros.append((rotulo_d, 'Gênero obrigatório para disco usado.'))
 
         capa = str(o.get('capa') or '').strip()
-        if capa not in NOTAS_GOLDMINE:
-            erros.append((rotulo_d, f'Nota de capa fora de M NM VG+ VG G+ G F: {capa!r}.'))
-
         vinil = str(o.get('vinil') or '').strip()
-        if vinil not in NOTAS_GOLDMINE:
-            erros.append((rotulo_d, f'Nota de vinil fora de M NM VG+ VG G+ G F: {vinil!r}.'))
+        if formato not in ('lacrado', 'livro'):
+            if capa not in NOTAS_GOLDMINE:
+                erros.append((rotulo_d, f'Nota de capa fora de M NM VG+ VG G+ G F: {capa!r}.'))
+            if vinil not in NOTAS_GOLDMINE:
+                erros.append((rotulo_d, f'Nota de vinil fora de M NM VG+ VG G+ G F: {vinil!r}.'))
 
-        preco_et = o.get('preco_etiqueta')
-        if preco_et is not None:
-            if isinstance(preco_et, bool) or not isinstance(preco_et, (int, float)) or not math.isfinite(preco_et) or preco_et <= 0:
-                erros.append((rotulo_d, f'preco_etiqueta deve ser número positivo ou null: {preco_et!r}.'))
+        preco_inf = o.get('preco') if o.get('preco') is not None else o.get('preco_etiqueta')
+        if preco_inf is not None:
+            if isinstance(preco_inf, bool) or not isinstance(preco_inf, (int, float)) or not math.isfinite(preco_inf) or preco_inf <= 0:
+                erros.append((rotulo_d, f'preco_etiqueta deve ser número positivo ou null: {preco_inf!r}.'))
 
         for campo in ('artista', 'album', 'descricao', 'tags'):
             if not str(o.get(campo) or '').strip():
@@ -1049,14 +1183,25 @@ def validar_lote(
 
         desc = str(o.get('descricao') or '')
         linhas_desc = [l.strip() for l in desc.splitlines()]
-        if capa in NOTAS_GOLDMINE and f'• Capa {capa}' not in linhas_desc:
-            erros.append((rotulo_d, f'Descrição sem o tópico exato "• Capa {capa}".'))
-        if vinil in NOTAS_GOLDMINE and f'• Vinil {vinil}' not in linhas_desc:
-            erros.append((rotulo_d, f'Descrição sem o tópico exato "• Vinil {vinil}".'))
+        if formato == 'livro':
+            if '• Novo' not in linhas_desc and '• novo' not in desc.lower():
+                erros.append((rotulo_d, 'Descrição de livro sem o tópico "• Novo".'))
+            tags_lista = [t.strip() for t in str(o.get('tags') or '').split(',') if t.strip()]
+            if not ({'Livro', 'Livro de Música'} <= set(tags_lista)):
+                erros.append((rotulo_d, 'Tags sem Livro, Livro de Música.'))
+        elif formato == 'lacrado':
+            tags_lista = [t.strip() for t in str(o.get('tags') or '').split(',') if t.strip()]
+            if not ({'LP', 'LP Novo', 'Vinil Lacrado'} <= set(tags_lista)):
+                erros.append((rotulo_d, 'Tags sem LP, LP Novo, Vinil Lacrado.'))
+        else:
+            if capa in NOTAS_GOLDMINE and f'• Capa {capa}' not in linhas_desc:
+                erros.append((rotulo_d, f'Descrição sem o tópico exato "• Capa {capa}".'))
+            if vinil in NOTAS_GOLDMINE and f'• Vinil {vinil}' not in linhas_desc:
+                erros.append((rotulo_d, f'Descrição sem o tópico exato "• Vinil {vinil}".'))
 
-        tags_lista = [t.strip() for t in str(o.get('tags') or '').split(',') if t.strip()]
-        if not ({'LP', 'LP Usado', 'Vinil Usado'} <= set(tags_lista)):
-            erros.append((rotulo_d, 'Tags sem LP, LP Usado, Vinil Usado.'))
+            tags_lista = [t.strip() for t in str(o.get('tags') or '').split(',') if t.strip()]
+            if not ({'LP', 'LP Usado', 'Vinil Usado'} <= set(tags_lista)):
+                erros.append((rotulo_d, 'Tags sem LP, LP Usado, Vinil Usado.'))
 
         desc_lower = desc.lower()
         exageros = [p for p in PALAVRAS_EXAGERO if p in desc_lower]
@@ -1263,6 +1408,10 @@ def gravar_lote(
     base_trabalho: Path | str | None = None,
 ) -> dict[str, Any]:
     caminho_json = Path(caminho_json)
+    if caminho_json.is_dir():
+        caminho_json = caminho_json / 'lote.json'
+    elif not caminho_json.exists() and (Path(RAIZ_PROJETO) / 'dados' / 'cadastro_ia' / caminho_json / 'lote.json').exists():
+        caminho_json = Path(RAIZ_PROJETO) / 'dados' / 'cadastro_ia' / caminho_json / 'lote.json'
     dados_brutos = json.loads(caminho_json.read_text(encoding='utf-8'))
     lote = str(dados_brutos.get('lote') or '').strip() or lote_padrao()
     lote_dir = pasta_do_lote(lote, base_trabalho)
@@ -1651,9 +1800,32 @@ def main(argv: list[str] | None = None) -> int:
     p_rec_lote.add_argument('lote')
     p_rec_lote.add_argument('--confirmar', action='store_true')
 
+    p_heic = sub.add_parser('converter-heic', help='Converte fotos .HEIC para .jpg na raiz da entrada')
+    p_heic.add_argument('--origem', default='', help='Pasta de origem com .HEIC (padrão: <entrada>/Discos Monstro)')
+    p_heic.add_argument('--destino', default='', help='Pasta de destino para .jpg (padrão: <entrada>)')
+    p_heic.add_argument('--confirmar', action='store_true', help='Executa a conversão real')
+
     args = parser.parse_args(argv)
     cfg = carregar()
     pasta = pasta_entrada(cfg)
+
+    if args.comando == 'converter-heic':
+        origem = Path(args.origem) if args.origem else (pasta / 'Discos Monstro')
+        destino = Path(args.destino) if args.destino else pasta
+        if not origem.exists():
+            raise ErroLote(f'Pasta de origem não encontrada: {origem}')
+        res = converter_heic(origem, destino, confirmar=args.confirmar)
+        if res['modo'] == 'simulacao':
+            print(
+                f"Simulação converter-heic: {res['para_converter']} arquivo(s) HEIC seriam convertidos para .jpg em {res['destino']}. "
+                f"{res['pulados']} já existem e seriam pulados. Use --confirmar para converter."
+            )
+        else:
+            print(
+                f"Gravado converter-heic: {res['convertidos']} arquivo(s) HEIC convertidos para .jpg em {res['destino']}. "
+                f"{res['pulados']} pulado(s) pois já existiam."
+            )
+        return 0
 
     if args.comando == 'recorte':
         saida = recortar_foto(args.arquivo, args.esq, args.topo, args.dir, args.base, pasta, args.lote or None)

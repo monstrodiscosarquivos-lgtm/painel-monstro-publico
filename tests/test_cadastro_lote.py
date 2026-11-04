@@ -713,6 +713,122 @@ def test_comando_recortar_lote_simulacao_e_confirmado(tmp_path):
 
 
 # ----------------------------------------------------------------------------
+# 7. Testes de conversão HEIC e formato lacrado (D-095)
+# ----------------------------------------------------------------------------
+def test_converter_heic_simulacao_e_confirmar(tmp_path: Path):
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+    except ImportError:
+        pytest.skip('pillow_heif não disponível')
+
+    origem = tmp_path / 'heic_origem'
+    origem.mkdir()
+    destino = tmp_path / 'destino_jpg'
+    destino.mkdir()
+
+    # Cria 2 HEICs de teste
+    for nome in ['foto1.HEIC', 'foto2.heic']:
+        img = Image.new('RGB', (100, 100), (120, 150, 180))
+        img.save(origem / nome, format='HEIF')
+
+    # Cria foto1.jpg já no destino para testar skip
+    (destino / 'foto1.jpg').write_bytes(b'fake')
+
+    # Modo simulação
+    res_sim = cl.converter_heic(origem, destino, confirmar=False)
+    assert res_sim['modo'] == 'simulacao'
+    assert res_sim['total_heic'] == 2
+    assert res_sim['para_converter'] == 1
+    assert res_sim['pulados'] == 1
+    assert res_sim['convertidos'] == 0
+    assert not (destino / 'foto2.jpg').exists()
+
+    # Modo confirmado
+    res_conf = cl.converter_heic(origem, destino, confirmar=True)
+    assert res_conf['modo'] == 'gravado'
+    assert res_conf['convertidos'] == 1
+    assert (destino / 'foto2.jpg').exists()
+    assert (destino / 'foto1.jpg').read_bytes() == b'fake'  # Não sobrescreveu foto1
+
+
+def test_formato_lacrado_validar_e_derivar(tmp_path: Path):
+    pasta_local = tmp_path / 'entrada'
+    pasta_local.mkdir()
+    _criar_foto_sintetica_capa(pasta_local / 'capa_lacrado1.jpg')
+    _criar_foto_sintetica_capa(pasta_local / 'capa_lacrado2.jpg')
+
+    planilha = _nova_planilha()
+
+    dados_lote = {
+        'lote': '2026-10-31',
+        'discos': [
+            {
+                'disco': 'd01',
+                'acao': 'cadastrar',
+                'formato': 'lacrado',
+                'artista': 'Karina Buhr',
+                'album': 'Desmanche',
+                'ano': 2019,
+                'preco': 200,
+                'qtd': 1,
+                'descricao': 'Edição Noize Record Club em vinil amarelo translúcido.',
+                'tags': 'Karina Buhr, Desmanche, LP, LP Novo, Vinil Lacrado, MPB',
+                'cor': 'Amarelo Translúcido',
+                'discogs_url': 'https://www.discogs.com/release/14249845',
+                'fotos': [
+                    {'arquivo': 'capa_lacrado1.jpg', 'papel': 'capa'},
+                ],
+            },
+            {
+                'disco': 'd02',
+                'acao': 'cadastrar',
+                'formato': 'lacrado',
+                'artista': 'Insanidade',
+                'album': 'Enough to Be a Loser',
+                'ano': 2021,
+                'qtd': 2,
+                'descricao': 'Álbum de estreia da banda Insanidade.',
+                'tags': 'Insanidade, LP, LP Novo, Vinil Lacrado, Rock',
+                'fotos': [
+                    {'arquivo': 'capa_lacrado2.jpg', 'papel': 'capa'},
+                ],
+            },
+        ],
+    }
+
+    caminho_json = tmp_path / 'lote_lacrado.json'
+    caminho_json.write_text(json.dumps(dados_lote, ensure_ascii=False), encoding='utf-8')
+
+    res_val = cl.validar_lote(caminho_json, pasta_local, planilha, gerar_previas=False, base_trabalho=tmp_path / 'out')
+    assert res_val['ok'], f'Erros inesperados: {res_val["erros"]}'
+
+    derivado = res_val['derivado']
+    assert len(derivado['rascunhos_dicts']) == 2
+
+    # d01: com preço e com discogs
+    r1 = derivado['rascunhos_dicts'][0]
+    assert r1['titulo'] == 'LP Karina Buhr - Desmanche (2019) - (Vinil Amarelo Translúcido) (Novo/Lacrado)'
+    assert r1['categorias'] == 'LP, Novo/Lacrado, Nacionais, Novidades'
+    assert r1['capa'] == ''
+    assert r1['vinil'] == ''
+    assert r1['preco'] == '200'
+    assert r1['preco_origem'] == 'planilha'
+    assert r1['estoque'] == '1'
+    assert r1['discogs_url'] == 'https://www.discogs.com/release/14249845'
+    assert 'sem Discogs' not in r1['pendencias']
+    assert 'conferir preço' not in r1['pendencias']
+
+    # d02: sem preço e sem discogs
+    r2 = derivado['rascunhos_dicts'][1]
+    assert r2['titulo'] == 'LP Insanidade - Enough to Be a Loser (2021) - (Novo/Lacrado)'
+    assert r2['preco'] == ''
+    assert r2['estoque'] == '2'
+    assert 'sem Discogs' in r2['pendencias']
+    assert 'conferir preço' in r2['pendencias']
+
+
+# ----------------------------------------------------------------------------
 # 6. Teste com fotos reais (meta >= 90% dos cantos contra referência)
 # ----------------------------------------------------------------------------
 PASTA_REAL = os.getenv('CADASTRO_PASTA_LOCAL', '').strip() or r'J:\Meu Drive\Cadastro de Discos\entrada'
@@ -758,3 +874,55 @@ def test_fotos_reais_meta_90_porcento_cantos():
     assert total > 0
     taxa = dentro_10px / total
     assert taxa >= 0.90, f'Taxa de acerto em fotos reais ({taxa:.1%}) abaixo da meta de 90%'
+
+
+# ----------------------------------------------------------------------------
+# D-097 · Formato livro
+# ----------------------------------------------------------------------------
+def test_formato_livro_validacao_e_derivacao(tmp_path):
+    f_capa = tmp_path / 'livro-teste.jpg'
+    _criar_foto_sintetica_capa(f_capa, (500, 700))
+
+    lote_dados = {
+        'lote': '2026-11-04-livros',
+        'discos': [
+            {
+                'disco': 'd01',
+                'acao': 'cadastrar',
+                'formato': 'livro',
+                'artista': 'Claudio Jorge Oliveira',
+                'album': 'Disco É Cultura',
+                'preco': 95,
+                'peso_kg': '0,52',
+                'altura_cm': '2,5',
+                'largura_cm': '15,2',
+                'comprimento_cm': '22',
+                'tags': 'Disco É Cultura, Claudio Jorge Oliveira, Livro, Livro de Música',
+                'descricao': 'História da música sob a ditadura.\n\n• Autor: Claudio Jorge Oliveira\n• Novo',
+                'fotos': [{'arquivo': 'livro-teste.jpg', 'papel': 'capa'}],
+            }
+        ]
+    }
+
+    arq_lote = _salvar_lote(tmp_path, lote_dados)
+    planilha = _nova_planilha()
+    val = cl.validar_lote(arq_lote, pasta_local=tmp_path, planilha=planilha)
+    assert val['erros'] == []
+
+    deriv = cl.derivar_lote(lote_dados, planilha=planilha, pasta_local=tmp_path, usar_nomes_novos=False)
+    rasc = deriv['rascunhos_dicts'][0]
+    assert rasc['titulo'] == 'Livro Disco É Cultura - Claudio Jorge Oliveira'
+    assert rasc['categorias'] == 'Livros'
+    assert rasc['capa'] == ''
+    assert rasc['vinil'] == ''
+    assert rasc['preco'] == '95'
+    assert rasc['peso_kg'] == '0,52'
+    assert rasc['altura_cm'] == '2,5'
+    assert rasc['largura_cm'] == '15,2'
+    assert rasc['comprimento_cm'] == '22'
+    assert rasc['estoque'] == ''
+    assert 'quantidade' in rasc['pendencias']
+
+    # Foto de livro tem recorte inteira sem cantos manuais/automáticos
+    f_info = deriv['detalhes_discos'][0]['fotos_site'][0]
+    assert f_info['cantos'] is None

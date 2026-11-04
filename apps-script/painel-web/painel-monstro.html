@@ -203,6 +203,12 @@ tr.fora td:first-child{text-decoration:none}
 .chart .fl-top .seg{margin:0}
 footer{margin-top:28px;font-size:13px;color:var(--muted)}
 footer a{color:var(--muted)}
+@media print{
+  body{background:#fff!important;color:#000!important;padding:0!important}
+  header,.tabs,nav,#banner,#cd-filtro,#cd-lote,.savebar,.no-print,footer,#cd-nota{display:none!important}
+  #view-cad{display:block!important}
+  .cd-marcar-card{border:0!important;border-bottom:1px solid #ccc!important;border-radius:0!important;padding:10px 0!important;background:transparent!important;page-break-inside:avoid}
+}
 </style>
 
 <div class="wrap">
@@ -1231,8 +1237,10 @@ const MEIO_NOME = {pix:"Pix", cartao:"Cartão", boleto:"Boleto", outros:"Outro"}
 function comCfg(){
   const it = re => CFG.find(x => re.test(String(x.label)));
   const g = (re, d) => { const x = it(re); const v = x ? num(x.value) : null; return {v: v == null ? d : v, row: x ? x.row : null}; };
+  const s = (re, d) => { const x = it(re); const v = x && x.value != null ? String(x.value).trim() : null; return {v: (v !== null && v !== "") ? v : d, row: x ? x.row : null}; };
   return { pct:g(/^comiss[ãa]o: percentual/i,10), pix:g(/^comiss[ãa]o: taxa do pix/i,0.99), cartao:g(/^comiss[ãa]o: taxa do cart/i,3.65),
-           boleto:g(/^comiss[ãa]o: taxa do boleto/i,1.34), outros:g(/^comiss[ãa]o: taxa de outros/i,0) };
+           boleto:g(/^comiss[ãa]o: taxa do boleto/i,1.34), outros:g(/^comiss[ãa]o: taxa de outros/i,0),
+           catSemCom:s(/^comiss[ãa]o: categorias sem comiss[ãa]o/i, "Livros") };
 }
 const meioDe = fp => { fp = String(fp||"").toLowerCase(); if (fp === "pix") return "pix"; if (/card|cart/.test(fp)) return "cartao"; if (/boleto|ticket/.test(fp)) return "boleto"; return "outros"; };
 const retirada = fe => /loja monstro|monstro discos|retirad/i.test(String(fe||""));
@@ -1352,16 +1360,33 @@ function comCalc(m, st, cfg){
   const taxas = taxasSite + manTaxas;
   const foraL = ped.filter(p => p.fora), valorFora = sum(foraL, "liq");
   const fl = freteLoja(m); const freteDesc = st.frete ? (num(st.freteValor) ?? fl.v ?? 0) : 0;
-  // produtos sem comissão (ações da loja): sai só a parte do pedido que é desses produtos, já sem frete, taxa e estorno
-  const FORA = comForaMap(), IT = FORA.size ? comItensPorPedido() : null;
-  ped.forEach(p => { p.semCom = 0; p.semComItens = [];
+  // produtos sem comissão (ações da loja) e categorias sem comissão (ex.: Livros, D-097)
+  const catSemComCfg = (cfg.catSemCom && cfg.catSemCom.v) || "";
+  const semComCats = catSemComCfg.split(",").map(c => c.trim().toLowerCase()).filter(Boolean);
+  const PROD_CATS = semComCats.length ? comProdutosCategoriasMap() : new Map();
+  const FORA = comForaMap(), IT = (FORA.size || semComCats.length) ? comItensPorPedido() : null;
+  ped.forEach(p => {
+    p.semCom = 0; p.semComItens = [];
+    p.semComCat = 0; p.semComCatItens = [];
     if (!IT || p.fora || p.total_est) return;
-    const its = IT[normNum(p.o.numero)] || [], tot = its.reduce((t,x) => t + x.v, 0), exc = its.filter(x => FORA.has(x.pid));
-    if (!tot || !exc.length) return;
-    p.semComItens = exc; p.semCom = exc.reduce((t,x) => t + x.v, 0) / tot * p.liq; });
+    const its = IT[normNum(p.o.numero)] || [], tot = its.reduce((t,x) => t + x.v, 0);
+    if (!tot) return;
+    const exc = its.filter(x => FORA.has(x.pid));
+    if (exc.length){ p.semComItens = exc; p.semCom = exc.reduce((t,x) => t + x.v, 0) / tot * p.liq; }
+    if (semComCats.length){
+      const excCat = its.filter(x => !FORA.has(x.pid) && (() => {
+        const info = PROD_CATS.get(x.pid);
+        if (!info) return false;
+        const cp = info.categorias.split(",").map(c => c.trim().toLowerCase());
+        return cp.some(c => semComCats.includes(c));
+      })());
+      if (excCat.length){ p.semComCatItens = excCat; p.semComCat = excCat.reduce((t,x) => t + x.v, 0) / tot * p.liq; }
+    }
+  });
   const semComL = ped.filter(p => p.semCom > 0), semComV = sum(semComL, "semCom");
-  const base = vendido - estornos - fretes - taxas - valorFora - freteDesc - semComV;
-  return {manL, manVendido, manFretes, manTaxas, manBase, vendidoSite, fretesSite, taxasSite, semComL, semComV, semComCarregando: FORA.size > 0 && !IT, ped, estornos, estL, faltaEst, vendido, fretes, taxas, taxasOrigem, foraL, valorFora, freteDesc, fl, base, pct: cfg.pct.v, comissao: base * cfg.pct.v / 100, temOutros,
+  const semComCatL = ped.filter(p => p.semComCat > 0), semComCatV = sum(semComCatL, "semComCat");
+  const base = vendido - estornos - fretes - taxas - valorFora - freteDesc - semComV - semComCatV;
+  return {manL, manVendido, manFretes, manTaxas, manBase, vendidoSite, fretesSite, taxasSite, semComL, semComV, semComCatL, semComCatV, catSemComCfg, semComCarregando: (FORA.size > 0 || semComCats.length > 0) && !IT, ped, estornos, estL, faltaEst, vendido, fretes, taxas, taxasOrigem, foraL, valorFora, freteDesc, fl, base, pct: cfg.pct.v, comissao: base * cfg.pct.v / 100, temOutros,
           gratis: ped.filter(p => p.gratis && !p.fora).length};
 }
 function comMeses(){
@@ -1399,6 +1424,7 @@ function renderCom(){
     <tr class="minus"><td>Taxas de pagamento <span class="s" style="color:var(--muted)">(${r.taxasOrigem})</span></td><td class="n">${brl2(r.taxas)}</td></tr>
     ${r.foraL.length ? `<tr class="minus"><td>Pedidos fora da base (${r.foraL.length})</td><td class="n">${brl2(r.valorFora)}</td></tr>` : ""}
     ${r.semComL.length ? `<tr class="minus"><td>Produtos sem comissão (${r.semComL.length} ${r.semComL.length>1?"pedidos":"pedido"})<div class="s" style="color:var(--muted)">${esc([...new Set(r.semComL.flatMap(p => p.semComItens.map(x => x.nome)))].join(", "))}</div></td><td class="n">${brl2(r.semComV)}</td></tr>` : (r.semComCarregando ? `<tr><td colspan="2" class="s" style="color:var(--muted)">Carregando os itens dos pedidos para tirar os produtos sem comissão…</td></tr>` : "")}
+    ${r.semComCatL && r.semComCatL.length ? `<tr class="minus"><td>Categorias sem comissão (${esc(r.catSemComCfg || "Livros")}) (${r.semComCatL.length} ${r.semComCatL.length>1?"pedidos":"pedido"})</td><td class="n">${brl2(r.semComCatV)}</td></tr>` : ""}
     ${r.freteDesc ? `<tr class="minus"><td>Frete grátis pago pela loja</td><td class="n">${brl2(r.freteDesc)}</td></tr>` : ""}
     <tr class="tot"><td>Base da comissão</td><td class="n">${brl2(r.base)}</td></tr>
     <tr class="tot"><td>Comissão (${nf1.format(r.pct)}%)</td><td class="n">${brl2(r.comissao)}</td></tr>
@@ -1428,7 +1454,7 @@ function renderCom(){
   const manRowsHtml = r.manL.map(m => `<tr><td><input type="checkbox" checked disabled aria-label="Pedido ${esc(m.id)} fora da Nuvemshop"></td><td><b>${esc(m.id)}</b> <span class="pill p-info">fora da Nuvemshop</span> <span class="s" style="font-size:12px;color:var(--muted)">${esc(m.rotuloParcela)}</span>${m.descricao ? `<div class="s" style="font-size:12px;color:var(--muted)">${esc(m.descricao)}</div>` : ""}</td><td>${esc(diaLabel(String(m.data).slice(0,10)))}</td><td>${esc(m.forma_pagamento)}</td><td class="n">${brl2(m.vendido)}</td><td class="n">${m.frete ? brl2(m.frete) : "–"}</td><td class="n">${brl2(m.taxa)}${m.taxaEst?"*":""}</td><td></td><td class="n">${brl2(m.liq)}</td></tr>`).join("");
   $("cm-ped").innerHTML = (r.ped.length || r.manL.length) ? `<table><thead><tr><th>Base</th><th>Pedido</th><th>Data</th><th>Pagamento</th><th>Total</th><th>Frete</th><th>Taxa</th><th>Cupom</th><th>Líquido</th></tr></thead><tbody>${
     r.ped.map(p => `<tr class="${p.fora?"fora":""}"${p.total_est?' style="background:var(--accent-soft)"':""}><td>${p.total_est ? "" : `<input type="checkbox" data-ped="${esc(p.o.numero)}" aria-label="Pedido ${esc(p.o.numero)} entra na base"${p.fora?"":" checked"}${p.cup && st.cupons.map(z=>z.toUpperCase()).includes(p.cup)?" disabled":""}>`}</td>
-      <td>${esc(p.o.numero)}${p.semCom > 0 ? `<div class="s" style="font-size:12px;color:var(--muted)">sem comissão: ${brl2(p.semCom)}</div>` : ""}${p.total_est?' <span class="pill p-bad">estornado</span>':(p.parcial?' <span class="pill p-wait">estorno parcial</span>':"")}${p.parcial ? (p.estFonte === "api" ? `<div class="s" style="font-size:12px;color:var(--muted)">estornado: ${brl2(p.estornoV)}</div>` : `<div class="cm-inline" style="margin:4px 0 0">estornado: <input data-est="${esc(p.o.numero)}" inputmode="decimal" value="${esc((st.est||{})[p.o.numero] ?? "")}" placeholder="R$" style="width:90px"></div>`) : ""}</td><td>${esc(diaLabel(String(p.o.data).slice(0,10)))}</td><td>${MEIO_NOME[p.meio]}</td>
+      <td>${esc(p.o.numero)}${p.semCom > 0 ? `<div class="s" style="font-size:12px;color:var(--muted)">sem comissão: ${brl2(p.semCom)}</div>` : ""}${p.semComCat > 0 ? `<div class="s" style="font-size:12px;color:var(--muted)">categoria sem comissão: ${brl2(p.semComCat)}</div>` : ""}${p.total_est?' <span class="pill p-bad">estornado</span>':(p.parcial?' <span class="pill p-wait">estorno parcial</span>':"")}${p.parcial ? (p.estFonte === "api" ? `<div class="s" style="font-size:12px;color:var(--muted)">estornado: ${brl2(p.estornoV)}</div>` : `<div class="cm-inline" style="margin:4px 0 0">estornado: <input data-est="${esc(p.o.numero)}" inputmode="decimal" value="${esc((st.est||{})[p.o.numero] ?? "")}" placeholder="R$" style="width:90px"></div>`) : ""}</td><td>${esc(diaLabel(String(p.o.data).slice(0,10)))}</td><td>${MEIO_NOME[p.meio]}</td>
       <td class="n">${brl2(p.total)}</td><td class="n">${p.frete ? brl2(p.frete) : (p.gratis ? '<span class="s" style="color:var(--muted)">grátis</span>' : "–")}</td>
       <td class="n">${brl2(p.taxa)}${p.est?"*":""}</td><td>${p.cup?`<code>${esc(p.cup)}</code>`:""}</td><td class="n">${p.total_est ? '<span class="s" style="color:var(--muted)">devolvido</span>' : brl2(p.liq)}</td></tr>`).join("")}${manRowsHtml}</tbody></table>`
     : '<div class="empty">Nenhum pedido pago neste mês.</div>';
@@ -1440,17 +1466,21 @@ function renderCom(){
     hist.map(x => `<tr><td>${esc(mesLabel(x.mes))}</td><td class="n">${int(num(x.pedidos))}</td><td class="n">${brl2(num(x.vendido_total))}</td><td class="n">${x.estornos ? brl2(num(x.estornos)) : "–"}</td><td class="n">${brl2(num(x.base))}</td><td class="n"><b>${brl2(num(x.comissao))}</b></td><td style="font-size:13px">${esc(x.criterios)}</td><td>${esc(x.registrado_em)}</td></tr>`).join("")}</tbody></table>`
     : '<div class="empty">Nenhum mês registrado ainda. Confira o mês acima e clique em Registrar.</div>';
   // taxas e percentual
-  const fld = (k, lab) => cfg[k].row ? `<label>${lab}<input data-cmcfg="${cfg[k].row}" data-orig="${esc(String(cfg[k].v).replace(".",","))}" value="${esc(String(cfg[k].v).replace(".",","))}" inputmode="decimal"></label>` : "";
+  const fld = (k, lab) => cfg[k] && cfg[k].row ? `<label>${lab}<input data-cmcfg="${cfg[k].row}" data-orig="${esc(String(cfg[k].v).replace(".",","))}" value="${esc(String(cfg[k].v).replace(".",","))}" inputmode="decimal"></label>` : "";
+  const fldTxt = (k, lab, help) => cfg[k] && cfg[k].row ? `<label>${lab}<input data-cmcfg-txt="${cfg[k].row}" data-orig="${esc(String(cfg[k].v || ""))}" value="${esc(String(cfg[k].v || ""))}">${help ? `<span class="s" style="font-weight:400">${help}</span>` : ""}</label>` : "";
   if (!$("cm-cfg").querySelector(".changed")) $("cm-cfg").innerHTML = `<h3>Percentual e taxas</h3><p class="sub" style="margin:0 0 4px">A Nuvemshop não informa a taxa de cada pedido pela API. Estas taxas fazem a estimativa; para o valor exato, use o total do extrato do Nuvem Pago no ajuste acima.</p>
-    <div class="cost-form">${fld("pct","Comissão (%)")}${fld("pix","Taxa do Pix (%)")}${fld("cartao","Taxa do cartão (%)")}${fld("boleto","Taxa do boleto (%)")}${fld("outros","Taxa de outros meios (%)")}</div>
+    <div class="cost-form">${fld("pct","Comissão (%)")}${fld("pix","Taxa do Pix (%)")}${fld("cartao","Taxa do cartão (%)")}${fld("boleto","Taxa do boleto (%)")}${fld("outros","Taxa de outros meios (%)")}${fldTxt("catSemCom","Categorias sem comissão","separadas por vírgula (ex.: Livros)")}</div>
     <div class="savebar"><button class="primary" type="button" id="cm-cfg-save">Salvar</button><span class="status"></span></div>`;
   $("cm-cfg").querySelectorAll("input").forEach(el => el.addEventListener("input", () => el.classList.toggle("changed", el.value !== el.dataset.orig)));
   const cs = $("cm-cfg-save"); if (cs) cs.onclick = async () => {
     const stt = $("cm-cfg").querySelector(".status"), ch = [...$("cm-cfg").querySelectorAll(".changed")];
     if (!ch.length){ stt.className = "status"; stt.textContent = "Nada mudou."; return; }
-    if (ch.some(el => !isFinite(parseBR(el.value)))){ stt.className = "status err"; stt.textContent = "Use só números, como 3,65."; return; }
+    if (ch.some(el => !el.dataset.cmcfgTxt && !isFinite(parseBR(el.value)))){ stt.className = "status err"; stt.textContent = "Use só números, como 3,65."; return; }
     cs.disabled = true; stt.className = "status"; stt.textContent = "Salvando…";
-    try { for (const el of ch){ await write(`'Configuração'!B${el.dataset.cmcfg}`, [[parseBR(el.value)]]); el.dataset.orig = el.value; el.classList.remove("changed"); }
+    try { for (const el of ch){
+        if (el.dataset.cmcfgTxt){ await write(`'Configuração'!B${el.dataset.cmcfgTxt}`, [[el.value.trim()]]); }
+        else { await write(`'Configuração'!B${el.dataset.cmcfg}`, [[parseBR(el.value)]]); }
+        el.dataset.orig = el.value; el.classList.remove("changed"); }
       stt.className = "status ok"; stt.textContent = "Salvo às " + hhmm() + "."; await afterSave();
     } catch(e){ stt.className = "status err"; stt.textContent = writeErr(e); }
     cs.disabled = false; };
@@ -1693,6 +1723,20 @@ function comCatalogo(){
   const a = D.prodA || [], ids = D.prodId || []; if (a.length < 2 || ids.length < 2) return [];
   const iN = a[0].indexOf("nome"); return a.slice(1).map((r,i) => ({id: normNum((ids[i+1] || [])[0]), nome: String((r || [])[iN] || "")})).filter(x => x.id && x.nome);
 }
+function comProdutosCategoriasMap(){
+  const a = D.prodA || [], ids = D.prodId || []; if (a.length < 2 || ids.length < 2) return new Map();
+  const h = a[0], iCat = h.indexOf("categorias"), iNome = h.indexOf("nome");
+  const m = new Map();
+  for (let i = 1; i < a.length; i++){
+    const pid = normNum((ids[i] || [])[0]);
+    if (!pid) continue;
+    const r = a[i] || [];
+    const cat = String((iCat >= 0 ? r[iCat] : "") || "");
+    const nome = String((iNome >= 0 ? r[iNome] : "") || "");
+    m.set(pid, {categorias: cat, nome: nome});
+  }
+  return m;
+}
 const texto = v => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 let COM_SCQ = "", COM_SCM = "Ação da loja";
 function renderSemCom(){
@@ -1728,6 +1772,7 @@ async function comRegistrar(r, st){
   if (r.estL.length) crit.push("estornos: " + r.estL.map(p => p.o.numero + " " + brl2(p.estornoV) + (p.total_est ? " (total)" : "")).join(", ") + (r.faltaEst ? " [" + r.faltaEst + " sem valor]" : ""));
   if (r.foraL.length) crit.push("fora: " + r.foraL.map(p => p.o.numero + (p.cup ? " (" + p.cup + ")" : "")).join(", "));
   if (r.semComL.length) crit.push("produtos sem comissão: " + r.semComL.map(p => p.o.numero + " " + brl2(p.semCom)).join(", "));
+  if (r.semComCatL && r.semComCatL.length) crit.push("categorias sem comissão (" + (r.catSemComCfg || "Livros") + "): " + r.semComCatL.map(p => p.o.numero + " " + brl2(p.semComCat)).join(", "));
   if (r.manL && r.manL.length) crit.push("fora da Nuvemshop: " + r.manL.map(m => m.id + " (" + m.rotuloParcela + " " + brl2(m.liq) + ")").join(", "));
   if (r.freteDesc) crit.push("frete grátis descontado");
   crit.push("taxas " + r.taxasOrigem);
@@ -2034,7 +2079,7 @@ function renderAdAds(c){
   if (!v.length){ $("ad-ads").innerHTML = '<div class="empty">Nenhum anúncio com gasto nos últimos 30 dias.</div>'; return; }
   $("ad-ads").innerHTML = v.map(r => { const inv = num(r.investido_7d)||0, rec = num(r.receita_7d)||0, roas = inv > 0 ? rec/(inv*c.imp) : null, ctr = num(r.ctr_7d), ctrc = num(r.ctr_campanha_7d), fq = num(r.frequencia_7d);
     const cansado = /^sim$/i.test(r.cansado), ativo = /^ACTIVE$/i.test(r.status), ev = ((nts[String(r.campanha_id)] || {}).tipo || r.tipo) === "evento";
-    const th = /^https:\/\//.test(r.thumb) ? `<img class="ad-thumb" src="${esc(r.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ad-thumb'}))">` : '<div class="ad-thumb"></div>';
+    const th = /^https:[/][/]/.test(r.thumb) ? `<img class="ad-thumb" src="${esc(r.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ad-thumb'}))">` : '<div class="ad-thumb"></div>';
     return `<div class="fcard"><div class="ad-row">${th}<div style="min-width:0;flex:1"><div class="fcard-h"><b style="overflow-wrap:anywhere">${esc(r.anuncio)}</b><span class="pill ${ativo ? "p-ok" : "p-wait"}">${ativo ? "ativo" : "parado"}</span>${cansado ? '<span class="pill p-bad">cansado</span>' : ""}</div>
       <div class="s">${esc(r.campanha)}${r.conjunto ? " · " + esc(r.conjunto) : ""}</div></div></div>
       <div class="fmeta"><div><div class="k">Investido 7d</div>${brl(inv)}</div>${ev ? "" : `<div><div class="k">Compras 7d</div>${int(num(r.compras_7d))}</div><div><div class="k">ROAS real 7d</div><span class="pill ${roasCls(roas,c)}">${roas == null ? "–" : nf1.format(roas)}</span></div>`}
@@ -2970,7 +3015,9 @@ function cdLote(){
   });
 }
 const CD_GRADES = ["M","NM","VG+","VG","G+","G","P"];
-const CD_FILTROS = [["rascunho","Para revisar"],["aprovado","Aprovados"],["criado","Criados (ocultos)"],["erro","Com erro"],["publicado","Publicados"],["descartado","Descartados"],["todos","Todos"]];
+const CD_CAPA_GRADES = ["M","NM","VG+","VG","G+","G","F"];
+const CD_PAPEIS = ["capa", "contracapa", "encarte frente", "encarte verso", "encarte aberto", "capa interna", "disco", "rótulo", "etiqueta"];
+const CD_FILTROS = [["rascunho","Para revisar"],["aprovado","Aprovados"],["criado","Criados (ocultos)"],["erro","Com erro"],["publicado","Publicados"],["marcar_vinil","Marcar no vinil"],["descartado","Descartados"],["todos","Todos"]];
 const cdGrupo = s => { s = String(s || "").trim().toLowerCase(); if (s.startsWith("erro")) return "erro"; if (s.startsWith("descartado")) return "descartado"; return ["rascunho","aprovado","criado","publicado"].includes(s) ? s : "rascunho"; };
 const CD_PILL = {rascunho:["p-wait","para revisar"], aprovado:["p-info","aprovado, aguardando a rotina"], criado:["p-ok","criado oculto na loja"], erro:["p-bad","erro"], publicado:["p-ok","publicado"], descartado:["p-info","descartado"]};
 const colL = n => { let s = ""; n++; while (n > 0){ const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
@@ -2986,58 +3033,245 @@ function cdFotos(o){
     return {ordem: f.ordem, papel: f.papel, id: (a && a.arquivo_drive_id) || f.arquivo_drive_id, ajustada: !!(a && a.arquivo_drive_id)}; });
   return String(o.fotos || "").split("|").map(s => s.trim()).filter(Boolean).map((s,i) => ({ordem: i + 1, papel: s.replace(/^\d+\s*/, "").replace(/\.jpg$/i, ""), id: "", ajustada: false}));
 }
+function cdFotosLinhas(o){
+  const v = D.cadf || []; if (v.length < 2) return [];
+  const list = [];
+  for (let i = 1; i < v.length; i++){
+    const r = v[i];
+    if (r && String(r[0] || "").trim() === o.id){
+      list.push({
+        _row: i + 1,
+        ordem: num(r[1]) || (list.length + 1),
+        papel: String(r[2] || "").trim(),
+        arquivo_drive_id: String(r[3] || "").trim(),
+        cantos: String(r[4] || "").trim(),
+        observacao: String(r[5] || "").trim()
+      });
+    }
+  }
+  return list.sort((a,b) => a.ordem - b.ordem);
+}
+function cdFotosEditor(o, edit){
+  const flinhas = cdFotosLinhas(o);
+  if (!flinhas.length) return "";
+  const dis = edit ? "" : " disabled";
+  return `<div style="margin-top:10px">
+    <div class="k" style="font-size:12px;font-weight:700;margin-bottom:6px">Fotos do disco (ordem e papel)</div>
+    <div class="cd-fotos-lista" data-disco="${esc(o.id)}">
+      ${flinhas.map(f => {
+        const naoUsar = f.papel === "etiqueta";
+        return `<div class="cd-foto-item" data-row="${f._row}" data-orig-ordem="${f.ordem}" data-orig-papel="${esc(f.papel)}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:6px;background:var(--bg-card,transparent);${naoUsar ? "opacity:0.65;" : ""}">
+          <b class="cd-foto-pos" style="min-width:24px;color:var(--muted)">${f.ordem}</b>
+          <div style="flex:1;min-width:140px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            ${f.arquivo_drive_id ? `<a href="https://drive.google.com/file/d/${esc(f.arquivo_drive_id)}/view" target="_blank" rel="noopener" class="btn" style="padding:2px 8px;font:500 12px var(--mono)">Abrir foto</a>` : `<span class="s">sem arquivo</span>`}
+            <select data-fpapel="${f._row}" style="max-width:160px"${dis}>
+              ${CD_PAPEIS.map(p => `<option value="${p}"${p === f.papel ? " selected" : ""}>${p === "etiqueta" ? "etiqueta (não usar)" : p}</option>`).join("")}
+            </select>
+            <label class="s" style="display:inline-flex;gap:4px;align-items:center;margin:0">
+              <input type="checkbox" data-fnaousar="${f._row}" style="width:auto"${naoUsar ? " checked" : ""}${dis}> Não usar
+            </label>
+          </div>
+          ${edit ? `<div style="display:flex;gap:4px">
+            <button type="button" class="btn" data-foto-move="up" title="Subir foto" style="padding:2px 8px">▲</button>
+            <button type="button" class="btn" data-foto-move="down" title="Descer foto" style="padding:2px 8px">▼</button>
+          </div>` : ""}
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="s" style="margin-top:4px">Use as setas para mudar a ordem das fotos no site. A primeira vira a capa. Fotos marcadas como "não usar" (etiqueta) nunca vão para a loja.</div>
+  </div>`;
+}
+function cdCardMarcarVinil(o){
+  const pr = num(o.preco);
+  const prTxt = pr ? brl2(pr) : (o.preco ? "R$ " + o.preco : "sem preço");
+  const qtd = o.estoque ? o.estoque : "1";
+  const stTxt = o.status === "publicado" ? "publicado na loja" : "criado oculto";
+  const pillCls = o.status === "publicado" ? "p-ok" : "p-info";
+  return `<div class="fcard cd-marcar-card" data-disco-marcar="${esc(o.id)}" style="margin-bottom:12px;padding:16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+      <div style="flex:1;min-width:240px">
+        <div style="font-size:19px;font-weight:700;line-height:1.25;margin-bottom:6px">${esc(o.titulo)}</div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:15px;margin-bottom:8px">
+          <span style="font-weight:700;font-size:18px;color:var(--accent)">${prTxt}</span>
+          <span>Quantidade: <b>${esc(qtd)}</b></span>
+          <span class="pill ${pillCls}">${esc(stTxt)}</span>
+          <span class="s" style="font-family:var(--mono)">ID: ${esc(o.id)}</span>
+        </div>
+      </div>
+      <div class="no-print" style="margin-top:4px">
+        <label class="btn" style="display:inline-flex;align-items:center;gap:8px;font-size:16px;font-weight:700;padding:10px 16px;cursor:pointer;background:var(--accent-soft);border-color:var(--accent);color:var(--accent)">
+          <input type="checkbox" data-marcar-vinil="${esc(o.id)}" style="width:20px;height:20px;margin:0;cursor:pointer"> Marcar no vinil
+        </label>
+      </div>
+    </div>
+  </div>`;
+}
+let CD_DESFAZER_TIMER = null;
+async function cdExecutarMarcarVinil(o, cardEl){
+  const agora = hojeSP() + " " + hhmm();
+  cardEl.style.opacity = "0.4";
+  try {
+    let iCol = o._h.indexOf("marcado_vinil");
+    if (iCol < 0){
+      await write(`cadastro_rascunhos!${colL(o._h.length)}1`, [["marcado_vinil"]]);
+      iCol = o._h.length;
+      o._h.push("marcado_vinil");
+    }
+    await write(`cadastro_rascunhos!${colL(iCol)}${o._row}`, [[agora]]);
+    o.marcado_vinil = agora;
+    if (D.cad && D.cad[o._row - 1]){
+      while (D.cad[o._row - 1].length <= iCol) D.cad[o._row - 1].push("");
+      D.cad[o._row - 1][iCol] = agora;
+    }
+    cardEl.remove();
+    const dBox = $("cd-desfazer-box");
+    if (dBox){
+      clearTimeout(CD_DESFAZER_TIMER);
+      dBox.innerHTML = `<div class="banner no-print" style="display:flex;justify-content:space-between;align-items:center;background:var(--good-soft);border-color:var(--good);margin-bottom:12px;padding:10px 14px">
+        <span><b>${esc(o.titulo)}</b> marcado no vinil.</span>
+        <button type="button" class="btn" id="cd-btn-desfazer" style="font-weight:700">Desfazer</button>
+      </div>`;
+      const btnDesfazer = $("cd-btn-desfazer");
+      if (btnDesfazer){
+        btnDesfazer.onclick = async () => {
+          btnDesfazer.disabled = true;
+          await write(`cadastro_rascunhos!${colL(iCol)}${o._row}`, [[""]]);
+          o.marcado_vinil = "";
+          if (D.cad && D.cad[o._row - 1]) D.cad[o._row - 1][iCol] = "";
+          dBox.innerHTML = "";
+          renderCad();
+        };
+      }
+      CD_DESFAZER_TIMER = setTimeout(() => { if (dBox) dBox.innerHTML = ""; }, 10000);
+    }
+    renderCad();
+  } catch(e){
+    cardEl.style.opacity = "";
+    alert("Erro ao marcar no vinil: " + (e && e.message ? e.message : e));
+  }
+}
 function renderCad(){
   if (!D.cad) return;
-  const L = cdLinhas(), cont = {}; L.forEach(o => { const g = cdGrupo(o.status); cont[g] = (cont[g] || 0) + 1; }); cont.todos = L.length;
+  const L = cdLinhas(), cont = {};
+  L.forEach(o => { const g = cdGrupo(o.status); cont[g] = (cont[g] || 0) + 1; });
+  cont.todos = L.length;
+  cont.marcar_vinil = L.filter(o => !cdEhLivro(o) && ["criado","publicado"].includes(cdGrupo(o.status)) && !String(o.marcado_vinil || "").trim()).length;
   $("cd-filtro").innerHTML = CD_FILTROS.map(([v,l]) => `<button type="button" data-v="${v}" aria-pressed="${v === CD_FILTRO}">${l} (${cont[v] || 0})</button>`).join("");
   $("cd-filtro").querySelectorAll("button").forEach(b => b.onclick = () => { CD_FILTRO = b.dataset.v; renderCad(); });
-  const lista = L.filter(o => CD_FILTRO === "todos" || cdGrupo(o.status) === CD_FILTRO);
   $("cd-nota").textContent = CD_FILTRO === "rascunho" ? "Disco usado é sempre exemplar único: cada rascunho vira um produto novo com estoque 1." :
-    CD_FILTRO === "criado" ? "Produto oculto pode não abrir pelo link público. Confira no administrador da Nuvemshop, em Produtos, e publique por lá." : "";
+    CD_FILTRO === "criado" ? "Produto oculto pode não abrir pelo link público. Confira no administrador da Nuvemshop, em Produtos, e publique por lá." :
+    CD_FILTRO === "marcar_vinil" ? "Discos já criados ou publicados para marcar a etiqueta no vinil da loja física. Livros ficam fora." : "";
+
+  if (CD_FILTRO === "marcar_vinil"){
+    const pendentesVinil = L.filter(o => !cdEhLivro(o) && ["criado","publicado"].includes(cdGrupo(o.status)) && !String(o.marcado_vinil || "").trim())
+      .sort((a,b) => String(a.id || "").localeCompare(String(b.id || "")));
+    if (!pendentesVinil.length){
+      $("cd-lista").innerHTML = '<div class="empty">Nenhum vinil pendente de marcação na loja física.</div>';
+      cdLote();
+      return;
+    }
+    const topoHtml = `<div class="cd-marcar-topo no-print" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:12px">
+      <div><b>${pendentesVinil.length} ${pendentesVinil.length === 1 ? "disco pendente" : "discos pendentes"}</b> para marcar no vinil físico</div>
+      <button type="button" class="btn primary" onclick="window.print()">Imprimir lista</button>
+    </div><div id="cd-desfazer-box"></div>`;
+    $("cd-lista").innerHTML = topoHtml + pendentesVinil.map(cdCardMarcarVinil).join("");
+    $("cd-lista").querySelectorAll("[data-marcar-vinil]").forEach(chk => {
+      chk.onchange = async () => {
+        const id = chk.dataset.marcarVinil;
+        const o = L.find(x => x.id === id);
+        if (!o) return;
+        await cdExecutarMarcarVinil(o, chk.closest(".cd-marcar-card"));
+      };
+    });
+    cdLote();
+    return;
+  }
+
+  const lista = L.filter(o => CD_FILTRO === "todos" || cdGrupo(o.status) === CD_FILTRO);
   if (document.querySelector("#cd-lista .changed")) { cdLote(); return; } // não apagar edição em andamento
   $("cd-lista").innerHTML = lista.length ? lista.map(cdCard).join("") : '<div class="empty">Nada nesta situação.</div>';
   $("cd-lista").querySelectorAll("[data-cd]").forEach(box => cdLigar(box, L.find(o => o.id === box.dataset.cd)));
   cdLote();
 }
-// Novo/lacrado: sem estado de conservação, com quantidade (D-073). Usado continua exemplar único.
-const cdNovo = o => /novo|lacrad/i.test(String(o.categorias) + " " + String(o.titulo)) && !/usad/i.test(String(o.categorias) + " " + String(o.titulo));
+// Livros e novo/lacrado (D-073, D-095, D-097)
+const cdEhLivro = o => /^livro\b/i.test(String((o && o.titulo) || "")) || /\blivros\b/i.test(String((o && o.categorias) || ""));
+const cdNovo = o => (/novo|lacrad|livro/i.test(String((o && o.categorias) || "") + " " + String((o && o.titulo) || "")) || cdEhLivro(o)) && !/usad/i.test(String((o && o.categorias) || "") + " " + String((o && o.titulo) || ""));
+const cdPreVenda = o => /pr[eé][- ]?venda/i.test(String((o && o.categorias) || "") + " " + String((o && o.titulo) || ""));
+const cdPodeInfinito = o => (cdNovo(o) || cdPreVenda(o)) && !/usad/i.test(String((o && o.categorias) || "") + " " + String((o && o.titulo) || ""));
+const cdEhInfinito = v => /^(infinito|∞|sob[- ]?demanda)$/i.test(String(v || "").trim());
 const cdVaiPublicar = o => !/^n[aã]o$/i.test(String((o && o.publicar) || "").trim());
 const cdTemPendenciaAviso = o => /j[aá]\s+existe\s+na\s+loja|sem\s+etiqueta\s+de\s+pre[cç]o/i.test(String((o && o.pendencias) || ""));
+function cdSugestoesCategorias(o, iq){
+  const lista = (iq || cdIguais(o)).map(x => x.categorias).filter(Boolean);
+  if (!lista.length) return "";
+  return [...new Set(lista)].join(" · ");
+}
 function cdCard(o){
   const g = cdGrupo(o.status), pill = CD_PILL[g], edit = g === "rascunho";
   const vin = CD_GRADES.find(x => new RegExp("^" + x.replace("+","\\+") + "(\\s|$)").test(String(o.vinil).trim()) && !/conferir/i.test(o.vinil)) || "";
+  const cap = CD_CAPA_GRADES.find(x => new RegExp("^" + x.replace("+","\\+") + "(\\s|$)").test(String(o.capa).trim()) && !/conferir/i.test(o.capa)) || "";
   const fict = /fict/i.test(o.preco_origem), pend = [...new Set(String(o.pendencias || "").split(/;\s*|\n/).map(x => x.trim()).filter(Boolean))];
   const fotos = cdFotos(o);
   const dref = [o.preco_referencia, o.discogs_menor_preco ? `Discogs a partir de R$ ${esc(o.discogs_menor_preco)}${o.discogs_a_venda ? ` (${esc(o.discogs_a_venda)} à venda)` : ""}` : ""].filter(Boolean).join(" · ");
   const dis = edit ? "" : " disabled";
   const novo = cdNovo(o);
+  const podeInf = cdPodeInfinito(o);
+  const ehInf = cdEhInfinito(o.estoque);
+  const iq = cdIguais(o);
+  const sugCat = cdSugestoesCategorias(o, iq);
   return `<div class="fcard" data-cd="${esc(o.id)}">
     <div class="fcard-h"><b style="overflow-wrap:anywhere">${esc(o.titulo)}</b><span class="pill ${pill[0]}">${esc(g === "erro" || g === "descartado" ? o.status : pill[1])}</span>${g === "aprovado" || g === "criado" ? `<span class="pill ${cdVaiPublicar(o) ? "p-ok" : "p-wait"}">${cdVaiPublicar(o) ? "vai aparecer" : "fica oculto"}</span>` : ""}</div>
     <div class="s">${esc(o.ficha)}</div>
     <div class="cost-form" style="margin-top:10px">
       <label>Preço (R$)<input data-f="preco" inputmode="decimal" value="${esc(o.preco)}" data-orig="${esc(o.preco)}"${dis}>
         <span class="s" style="font-weight:400">${fict ? '<span class="pill p-bad">fictício do piloto: troque antes de aprovar</span>' : o.preco_origem ? "origem: " + esc(o.preco_origem) : ""}</span></label>
-      ${novo ? `<input type="hidden" data-f="vinil" value="${esc(o.vinil || "Novo/lacrado")}" data-orig="${esc(o.vinil || "Novo/lacrado")}">
-      <div><div class="k">Estado</div><b>Novo e lacrado</b><div class="s">sem conferência de estado</div></div>
-      <label>Quantidade em estoque<input data-f="estoque" inputmode="numeric" value="${esc(o.estoque || "")}" data-orig="${esc(o.estoque || "")}"${dis}><span class="s" style="font-weight:400">quantas unidades vão para a loja</span></label>`
+      ${novo ? `<input type="hidden" data-f="vinil" value="${esc(o.vinil || (cdEhLivro(o) ? "Novo" : "Novo/lacrado"))}" data-orig="${esc(o.vinil || (cdEhLivro(o) ? "Novo" : "Novo/lacrado"))}">
+      <div><div class="k">${cdEhLivro(o) ? "Formato" : "Estado"}</div><b>${cdEhLivro(o) ? "Livro novo" : "Novo e lacrado"}</b><div class="s">sem conferência de estado</div></div>
+      <label>Quantidade em estoque
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">
+          <input data-f="estoque" inputmode="numeric" value="${esc(ehInf ? "" : (o.estoque || ""))}" data-orig="${esc(o.estoque || "")}"${dis || (ehInf ? " disabled" : "")} style="max-width:140px">
+          <label class="s" style="display:inline-flex;gap:6px;align-items:center;font-weight:600;margin:0">
+            <input type="checkbox" data-f="infinito" data-orig="${ehInf ? "sim" : "nao"}" style="width:auto"${ehInf ? " checked" : ""}${dis}> Sob demanda (estoque infinito)
+          </label>
+        </div>
+        <span class="s" style="font-weight:400">quantas unidades vão para a loja</span>
+      </label>`
+      : (podeInf ? `<label>Vinil (na mão)<select data-f="vinil" data-orig="${esc(vin)}"${dis}><option value="">conferir…</option>${CD_GRADES.map(x => `<option${x === vin ? " selected" : ""}>${x}</option>`).join("")}</select></label>
+      <label>Capa (foto)<select data-f="capa" data-orig="${esc(cap)}"${dis}><option value="">conferir…</option>${CD_CAPA_GRADES.map(x => `<option${x === cap ? " selected" : ""}>${x}</option>`).join("")}</select></label>
+      <label>Quantidade em estoque
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">
+          <input data-f="estoque" inputmode="numeric" value="${esc(ehInf ? "" : (o.estoque || ""))}" data-orig="${esc(o.estoque || "")}"${dis || (ehInf ? " disabled" : "")} style="max-width:140px">
+          <label class="s" style="display:inline-flex;gap:6px;align-items:center;font-weight:600;margin:0">
+            <input type="checkbox" data-f="infinito" data-orig="${ehInf ? "sim" : "nao"}" style="width:auto"${ehInf ? " checked" : ""}${dis}> Sob demanda (estoque infinito)
+          </label>
+        </div>
+        <span class="s" style="font-weight:400">quantas unidades vão para a loja</span>
+      </label>`
       : `<label>Vinil (na mão)<select data-f="vinil" data-orig="${esc(vin)}"${dis}><option value="">conferir…</option>${CD_GRADES.map(x => `<option${x === vin ? " selected" : ""}>${x}</option>`).join("")}</select></label>
-      <div><div class="k">Capa</div><b>${esc(o.capa || "–")}</b><div class="s">pela foto</div></div>`}
+      <label>Capa (foto)<select data-f="capa" data-orig="${esc(cap)}"${dis}><option value="">conferir…</option>${CD_CAPA_GRADES.map(x => `<option${x === cap ? " selected" : ""}>${x}</option>`).join("")}</select></label>`)}
       <div><div class="k">Referência</div><span class="s">${esc(dref || "sem histórico")}</span></div>
     </div>
-    ${(() => { const iq = cdIguais(o); return iq.length ? `<div class="fobs" style="margin-top:10px"><b>Já existe na loja:</b> ${iq.map(x => `<a href="https://lojamonstro.com.br/produtos/${esc(x.url)}/" target="_blank" rel="noopener">${esc(x.nome)}</a> (R$ ${esc(x.preco)}, ${x.estoque > 0 ? (x.exibir ? "à venda" : "em estoque, oculto") : "esgotado"})`).join("<br>")}. Confira se não é o mesmo exemplar antes de aprovar.</div>` : ""; })()}
+    ${iq.length ? `<div class="fobs" style="margin-top:10px"><b>Já existe na loja:</b> ${iq.map(x => `<a href="https://lojamonstro.com.br/produtos/${esc(x.url)}/" target="_blank" rel="noopener">${esc(x.nome)}</a> (R$ ${esc(x.preco)}, ${x.estoque > 0 ? (x.exibir ? "à venda" : "em estoque, oculto") : "esgotado"})`).join("<br>")}. Confira se não é o mesmo exemplar antes de aprovar.</div>` : ""}
     ${pend.length ? `<div class="banner" style="margin:10px 0 0"><b>Pendências</b>${pend.map(p => "• " + esc(p)).join("<br>")}${edit ? '<label class="s" style="display:flex;gap:6px;margin-top:6px;align-items:center"><input type="checkbox" data-f="pendok" style="width:auto"${CD_PEND.has(o.id) ? " checked" : ""}> Conferi as pendências</label>' : ""}</div>` : ""}
     <div class="chips" style="margin-top:10px">${fotos.map(f => f.id ? `<a class="btn" style="font:500 12px var(--mono);padding:3px 8px" target="_blank" rel="noopener" href="https://drive.google.com/file/d/${esc(f.id)}/view">${String(f.ordem).padStart(2,"0")} ${esc(f.papel)}${f.ajustada ? " ✓" : ""}</a>` : `<span class="pill p-info">${String(f.ordem).padStart(2,"0")} ${esc(f.papel)}</span>`).join("")}</div>
     <div class="s">${fotos.some(f => f.ajustada) ? "✓ = foto já ajustada pela rotina. " : ""}As fotos abrem no Drive da conta da Monstro. A etiqueta de preço nunca vai para o site.</div>
-    <details class="fmsg"><summary>Título, descrição e observação</summary>
+    <details class="fmsg"${edit ? " open" : ""}><summary>Editar cadastro</summary>
       <div class="cost-form" style="grid-template-columns:1fr">
         <label>Título<input data-f="titulo" value="${esc(o.titulo)}" data-orig="${esc(o.titulo)}"${dis}></label>
+        <label>Categorias<input data-f="categorias" value="${esc(o.categorias)}" data-orig="${esc(o.categorias)}"${dis}>
+          <span class="s" style="font-weight:400;display:block;margin-top:2px">${sugCat ? "Categorias em produtos parecidos da loja: <b>" + esc(sugCat) + "</b>" : "Separadas por vírgula (ex.: LP, Novo/Lacrado, Rock)"}</span>
+        </label>
         <label>Descrição<textarea data-f="descricao" data-orig="${esc(o.descricao)}" style="min-height:220px"${dis}>${esc(o.descricao)}</textarea></label>
         ${o.faixas ? `<label class="s" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="faixas" style="width:auto"${/^sim$/i.test(o.faixas_na_descricao) ? " checked" : ""}${dis}> Incluir a lista de faixas do Discogs no fim da descrição</label>` : ""}
+        <label>Tags<input data-f="tags" value="${esc(o.tags)}" data-orig="${esc(o.tags)}"${dis}></label>
+        <label>Peso (kg)<input data-f="peso_kg" inputmode="decimal" value="${esc(o.peso_kg)}" data-orig="${esc(o.peso_kg)}"${dis}><span class="s" style="font-weight:400;display:block;margin-top:2px">Padrão: LP simples 0,50 kg · capa dupla/encarte 0,55 kg · duplo 0,80 kg · compacto/CD 0,20 kg · K7 0,17 kg</span></label>
+        <label>Link do Discogs<input data-f="discogs_url" type="url" value="${esc(o.discogs_url)}" data-orig="${esc(o.discogs_url)}"${dis}></label>
         <label>Observação para o Claude<input data-f="obs" value="${esc(o.observacao_tulio)}" data-orig="${esc(o.observacao_tulio)}"></label>
       </div>
-      <div class="s" style="margin-top:6px">Categorias: ${esc(o.categorias)} · Peso ${esc(o.peso_kg)} kg · ${esc(o.altura_cm)} × ${esc(o.largura_cm)} × ${esc(o.comprimento_cm)} cm${o.discogs_url ? ` · <a href="${esc(o.discogs_url)}" target="_blank" rel="noopener">Discogs</a> (confiança ${esc(o.discogs_confianca)})` : ""}</div>
+      ${cdFotosEditor(o, edit)}
+      <div class="s" style="margin-top:6px">${esc(o.altura_cm)} × ${esc(o.largura_cm)} × ${esc(o.comprimento_cm)} cm${o.discogs_confianca ? ` · confiança Discogs ${esc(o.discogs_confianca)}` : ""}</div>
     </details>
-    ${g === "criado" || g === "publicado" ? `<div class="fobs">Produto ${esc(o.produto_id)}${o.link_loja ? ` · <a href="${esc(o.link_loja)}" target="_blank" rel="noopener">link na loja</a>` : ""}</div>` : ""}
+    ${(g === "criado" || g === "publicado" || o.produto_id) ? `<div class="fobs" style="margin-top:10px">Já está na loja: corrija pelo <a href="https://monstrodiscos.lojavirtualnuvem.com.br/admin/products/${esc(o.produto_id)}" target="_blank" rel="noopener">administrador da Nuvemshop</a> (produto ${esc(o.produto_id)})${o.link_loja ? ` · <a href="${esc(o.link_loja)}" target="_blank" rel="noopener">ver na loja</a>` : ""}</div>` : ""}
     ${g === "erro" ? `<div class="fobs" style="color:var(--accent)">A rotina não conseguiu criar. Não aprove de novo antes de conferir: peça ao Claude ou ao Codex para olhar o diário desta linha e a loja.</div>` : ""}
     ${edit ? `<div style="margin:10px 0 2px;display:flex;flex-wrap:wrap;gap:8px;align-items:center"><label class="s" style="display:flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" data-f="publicar" data-orig="${cdVaiPublicar(o) ? "sim" : "nao"}" style="width:auto"${cdVaiPublicar(o) ? " checked" : ""}> Mostrar na loja assim que for criado</label>${cdTemPendenciaAviso(o) ? `<span class="pill p-wait">Confira as pendências antes de deixar aparecer na loja.</span>` : ""}</div>` : ""}
     <div class="savebar">
@@ -3065,33 +3299,191 @@ function cdLigar(box, o){
   const st = box.querySelector(".status"), q = f => box.querySelector(`[data-f="${f}"]`);
   const idx = k => o._h.indexOf(k), cel = k => `cadastro_rascunhos!${colL(idx(k))}${o._row}`;
   const agora = () => new Date().toLocaleString("sv-SE",{timeZone:"America/Sao_Paulo"}).slice(0,16);
+
+  function atualizarTopicoDescricao(topico, valor){
+    if (!valor || !q("descricao")) return;
+    const re = new RegExp(`^• ${topico}.*$`, "m");
+    const novaLinha = `• ${topico} ${valor}`;
+    let d = q("descricao").value;
+    d = re.test(d) ? d.replace(re, novaLinha) : (d ? d + "\n" + novaLinha : novaLinha);
+    q("descricao").value = d;
+    if (q("descricao").dataset.orig !== undefined){
+      q("descricao").classList.toggle("changed", d !== q("descricao").dataset.orig);
+    }
+  }
+  if (q("capa")) q("capa").addEventListener("change", () => atualizarTopicoDescricao("Capa", q("capa").value));
+  if (q("vinil")) q("vinil").addEventListener("change", () => atualizarTopicoDescricao("Vinil", q("vinil").value));
+
+  if (q("infinito")){
+    q("infinito").addEventListener("change", () => {
+      const inf = q("infinito").checked;
+      if (q("estoque")){
+        q("estoque").disabled = inf;
+        if (inf) q("estoque").value = "";
+        q("estoque").classList.toggle("changed", inf ? (o.estoque !== "infinito") : (q("estoque").value !== q("estoque").dataset.orig));
+      }
+    });
+  }
+
+  const fotoContainer = box.querySelector(".cd-fotos-lista");
+  if (fotoContainer){
+    function reordenarFotos(){
+      const items = fotoContainer.querySelectorAll(".cd-foto-item");
+      items.forEach((el, idx) => {
+        const pos = idx + 1;
+        const posEl = el.querySelector(".cd-foto-pos");
+        if (posEl) posEl.textContent = pos;
+        const origOrdem = parseInt(el.dataset.origOrdem, 10);
+        const sel = el.querySelector("[data-fpapel]");
+        const papel = sel ? sel.value : el.dataset.origPapel;
+        const mudou = (pos !== origOrdem) || (papel !== el.dataset.origPapel);
+        el.classList.toggle("changed", mudou);
+      });
+    }
+    fotoContainer.addEventListener("click", e => {
+      const btn = e.target.closest("[data-foto-move]");
+      if (!btn) return;
+      const item = btn.closest(".cd-foto-item");
+      if (!item) return;
+      if (btn.dataset.fotoMove === "up"){
+        const prev = item.previousElementSibling;
+        if (prev) { fotoContainer.insertBefore(item, prev); reordenarFotos(); }
+      } else if (btn.dataset.fotoMove === "down"){
+        const next = item.nextElementSibling;
+        if (next) { fotoContainer.insertBefore(next, item); reordenarFotos(); }
+      }
+    });
+    fotoContainer.addEventListener("change", e => {
+      const chk = e.target.closest("[data-fnaousar]");
+      if (chk){
+        const item = chk.closest(".cd-foto-item");
+        const sel = item ? item.querySelector("[data-fpapel]") : null;
+        if (sel){
+          if (chk.checked){
+            sel.value = "etiqueta";
+            item.style.opacity = "0.65";
+          } else {
+            sel.value = (item.dataset.origPapel !== "etiqueta" && item.dataset.origPapel) ? item.dataset.origPapel : "capa";
+            item.style.opacity = "";
+          }
+        }
+        reordenarFotos();
+        return;
+      }
+      const sel = e.target.closest("[data-fpapel]");
+      if (sel){
+        const item = sel.closest(".cd-foto-item");
+        const chkbox = item ? item.querySelector("[data-fnaousar]") : null;
+        if (chkbox){
+          chkbox.checked = (sel.value === "etiqueta");
+          item.style.opacity = chkbox.checked ? "0.65" : "";
+        }
+        reordenarFotos();
+      }
+    });
+  }
+
   async function salvar(aoAprovar){
     const w = [];
     const set = (k, v) => { if (idx(k) < 0) throw new Error("coluna " + k + " não existe"); w.push([cel(k), v]); };
     const g = cdGrupo(o.status);
     if (g === "rascunho"){
-      const tit = q("titulo").value.trim(), pr = q("preco").value.trim(), vin = q("vinil").value;
+      const tit = q("titulo").value.trim(), pr = q("preco").value.trim(), vin = q("vinil") ? q("vinil").value : "";
+      const cap = q("capa") ? q("capa").value : "";
       let desc = q("descricao").value;
-      if (vin && vin !== q("vinil").dataset.orig) desc = /^• Vinil.*$/m.test(desc) ? desc.replace(/^• Vinil.*$/m, "• Vinil " + vin) : desc + "\n• Vinil " + vin;
+
+      // Validações
+      if (!tit) throw new Error("coloque o título");
+      if (/[\u2014]/.test(tit)) throw new Error("o título não pode conter travessão; use hífen (-)");
+      if (pr){
+        const pn = num(pr);
+        if (pn == null || pn <= 0) throw new Error("preço deve ser maior que zero");
+      }
+      if (q("peso_kg")){
+        const pv = q("peso_kg").value.trim();
+        if (pv){
+          const pnum = num(pv);
+          if (pnum == null || pnum < 0.1 || pnum > 2) throw new Error("peso deve estar entre 0,1 e 2 kg");
+        }
+      }
+      if (q("categorias")){
+        const cat = q("categorias").value.trim();
+        if (!cat) throw new Error("categorias não podem ficar vazias");
+      }
+
+      if (vin && q("vinil") && vin !== q("vinil").dataset.orig) desc = /^• Vinil.*$/m.test(desc) ? desc.replace(/^• Vinil.*$/m, "• Vinil " + vin) : desc + "\n• Vinil " + vin;
+      if (cap && q("capa") && cap !== q("capa").dataset.orig) desc = /^• Capa.*$/m.test(desc) ? desc.replace(/^• Capa.*$/m, "• Capa " + cap) : desc + "\n• Capa " + cap;
+
       if (tit !== o.titulo) set("titulo", tit);
       if (desc !== o.descricao) set("descricao", desc);
-      if (vin !== q("vinil").dataset.orig) set("vinil", vin || "VG+ (conferir)");
-      if (pr !== o.preco){ const n = num(pr); if (pr && (n == null || n <= 0)) throw new Error("preço inválido"); set("preco", n == null ? "" : n); set("preco_origem", "Túlio (painel)"); }
-      if (q("estoque")) { const ev = q("estoque").value.trim(); if (ev !== (o.estoque || "")){ const n = num(ev); if (ev && !(n >= 1 && Number.isInteger(n))) throw new Error("quantidade em estoque inválida"); set("estoque", ev ? String(n) : ""); } }
+      if (vin && q("vinil") && vin !== q("vinil").dataset.orig) set("vinil", vin || "VG+ (conferir)");
+      if (cap && q("capa") && cap !== q("capa").dataset.orig) set("capa", cap || "VG+ (conferir)");
+      if (pr !== o.preco){ const n = num(pr); set("preco", n == null ? "" : n); set("preco_origem", "Túlio (painel)"); }
+
+      if (q("infinito") && q("infinito").checked){
+        if ((o.estoque || "").toLowerCase() !== "infinito") set("estoque", "infinito");
+      } else if (q("estoque")) {
+        const ev = q("estoque").value.trim();
+        if (ev !== (o.estoque || "")){
+          const n = num(ev);
+          if (ev && !(n >= 1 && Number.isInteger(n))) throw new Error("quantidade em estoque inválida");
+          set("estoque", ev ? String(n) : "");
+        }
+      }
+
+      if (q("categorias")){
+        const cat = q("categorias").value.trim();
+        if (cat !== (o.categorias || "")) set("categorias", cat);
+      }
+      if (q("tags")){
+        const tg = q("tags").value.trim();
+        if (tg !== (o.tags || "")) set("tags", tg);
+      }
+      if (q("peso_kg")){
+        const pv = q("peso_kg").value.trim();
+        if (pv !== (o.peso_kg || "")) set("peso_kg", pv);
+      }
+      if (q("discogs_url")){
+        const du = q("discogs_url").value.trim();
+        if (du !== (o.discogs_url || "")) set("discogs_url", du);
+      }
       if (q("faixas")) { const fv = q("faixas").checked ? "sim" : "não"; if (fv !== (o.faixas_na_descricao || "não")) set("faixas_na_descricao", fv); }
       if (q("publicar")) { const pv = q("publicar").checked ? "sim" : "nao"; if (pv !== (o.publicar || "") && (aoAprovar || pv !== q("publicar").dataset.orig)) { if (idx("publicar") < 0) { await write(`cadastro_rascunhos!${colL(o._h.length)}1`, [["publicar"]]); o._h.push("publicar"); } set("publicar", pv); } }
+
+      // Fotos
+      if (fotoContainer){
+        const items = fotoContainer.querySelectorAll(".cd-foto-item");
+        let mudouFoto = false;
+        items.forEach((el, idx) => {
+          const novaOrdem = idx + 1;
+          const sel = el.querySelector("[data-fpapel]");
+          const chk = el.querySelector("[data-fnaousar]");
+          const novoPapel = (chk && chk.checked) ? "etiqueta" : (sel ? sel.value : el.dataset.origPapel);
+          const origOrdem = parseInt(el.dataset.origOrdem, 10);
+          const origPapel = el.dataset.origPapel;
+          if (novaOrdem !== origOrdem || novoPapel !== origPapel){
+            mudouFoto = true;
+            const row = el.dataset.row;
+            w.push([`cadastro_fotos!B${row}:C${row}`, [[novaOrdem, novoPapel]]]);
+          }
+        });
+        if (mudouFoto && o.fotos_ajustadas){
+          set("fotos_ajustadas", "");
+        }
+      }
     }
     const ob = q("obs").value.trim(); if (ob !== o.observacao_tulio) set("observacao_tulio", ob);
     if (w.length) set("atualizado_em", agora());
-    for (const [r, v] of w) await write(r, [[v]]);
+    for (const [r, v] of w) await write(r, Array.isArray(v) && Array.isArray(v[0]) ? v : [[v]]);
     return w.length;
   }
   async function aprovar(){
-    const pr = num(q("preco").value), vin = q("vinil").value, mudouPreco = q("preco").value.trim() !== o.preco;
+    const pr = num(q("preco").value), vin = q("vinil") ? q("vinil").value : "", mudouPreco = q("preco").value.trim() !== o.preco;
     if (!pr || pr <= 0) throw new Error("coloque o preço antes de aprovar");
     if (/fict/i.test(o.preco_origem) && !mudouPreco) throw new Error("o preço de R$ 200 é fictício do piloto: digite o preço real (mesmo que seja 200) e aprove");
     if (!vin) throw new Error("escolha o estado do vinil conferido na mão");
-    if (q("estoque") && !(num(q("estoque").value) >= 1)) throw new Error("coloque a quantidade em estoque antes de aprovar");
+    const ehInf = (q("infinito") && q("infinito").checked) || cdEhInfinito(q("estoque") ? q("estoque").value : o.estoque);
+    if (q("estoque") && !ehInf && !(num(q("estoque").value) >= 1)) throw new Error("coloque a quantidade em estoque antes de aprovar");
     if (q("pendok") && !q("pendok").checked) throw new Error("marque que conferiu as pendências");
     st.textContent = "Salvando…"; await salvar(true);
     await write(cel("status"), [["aprovado"]]);
@@ -3146,7 +3538,7 @@ function cdIguais(o){
   for (let i = 1; i < a.length; i++){ const nome = (a[i] || [])[0]; if (!nome || o.link_loja && String(o.link_loja).includes((u[i]||[])[0])) continue;
     const n = cdNorm(nome); if (!n) continue; const tn = n.split(" "); const comuns = tn.filter(t => ta.has(t)).length;
     if (n === alvo || (comuns >= Math.max(2, Math.ceil(ta.size * 0.8)) && comuns >= Math.ceil(tn.length * 0.8)))
-      out.push({nome, url: (u[i] || [])[0], preco: (a[i] || [])[2], estoque: num((a[i] || [])[4]) || 0, exibir: /^true$/i.test((a[i] || [])[6])}); }
+      out.push({nome, url: (u[i] || [])[0], categorias: String((a[i] || [])[1] || ""), preco: (a[i] || [])[2], estoque: num((a[i] || [])[4]) || 0, exibir: /^true$/i.test((a[i] || [])[6])}); }
   return out.sort((x,y) => (y.estoque > 0) - (x.estoque > 0)).slice(0, 4);
 }
 const cdR = () => { if (D.cad) { try { renderCad(); } catch(e){ setErr("cad", "Não consegui desenhar o cadastro: o formato da aba mudou."); } } };

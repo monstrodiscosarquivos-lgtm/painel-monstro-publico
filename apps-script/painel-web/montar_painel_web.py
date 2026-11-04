@@ -89,9 +89,23 @@ window.PM = "__PM_CONTEXTO__";
 })();
 </script>'''
 
+import re
+
+def proteger_barras(corpo):
+    """O Apps Script apaga tudo depois de "//" numa linha de script (acha que é comentário), inclusive dentro de
+    textos como "https://wa.me/...", e a página inteira para com "Unexpected token". Dentro dos <script>,
+    "://" vira ":\\/\\/" (o navegador lê igual). Comentário no fim da linha continua normal."""
+    def troca(m):
+        return m.group(1) + m.group(2).replace('://', ':\\/\\/') + m.group(3)
+    corpo = re.sub(r'(<script(?![^>]*\bsrc=)[^>]*>)(.*?)(</script>)', troca, corpo, flags=re.S)
+    for bloco in re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', corpo, flags=re.S):
+        assert '://' not in bloco, 'sobrou "://" num script'
+    return corpo
+
 def montar(origem, destino):
     corpo = open(origem, encoding='utf-8').read()
     assert 'window.claude?.use?.("mcp")' in corpo, 'painel sem o ponto de conexão esperado'
+    corpo = proteger_barras(corpo)
     html = ('<!doctype html>\n<html lang="pt-BR"><head><meta charset="utf-8">\n'
             + ADAPTADOR + '\n</head><body>\n' + corpo + '\n</body></html>\n')
     open(destino, 'w', encoding='utf-8').write(html)
