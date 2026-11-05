@@ -986,7 +986,7 @@ def derivar_lote(
             'id': id_,
             'lote': lote,
             'pasta': f'{n:02d} {art} - {alb}{anos}' if formato != 'livro' else f'{n:02d} Livro {alb} - {art}',
-            'status': 'rascunho',
+            'status': str(o.get('status') or 'rascunho').strip(),
             'titulo': titulo,
             'marca': art,
             'categorias': cat,

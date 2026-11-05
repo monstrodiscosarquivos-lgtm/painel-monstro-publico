@@ -178,6 +178,16 @@ def test_exif_rotulo_disco_fallback_e_circulo(monkeypatch):
     assert Image.open(io.BytesIO(fotos.processar(jpeg(),'disco'))).size==(1600,1600)
 
 
+def test_exif_orientation_8_com_giro_ccw():
+    exif = Image.Exif()
+    exif[274] = 8
+    cantos = '[[20, 150], [450, 150], [450, 350], [20, 350], 1, "ccw"]'
+    foto_bytes = jpeg(w=260, h=460, exif=exif)
+    saida = fotos.processar(foto_bytes, 'capa', cantos)
+    im = Image.open(io.BytesIO(saida))
+    assert im.size == (1600, 1600) and im.format == 'JPEG'
+
+
 @pytest.mark.parametrize('cantos',list(json.loads(Path('referencia/cadastro_piloto/cantos-2026-10-15.json').read_text()).values()))
 def test_todos_cantos_do_piloto_equivalentes_sem_copiar_fotos(cantos):
     from referencia.cadastro_piloto import processar as piloto

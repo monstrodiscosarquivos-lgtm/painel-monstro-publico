@@ -195,3 +195,21 @@ Três mudanças integradas para o catálogo da loja e relacionamento com a equip
   - Nova coluna `marcado_vinil` ao final de `cadastro_rascunhos` (criada automaticamente pela rotina em `cadastro.py` ou pelo painel web).
   - Aba Cadastro do Painel: novo filtro "Marcar no vinil" exibindo contador de discos em situação `criado` ou `publicado` que ainda não tenham sido marcados (`marcado_vinil` vazio), excluindo livros. Ordenados do mais antigo ao mais novo.
   - Layout otimizado para celular com botões grandes e checkbox "Marcar no vinil" que grava data e hora na planilha e remove o card da lista, com banner temporário de desfazer por 10 segundos. Botão "Imprimir lista" com estilos limpos em `@media print`.
+
+## D-098 · Correção de recorte com EXIF 8, prévias do lote 2026-10-28 e reconciliação (05/11/2026)
+
+Diagnóstico e resolução dos 28 registros em erro em `cadastro_rascunhos`:
+- Diagnóstico:
+  - 27 discos do lote `2026-10-28` falharam com `ValueError('cantos fora da imagem')`. Causa: fotos capturadas na vertical (2600 x 4624) com cabeçalho `Exif Orientation: 8` e cantos calculados com giro `"ccw"` em relação à imagem crua. Ao rodar `ImageOps.exif_transpose` antes do cálculo, a imagem era transposta para 4624 x 2600; as coordenadas `y` escaladas ultrapassavam 2600 gerando erro.
+  - 1 disco (`2026-10-26-30`, Caetano Veloso) falhou com `erro: imagem anterior incerta` após upload da imagem 3.
+- Correção no motor (`painel_monstro/saidas/fotos.py`):
+  - Em `fotos.processar`, quando os pontos não cabem na imagem transposta pelo EXIF, o código valida se cabem na imagem crua (`raw_img`). Em caso afirmativo, aplica a perspectiva e a rotação correta (`giro`) a partir do raw, gerando a imagem 1600x1600 perfeitamente em pé e recortada.
+  - Teste unitário adicionado em `tests/test_cadastro.py` cobrindo caso sintético com `Exif Orientation: 8` e giro `"ccw"`.
+- Isolamento e Reconciliação:
+  - Linha `2026-10-28-13` (Passarim): alterada para status `rascunho` com pendência `"confirmar se é outro exemplar (já houve um descartado como duplicado)"`, isolada da fila de aprovação.
+  - Linha `2026-10-26-30` (Caetano Veloso): foto 4 (`disco`, arquivo `IMG_20261025_130509.jpg`) processada e enviada para a Nuvemshop no produto existente `376745518` (imagem ID `1313020693`). Manifesto do diário `cadastro_execucao` reconciliado e status atualizado para `publicado`.
+- Prévias e folhas de contato:
+  - Todas as 98 fotos do site dos 27 discos processadas com sucesso (0 erros).
+  - Folhas de contato montadas em `dados/cadastro_ia/2026-10-28/previas_d098/`: 3 folhas de capas (`folha_01_capas.jpg` a `folha_03_capas.jpg`) em grade 3x3 de alta resolução e 7 folhas completas (`folha_01_todas_fotos.jpg` a `folha_07_todas_fotos.jpg`) com todas as fotos lado a lado.
+  - As 26 linhas do lote `2026-10-28` foram mantidas com o status atual até conferência e liberação explícita do Túlio.
+

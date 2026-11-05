@@ -2,7 +2,24 @@
 
 Atualize este arquivo ao fim de toda sessão. Ele responde a uma pergunta: onde o projeto está agora?
 
-**Última atualização:** 04/11/2026: D-097 implementada (Parte 1: 23 livros novos pesquisados com metadados técnicos e capas da Garota FM Books, formato "livro" no cadastro_lote.py, lote 2026-11-04-livros conferido com 0 erros; Parte 2: categorias sem comissão no cálculo e quadro da comissão com teste de pedido misto; Parte 3: coluna marcado_vinil e filtro "Marcar no vinil" para loja física no painel web com layout para celular e botão de impressão). Painel.html recompilado, 757 testes pytest verdes, 53 testes JS verdes e auditoria de publicação com 0 problemas.
+**Última atualização:** 05/11/2026: D-098 concluída com OK parcial do Túlio (21 linhas do lote 2026-10-28 aprovadas na planilha; 5 mantidas em rascunho com pendências tratadas, sendo 19 e 32 com cantos recalculados e novas prévias recortadas salvas em previas_d098/; Passarim isolado; Caetano Veloso publicado). 136 testes pytest verdes e auditoria de publicação com 0 problemas.
+
+## D-098 · Correção de recorte com EXIF 8, prévias do lote 2026-10-28 e reconciliação (05/11/2026)
+- **Diagnóstico e correção em `fotos.py`:**
+  - Identificada causa raiz dos 27 erros do lote `2026-10-28`: fotos verticais com `Exif Orientation: 8` e cantos calculados com giro `"ccw"` em relação à imagem crua. Ao transpor via EXIF, largura e altura se invertiam estourando limites e gerando `ValueError('cantos fora da imagem')`.
+  - Ajustado `painel_monstro/saidas/fotos.py` para validar cantos na imagem crua quando falharem na transposta, aplicando recorte e rotação corretos.
+  - Teste unitário adicionado em `tests/test_cadastro.py` (`test_exif_orientation_8_com_giro_ccw`).
+- **Passarim e Caetano Veloso:**
+  - Linha `2026-10-28-13` (Passarim): alterada para status `rascunho` com a pendência `"confirmar se é outro exemplar (já houve um descartado como duplicado)"`.
+  - Linha `2026-10-26-30` (Caetano Veloso): foto 4 (`disco`) enviada para o produto `376745518` na Nuvemshop, manifesto do diário `cadastro_execucao` atualizado e status alterado para `publicado`.
+- **Aprovação e prévias:**
+  - 21 linhas voltaram para status `aprovado` na planilha: `2026-10-28-08`, `09`, `11`, `15`, `16`, `17`, `18`, `20`, `21`, `22`, `23`, `24`, `25`, `26`, `27`, `28`, `29`, `31`, `33`, `36` e `37`.
+  - 5 linhas mantidas como `rascunho` com pendências indicadas:
+    - `2026-10-28-19` (Chico Buarque): cantos de capa, contracapa e encarte recalculados; pendência `capa sem recorte`; nova prévia em `previa_nova_2026-10-28-19.jpg`.
+    - `2026-10-28-32` (Cesar Costa Filho): cantos de capa e contracapa recalculados; pendência `capa sem recorte`; nova prévia em `previa_nova_2026-10-28-32.jpg`.
+    - `2026-10-28-30` (Tom & Dito): pendência `"conferir se a foto da capa não é a contracapa"`.
+    - `2026-10-28-35` (Os Originais do Samba): pendência `"título não confere: na capa está Alegria de Sambar"`.
+    - `2026-10-28-34` (Vários - Samba... Oba!): título corrigido para `Percussonic Series` e mantido como rascunho.
 
 ## D-097 · Livros na loja, categorias fora da comissão e lista de marcar vinil (04/11/2026)
 - **Parte 1 · Livros na loja (formato "livro"):**
