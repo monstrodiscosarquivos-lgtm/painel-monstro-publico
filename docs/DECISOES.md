@@ -235,3 +235,18 @@ Implementação local:
 Estas autorizações substituem as proibições anteriores de imagens oficiais para lacrados e soma de estoque deste fluxo. Brevo, frete e demais integrações não mudam. Sem execução real, publicação de código ou commit nesta sessão.
 
 Referências consultadas: https://tiendanube.github.io/api-documentation/resources/product-variant e https://www.discogs.com/developers (esta última respondeu 403 na consulta automatizada).
+
+
+## D-100 · Troca de fotos de lacrados na loja por imagens oficiais do Discogs (05/11/2026)
+
+- Autorização única do Túlio:
+  - Na esteira da D-099, o Túlio autorizou a substituição pontual das fotos dos produtos lacrados do lote 2026-11-03 que já estão criados na Nuvemshop (produtos a partir de 2026-11-03-03 com produto_id) pelas imagens oficiais do release no Discogs (até 4 imagens, capa primeiro).
+- Segurança e integridade:
+  - Ordem das operações: para cada produto, baixa as imagens oficiais do Discogs, envia para a Nuvemshop na ordem correta (capa em primeiro lugar) e somente após a confirmação do upload de todas as novas fotos apaga as fotos antigas do produto. Garante que nenhum produto fique sem imagem em nenhum momento.
+  - Campos preservados: nome, preço, estoque, descrição, categorias e tags não são alterados.
+  - Planilha: na aba cadastro_fotos, as fotos antigas do produto passam a ter papel 
+eferencia.
+- Implementação e automação:
+  - Adicionado método pagar_imagem na classe LojaCadastro (painel_monstro/saidas/cadastro.py), chamando DELETE /products/{id}/images/{image_id} com controle de taxa de requisições.
+  - Criado script scripts/trocar_fotos_lacrados.py com execução padrão em modo simulação (somente leitura) e flag --aplicar para execução real após conferência e autorização do Túlio. Relatório salvo em dados/troca_fotos_lacrados_2026-11-03.json.
+  - Testes unitários implementados em 	ests/test_trocar_fotos_lacrados.py cobrindo ordenação de fotos, conversão padronizada para JPEG, filtro de alvos e execução com simulação e aplicação real.

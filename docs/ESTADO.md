@@ -1,3 +1,14 @@
+# Atualização de sessão D-100, 05/11/2026
+
+Troca de fotos oficiais do Discogs aplicada com sucesso para 21 produtos lacrados do lote 2026-11-03 na Nuvemshop.
+Total de 68 fotos antigas marcadas com papel 'referencia' na aba cadastro_fotos da planilha.
+Juli Manzi (2026-11-03-08) ajustado conforme pedido: foto 3 pulada (deitada), enviadas capa, 2ª e 4ª fotos.
+Ratos de Porão (2026-11-03-17) e Coldplay (2026-11-03-27) tiveram prévias geradas com os novos releases (24080759 e 31902511) e aguardam aprovação do Túlio.
+
+Verificação: 797 testes Python passaram, 1 ignorado; auditoria de publicação com 137 arquivos versionados e 0 problemas.
+
+Próximo passo: aguardar aprovação do Túlio após conferência das prévias de Ratos de Porão e Coldplay para aplicar a troca nesses dois discos restantes.
+
 # Atualização de sessão D-099, 05/11/2026
 
 Implementação local preparada na pasta pública, sem commit ou chamadas reais. Cadastro com referências privadas, oficiais de lacrado, busca barcode, comparação pHash e conferência de título do rótulo lido pelo agente. Soma de estoque exige confirmação de edição e diário; resultado incerto bloqueia nova tentativa. Checklist físico cruza visibilidade/estoque e registra conferido_em.

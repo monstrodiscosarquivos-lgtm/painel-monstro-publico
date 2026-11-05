@@ -1,5 +1,12 @@
 # Histórico
 
+## 2026-11-05 · Antigravity · troca de fotos de lacrados na loja (D-100)
+- Feito: autorização do Túlio registrada para troca de fotos de lacrados do lote 2026-11-03 na loja por imagens oficiais do Discogs; implementado método apagar_imagem em LojaCadastro; criado scripts/trocar_fotos_lacrados.py com modo simulação e aplicação real (--aplicar); criados testes unitários em tests/test_trocar_fotos_lacrados.py; executada simulação para os 23 produtos e geradas 5 folhas de conferência e 23 prévias individuais em dados/troca_fotos_previas/; executada aplicação real com sucesso para 21 produtos na Nuvemshop, marcando 68 fotos antigas como 'referencia' na planilha; Juli Manzi atualizado com capa, 2ª e 4ª fotos (pulando a 3ª deitada); geradas prévias dos novos releases de Ratos de Porão (24080759, esfumaçado) e Coldplay (31902511, rosa translúcido) para aprovação; scripts auxiliares temporários removidos do repositório.
+- Arquivos alterados: painel_monstro/saidas/cadastro.py, scripts/trocar_fotos_lacrados.py, tests/test_trocar_fotos_lacrados.py, docs/DECISOES.md, docs/ESTADO.md, docs/HISTORICO.md.
+- Como conferir: consultar os 21 produtos atualizados na Nuvemshop e a aba cadastro_fotos na Planilha Google; verificar dados/troca_fotos_previas/folha_novos_releases_ratos_coldplay.jpg; rodar pytest tests/test_trocar_fotos_lacrados.py e python scripts/auditar_publicacao.py (0 problemas).
+- Problemas conhecidos: nenhum.
+- Próximo passo: Túlio conferir a prévia de Ratos de Porão e Coldplay com os novos releases e dar o OK para aplicar a troca nos dois produtos restantes.
+
 ## 2026-11-05 · Codex · cadastro e checklist físico (D-099)
 - Feito: autorizações registradas; fotos privadas/oficiais, barcode, comparação de capas, título de rótulo lido pelo agente, publicação inicial conservadora, soma de estoque com diário, listas físicas e sessões de fotos. Nenhum acesso real à loja/planilha, nenhum commit.
 - Arquivos alterados: AGENTS.md, docs/CADASTRO*.md, docs/DECISOES.md, docs/ESTADO.md, docs/HISTORICO.md, scripts/cadastro_lote.py, painel_monstro/coletor/discogs.py, painel_monstro/saidas/cadastro.py e fotos.py, apps-script/painel-web/painel-monstro.html e Painel.html, apps-script/teste_local.js, tests/test_cadastro_lote.py e test_cadastro_d099.py.

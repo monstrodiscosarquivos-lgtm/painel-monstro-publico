@@ -291,6 +291,16 @@ class LojaCadastro:
         return self._put(f'products/{int(pid)}/variants/{int(vid)}', {'stock': quantidade})
     def publicar(self,pid,corpo=None):
         return self._put(f'products/{int(pid)}',{'published':True} if corpo is None else corpo)
+    def apagar_imagem(self,pid,iid):
+        self.api._esperar_vaga()
+        try:
+            r=self.api._sessao.delete(f'{self.api._base}/products/{int(pid)}/images/{int(iid)}',
+                                      headers=self.api._cabecalhos,timeout=60,allow_redirects=False)
+            self.api._guardar_limites(r)
+            if r.status_code not in (200,204): raise ErroCadastro(f'DELETE imagem não confirmado (HTTP {r.status_code})')
+            return True
+        except ErroCadastro: raise
+        except Exception: raise ErroCadastro('DELETE imagem não confirmado') from None
 
 
 class DriveFotos:
