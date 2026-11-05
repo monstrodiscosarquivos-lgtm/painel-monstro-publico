@@ -42,7 +42,16 @@ class Discogs:
         except Exception:
             raise ErroDiscogs('Falha ao consultar Discogs.') from None
 
-    def buscar(self, titulo, catalogo='', url=''):
+    def buscar(self, titulo, catalogo='', url='', barcode=''):
+        if barcode:
+            resultados = self.get('/database/search', type='release', barcode=barcode)
+            rs = resultados.get('results', [])
+            total = int((resultados.get('pagination') or {}).get('items', len(rs)))
+            exatos = [r for r in rs if catalogo and normalizar(r.get('catno', '')) == normalizar(catalogo)]
+            escolhido = rs[0] if total == 1 and len(rs) == 1 else (exatos[0] if len(exatos) == 1 else None)
+            if escolhido is None:
+                return {'discogs_confianca': 'baixa'}
+            url = 'https://www.discogs.com/release/' + str(int(escolhido['id']))
         if url:
             m = re.fullmatch(r'https://(?:www\.)?discogs\.com/(?:[a-z]{2}(?:_[A-Z]{2})?/)?release/(\d+)(?:-[^?#]*)?/?', url.strip().split('?')[0])
             if not m:

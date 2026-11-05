@@ -213,3 +213,25 @@ Diagnóstico e resolução dos 28 registros em erro em `cadastro_rascunhos`:
   - Folhas de contato montadas em `dados/cadastro_ia/2026-10-28/previas_d098/`: 3 folhas de capas (`folha_01_capas.jpg` a `folha_03_capas.jpg`) em grade 3x3 de alta resolução e 7 folhas completas (`folha_01_todas_fotos.jpg` a `folha_07_todas_fotos.jpg`) com todas as fotos lado a lado.
   - As 26 linhas do lote `2026-10-28` foram mantidas com o status atual até conferência e liberação explícita do Túlio.
 
+
+
+## D-099 · Cadastro: referências, edição repetida e checklist físico (05/11/2026)
+
+Autorizações expressas do Túlio nesta sessão:
+- Lacrado pode usar imagens oficiais do Discogs na loja, até quatro, capa primeiro.
+- A rotina pode somar estoque de produto existente apenas para a mesmíssima edição de lacrado confirmada pelo Túlio no Painel. Só muda `stock` da variante; não altera preço, nome, fotos ou outros campos.
+- Disco sem alerta pode ficar visível; qualquer alerta define `publicar=nao` na criação do rascunho. O Túlio pode revisar a opção no card.
+
+Implementação local:
+- `referencia` e `codigo_barras`, assim como `etiqueta`, nunca são enviados à loja. Fotos próprias de lacrado viram referência; oficiais são baixadas no preparar do CLI e renomeadas com o ID ao gravar. Para usado, baixa somente a capa de comparação, sem incluí-la nas fotos do site.
+- O agente lê visualmente o código da foto e informa `barcode` no JSON; pesquisa por barcode vem primeiro. Só aceita resultado único global ou catálogo idêntico único. Ambiguidade permanece como confiança baixa.
+- O agente lê o título na foto de rótulo e informa `rotulo_titulo`; divergência com o álbum gera a pendência solicitada. Não há serviço automático de OCR nesta implementação.
+- Comparação pHash DCT em 32 pixels, 64 bits, distância máxima 18. Falta de imagem não libera publicação. Fotos próprias e oficial aparecem lado a lado no card quando disponíveis.
+- `publicar=sim` inicial exige ausência de pendências, capa conferida, preço da etiqueta, confiança alta e configuração habilitada. Configuração nova no fim: `Cadastro: publicar direto quando não houver alerta`, padrão Sim. A criação técnica continua oculta até terminar o envio das fotos, quando a rotina aplica a visibilidade escolhida.
+- Confirmação no card grava produto existente, quantidade e status `somar_estoque`, por último. Rotina relê a confirmação, consulta produto, exige variante única e estoque finito, registra antes/depois em diário local e na planilha antes do PUT. Concluído vira `estoque_somado`; resultado incerto exige conferência manual e nunca repete às cegas. O diário não pode ser apagado para tentar novamente.
+- `Etiqueta verde` e `Conferência completa` cruzam `produto_id` com produtos atuais da planilha: somente visíveis com estoque positivo, fora Livros. Impressão em ordem de artista com caixa no papel. `marcado_vinil` registra marcador; `conferido_em`, acrescentada no fim, registra conferência. `capa_discogs_url` também é acrescentada ao contrato. A lista acompanha a última sincronização da loja, não uma consulta instantânea no navegador.
+- `folhas --pasta entrada/subpasta` limita a sessão; conferir e gravar recebem o mesmo `--pasta`. Após ambas as abas gravadas, fotos usadas são movidas para `entrada/processadas/<lote>`, sem apagar. Drive procura nomes exatos nas subpastas de entrada e rejeita duplicatas. Nunca procurar fora dessa árvore.
+
+Estas autorizações substituem as proibições anteriores de imagens oficiais para lacrados e soma de estoque deste fluxo. Brevo, frete e demais integrações não mudam. Sem execução real, publicação de código ou commit nesta sessão.
+
+Referências consultadas: https://tiendanube.github.io/api-documentation/resources/product-variant e https://www.discogs.com/developers (esta última respondeu 403 na consulta automatizada).

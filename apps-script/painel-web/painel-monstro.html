@@ -668,7 +668,7 @@ const RANGES = {
   acd: "anuncios_campanha_dia!A1:T3000", ahoje: "anuncios_hoje!A1:K400", aads: "anuncios_anuncios!A1:S300", asem: "anuncios_semana!A1:U600",
   aalert: "anuncios_alertas!A1:F100", ares: "anuncios_resumo!A1:B20", anotas: "anuncios_notas!A1:E400", adir: "anuncios_direcao!A1:C400",
   pedMail: "pedidos!B1:B8000", itens: "itens!C1:I9000", prodA: "produtos!B1:H7000", prodM: "produtos!M1:M7000", prodQ: "produtos!Q1:Q7000",
-  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AM500", cadf: "cadastro_fotos!A1:F3000",
+  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AO500", cadf: "cadastro_fotos!A1:F3000",
   g4d: "ga4_diario!A1:I15000", g4l: "ga4_links!A1:I400", k7: "k7_resumo!A1:F500",
   itNum: "itens!A1:A9000", prodId: "produtos!L1:L7000", cprod: "comissao_produtos!A1:D300", pman: "pedidos_manuais!A1:N500", cajust: "comissao_ajustes!A1:D200"
 };
@@ -741,7 +741,7 @@ function barChart(host, o){
 /* ---------- estado ---------- */
 const D = {};
 function setErr(sec, msg){ const el = $("e-"+sec); if (!el) return; el.hidden = !msg; el.textContent = msg || ""; }
-const SEC_OF = { itNum:["com"], prodId:["com"], cprod:["com"], pman:["com"], cajust:["com"], g4d:["res"], g4l:["res"], rcamp:["rasp","res"], rjog:["rasp","res"], rev:["rasp"], rlem:["rasp"], reguaLog:["res"], cad:["cad"], cadf:["cad"], pedMail:["res"], itens:["res"], prodA:["res"], prodM:["res"], prodQ:["res"], acd:["ads"], ahoje:["ads"], aads:["ads"], asem:["ads"], aalert:["ads"], ares:["ads"], anotas:["ads"], adir:["ads"], atrib:["valeapena"], ped:["com"], pedNum:["com"], comis:["com"], fila:["fila"], rodada:["fila"], atual:["objetivo","novos","custos"], mensal:["objetivo"], coortes:["novos"], regua:["regua"], reguaRes:["regua"], car:["carrinhos"], vale:["valeapena"], ind:["custos"], res:["carrinhos"], k7:["k7"] };
+const SEC_OF = { itNum:["com"], prodId:["com","cad"], cprod:["com"], pman:["com"], cajust:["com"], g4d:["res"], g4l:["res"], rcamp:["rasp","res"], rjog:["rasp","res"], rev:["rasp"], rlem:["rasp"], reguaLog:["res"], cad:["cad"], cadf:["cad"], pedMail:["res"], itens:["res"], prodA:["res"], prodM:["res"], prodQ:["res"], acd:["ads"], ahoje:["ads"], aads:["ads"], asem:["ads"], aalert:["ads"], ares:["ads"], anotas:["ads"], adir:["ads"], atrib:["valeapena"], ped:["com"], pedNum:["com"], comis:["com"], fila:["fila"], rodada:["fila"], atual:["objetivo","novos","custos"], mensal:["objetivo"], coortes:["novos"], regua:["regua"], reguaRes:["regua"], car:["carrinhos"], vale:["valeapena"], ind:["custos"], res:["carrinhos"], k7:["k7"] };
 
 function renderAtual(){
   const a = rows(D.atual)[0]; if (!a) return;
@@ -2924,6 +2924,20 @@ function rpForm(c){
   };
   ligarOrig();
   box.querySelector('[data-a="add-orig"]').onclick = () => { origCorpo.insertAdjacentHTML("beforeend", linhaOrig({nome:"", codigo:""}, false)); ligarOrig(); box.classList.add("changed"); };
+  box.querySelectorAll("[data-somar]").forEach(b => b.onclick = async () => {
+    const qtd = Number(box.querySelector('[data-f="estoque"]')?.value || o.estoque);
+    if (!Number.isInteger(qtd) || qtd<1 || qtd>999) return alert("Informe uma quantidade de 1 a 999.");
+    if (!confirm("Confirma que é a mesmíssima edição e quer somar " + qtd + " unidades?")) return;
+    b.disabled = true;
+    try {
+      const celula = k => `cadastro_rascunhos!${colL(o._h.indexOf(k))}${o._row}`;
+      for (const [k,v] of [["produto_id",b.dataset.somar],["estoque",String(qtd)],["status","somar_estoque"]]) {
+        if (o._h.indexOf(k)<0) throw new Error("Atualize os cabeçalhos do cadastro");
+        await write(celula(k), [[v]]);
+      }
+      await afterSave();
+    } catch(e) { alert(cdErro(e)); } finally { b.disabled = false; }
+  });
   const st = box.querySelector(".status"), q = f => box.querySelector(`[data-f="${f}"]`);
   box.querySelector('[data-a="salvar"]').onclick = async () => {
     st.className = "status";
@@ -3016,10 +3030,10 @@ function cdLote(){
 }
 const CD_GRADES = ["M","NM","VG+","VG","G+","G","P"];
 const CD_CAPA_GRADES = ["M","NM","VG+","VG","G+","G","F"];
-const CD_PAPEIS = ["capa", "contracapa", "encarte frente", "encarte verso", "encarte aberto", "capa interna", "disco", "rótulo", "etiqueta"];
-const CD_FILTROS = [["rascunho","Para revisar"],["aprovado","Aprovados"],["criado","Criados (ocultos)"],["erro","Com erro"],["publicado","Publicados"],["marcar_vinil","Marcar no vinil"],["descartado","Descartados"],["todos","Todos"]];
-const cdGrupo = s => { s = String(s || "").trim().toLowerCase(); if (s.startsWith("erro")) return "erro"; if (s.startsWith("descartado")) return "descartado"; return ["rascunho","aprovado","criado","publicado"].includes(s) ? s : "rascunho"; };
-const CD_PILL = {rascunho:["p-wait","para revisar"], aprovado:["p-info","aprovado, aguardando a rotina"], criado:["p-ok","criado oculto na loja"], erro:["p-bad","erro"], publicado:["p-ok","publicado"], descartado:["p-info","descartado"]};
+const CD_PAPEIS = ["capa", "contracapa", "encarte frente", "encarte verso", "encarte aberto", "capa interna", "disco", "rótulo", "etiqueta", "referencia", "codigo_barras", "oficial"];
+const CD_FILTROS = [["rascunho","Para revisar"],["aprovado","Aprovados"],["criado","Criados (ocultos)"],["erro","Com erro"],["publicado","Publicados"],["marcar_vinil","Etiqueta verde"],["conferencia","Conferência completa"],["somar_estoque","Soma confirmada"],["estoque_somado","Estoque somado"],["descartado","Descartados"],["todos","Todos"]];
+const cdGrupo = s => { s = String(s || "").trim().toLowerCase(); if (s.startsWith("erro")) return "erro"; if (s.startsWith("descartado")) return "descartado"; return ["rascunho","aprovado","criado","publicado","somar_estoque","estoque_somado"].includes(s) ? s : "rascunho"; };
+const CD_PILL = {somar_estoque:["p-wait","soma aguardando a rotina"], estoque_somado:["p-ok","estoque somado"], rascunho:["p-wait","para revisar"], aprovado:["p-info","aprovado, aguardando a rotina"], criado:["p-ok","criado oculto na loja"], erro:["p-bad","erro"], publicado:["p-ok","publicado"], descartado:["p-info","descartado"]};
 const colL = n => { let s = ""; n++; while (n > 0){ const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
 function cdLinhas(){
   const v = D.cad || []; if (v.length < 2) return [];
@@ -3081,13 +3095,25 @@ function cdFotosEditor(o, edit){
     <div class="s" style="margin-top:4px">Use as setas para mudar a ordem das fotos no site. A primeira vira a capa. Fotos marcadas como "não usar" (etiqueta) nunca vão para a loja.</div>
   </div>`;
 }
+function cdProdutoAtual(o){
+  const ids = D.prodId || [], produtos = D.prodA || [];
+  const i = ids.findIndex((r,n) => n>0 && String(r[0]) === String(o.produto_id));
+  return i>0 ? produtos[i] : null;
+}
+function cdFisicoAtivo(o){
+  const p = cdProdutoAtual(o);
+  return !cdEhLivro(o) && !!o.produto_id && !!p && /^true$/i.test(p[6]) && num(p[4])>0;
+}
 function cdCardMarcarVinil(o){
-  const pr = num(o.preco);
+  const pAtual = cdProdutoAtual(o);
+  const pr = num(pAtual ? pAtual[2] : o.preco);
   const prTxt = pr ? brl2(pr) : (o.preco ? "R$ " + o.preco : "sem preço");
-  const qtd = o.estoque ? o.estoque : "1";
+  const atual = cdProdutoAtual(o);
+  const qtd = atual ? atual[4] : o.estoque || "1";
   const stTxt = o.status === "publicado" ? "publicado na loja" : "criado oculto";
   const pillCls = o.status === "publicado" ? "p-ok" : "p-info";
   return `<div class="fcard cd-marcar-card" data-disco-marcar="${esc(o.id)}" style="margin-bottom:12px;padding:16px">
+    <div class="s">☐ Conferência no papel. Última conferência: ${esc(o.conferido_em || "nunca")}</div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
       <div style="flex:1;min-width:240px">
         <div style="font-size:19px;font-weight:700;line-height:1.25;margin-bottom:6px">${esc(o.titulo)}</div>
@@ -3100,7 +3126,7 @@ function cdCardMarcarVinil(o){
       </div>
       <div class="no-print" style="margin-top:4px">
         <label class="btn" style="display:inline-flex;align-items:center;gap:8px;font-size:16px;font-weight:700;padding:10px 16px;cursor:pointer;background:var(--accent-soft);border-color:var(--accent);color:var(--accent)">
-          <input type="checkbox" data-marcar-vinil="${esc(o.id)}" style="width:20px;height:20px;margin:0;cursor:pointer"> Marcar no vinil
+          <input type="checkbox" data-marcar-vinil="${esc(o.id)}" style="width:20px;height:20px;margin:0;cursor:pointer"> ${typeof CD_FILTRO !== "undefined" && CD_FILTRO === "conferencia" ? "Conferido hoje" : "Passei o marcador verde"}
         </label>
       </div>
     </div>
@@ -3111,14 +3137,15 @@ async function cdExecutarMarcarVinil(o, cardEl){
   const agora = hojeSP() + " " + hhmm();
   cardEl.style.opacity = "0.4";
   try {
-    let iCol = o._h.indexOf("marcado_vinil");
+    const campo = CD_FILTRO === "conferencia" ? "conferido_em" : "marcado_vinil";
+    let iCol = o._h.indexOf(campo);
     if (iCol < 0){
-      await write(`cadastro_rascunhos!${colL(o._h.length)}1`, [["marcado_vinil"]]);
+      await write(`cadastro_rascunhos!${colL(o._h.length)}1`, [[campo]]);
       iCol = o._h.length;
-      o._h.push("marcado_vinil");
+      o._h.push(campo);
     }
     await write(`cadastro_rascunhos!${colL(iCol)}${o._row}`, [[agora]]);
-    o.marcado_vinil = agora;
+    o[campo] = agora;
     if (D.cad && D.cad[o._row - 1]){
       while (D.cad[o._row - 1].length <= iCol) D.cad[o._row - 1].push("");
       D.cad[o._row - 1][iCol] = agora;
@@ -3136,7 +3163,7 @@ async function cdExecutarMarcarVinil(o, cardEl){
         btnDesfazer.onclick = async () => {
           btnDesfazer.disabled = true;
           await write(`cadastro_rascunhos!${colL(iCol)}${o._row}`, [[""]]);
-          o.marcado_vinil = "";
+          o[campo] = "";
           if (D.cad && D.cad[o._row - 1]) D.cad[o._row - 1][iCol] = "";
           dBox.innerHTML = "";
           renderCad();
@@ -3155,16 +3182,17 @@ function renderCad(){
   const L = cdLinhas(), cont = {};
   L.forEach(o => { const g = cdGrupo(o.status); cont[g] = (cont[g] || 0) + 1; });
   cont.todos = L.length;
-  cont.marcar_vinil = L.filter(o => !cdEhLivro(o) && ["criado","publicado"].includes(cdGrupo(o.status)) && !String(o.marcado_vinil || "").trim()).length;
+  cont.conferencia = L.filter(cdFisicoAtivo).length;
+  cont.marcar_vinil = L.filter(o => cdFisicoAtivo(o) && !String(o.marcado_vinil || "").trim()).length;
   $("cd-filtro").innerHTML = CD_FILTROS.map(([v,l]) => `<button type="button" data-v="${v}" aria-pressed="${v === CD_FILTRO}">${l} (${cont[v] || 0})</button>`).join("");
   $("cd-filtro").querySelectorAll("button").forEach(b => b.onclick = () => { CD_FILTRO = b.dataset.v; renderCad(); });
   $("cd-nota").textContent = CD_FILTRO === "rascunho" ? "Disco usado é sempre exemplar único: cada rascunho vira um produto novo com estoque 1." :
     CD_FILTRO === "criado" ? "Produto oculto pode não abrir pelo link público. Confira no administrador da Nuvemshop, em Produtos, e publique por lá." :
-    CD_FILTRO === "marcar_vinil" ? "Discos já criados ou publicados para marcar a etiqueta no vinil da loja física. Livros ficam fora." : "";
+    CD_FILTRO === "marcar_vinil" ? "Discos visíveis no site, com estoque, para passar o marcador verde na loja física." : "";
 
-  if (CD_FILTRO === "marcar_vinil"){
-    const pendentesVinil = L.filter(o => !cdEhLivro(o) && ["criado","publicado"].includes(cdGrupo(o.status)) && !String(o.marcado_vinil || "").trim())
-      .sort((a,b) => String(a.id || "").localeCompare(String(b.id || "")));
+  if (["marcar_vinil","conferencia"].includes(CD_FILTRO)){
+    const pendentesVinil = L.filter(o => cdFisicoAtivo(o) && (CD_FILTRO === "conferencia" || !String(o.marcado_vinil || "").trim()))
+      .sort((a,b) => String(a.marca || a.titulo || "").localeCompare(String(b.marca || b.titulo || ""), "pt-BR"));
     if (!pendentesVinil.length){
       $("cd-lista").innerHTML = '<div class="empty">Nenhum vinil pendente de marcação na loja física.</div>';
       cdLote();
@@ -3206,6 +3234,13 @@ function cdSugestoesCategorias(o, iq){
   if (!lista.length) return "";
   return [...new Set(lista)].join(" · ");
 }
+function cdCompararCapas(o){
+  const fs = cdFotosLinhas(o);
+  const propria = fs.find(f => ["capa","referencia"].includes(f.papel));
+  const oficial = fs.find(f => f.papel === "oficial");
+  const img = (f, label) => `<figure><figcaption>${label}</figcaption>${f && f.arquivo_drive_id ? `<img style="max-width:180px" src="https://drive.google.com/thumbnail?id=${encodeURIComponent(f.arquivo_drive_id)}&sz=w400" alt="${label}">` : "Imagem indisponível"}</figure>`;
+  return o.discogs_url ? `<div style="display:flex;flex-wrap:wrap">${img(propria,"Capa do Túlio")}${(o.capa_discogs_url && /^https:\/\/i\.discogs\.com\//.test(o.capa_discogs_url) ? `<figure><figcaption>Capa do Discogs</figcaption><img style="max-width:180px" src="${esc(o.capa_discogs_url)}" alt="Capa do Discogs"></figure>` : img(oficial,"Capa do Discogs"))}</div>` : "";
+}
 function cdCard(o){
   const g = cdGrupo(o.status), pill = CD_PILL[g], edit = g === "rascunho";
   const vin = CD_GRADES.find(x => new RegExp("^" + x.replace("+","\\+") + "(\\s|$)").test(String(o.vinil).trim()) && !/conferir/i.test(o.vinil)) || "";
@@ -3220,6 +3255,8 @@ function cdCard(o){
   const iq = cdIguais(o);
   const sugCat = cdSugestoesCategorias(o, iq);
   return `<div class="fcard" data-cd="${esc(o.id)}">
+    ${novo && !cdEhLivro(o) && edit ? iq.filter(x => x.produto_id).map(x => `<div class="banner">Já existe: ${esc(x.nome)}. É a mesma edição?<button type="button" data-somar="${esc(x.produto_id)}">Sim, somar ${esc(o.estoque || "1")} ao estoque deste produto</button></div>`).join("") : ""}
+    ${cdCompararCapas(o)}
     <div class="fcard-h"><b style="overflow-wrap:anywhere">${esc(o.titulo)}</b><span class="pill ${pill[0]}">${esc(g === "erro" || g === "descartado" ? o.status : pill[1])}</span>${g === "aprovado" || g === "criado" ? `<span class="pill ${cdVaiPublicar(o) ? "p-ok" : "p-wait"}">${cdVaiPublicar(o) ? "vai aparecer" : "fica oculto"}</span>` : ""}</div>
     <div class="s">${esc(o.ficha)}</div>
     <div class="cost-form" style="margin-top:10px">
@@ -3296,6 +3333,20 @@ function cdCard(o){
 function cdLigar(box, o){
   if (!o) return;
   box.querySelectorAll("input,select,textarea").forEach(el => el.addEventListener("input", () => { if (el.dataset.orig !== undefined){ const v = el.type === "checkbox" ? (el.checked ? "sim" : "nao") : el.value; el.classList.toggle("changed", v !== el.dataset.orig); } }));
+  box.querySelectorAll("[data-somar]").forEach(b => b.onclick = async () => {
+    const qtd = Number(box.querySelector('[data-f="estoque"]')?.value || o.estoque);
+    if (!Number.isInteger(qtd) || qtd<1 || qtd>999) return alert("Informe uma quantidade de 1 a 999.");
+    if (!confirm("Confirma que é a mesmíssima edição e quer somar " + qtd + " unidades?")) return;
+    b.disabled = true;
+    try {
+      const celula = k => `cadastro_rascunhos!${colL(o._h.indexOf(k))}${o._row}`;
+      for (const [k,v] of [["produto_id",b.dataset.somar],["estoque",String(qtd)],["status","somar_estoque"]]) {
+        if (o._h.indexOf(k)<0) throw new Error("Atualize os cabeçalhos do cadastro");
+        await write(celula(k), [[v]]);
+      }
+      await afterSave();
+    } catch(e) { alert(cdErro(e)); } finally { b.disabled = false; }
+  });
   const st = box.querySelector(".status"), q = f => box.querySelector(`[data-f="${f}"]`);
   const idx = k => o._h.indexOf(k), cel = k => `cadastro_rascunhos!${colL(idx(k))}${o._row}`;
   const agora = () => new Date().toLocaleString("sv-SE",{timeZone:"America/Sao_Paulo"}).slice(0,16);
@@ -3538,7 +3589,7 @@ function cdIguais(o){
   for (let i = 1; i < a.length; i++){ const nome = (a[i] || [])[0]; if (!nome || o.link_loja && String(o.link_loja).includes((u[i]||[])[0])) continue;
     const n = cdNorm(nome); if (!n) continue; const tn = n.split(" "); const comuns = tn.filter(t => ta.has(t)).length;
     if (n === alvo || (comuns >= Math.max(2, Math.ceil(ta.size * 0.8)) && comuns >= Math.ceil(tn.length * 0.8)))
-      out.push({nome, url: (u[i] || [])[0], categorias: String((a[i] || [])[1] || ""), preco: (a[i] || [])[2], estoque: num((a[i] || [])[4]) || 0, exibir: /^true$/i.test((a[i] || [])[6])}); }
+      out.push({produto_id: String(((D.prodId || [])[i] || [])[0] || ""), nome, url: (u[i] || [])[0], categorias: String((a[i] || [])[1] || ""), preco: (a[i] || [])[2], estoque: num((a[i] || [])[4]) || 0, exibir: /^true$/i.test((a[i] || [])[6])}); }
   return out.sort((x,y) => (y.estoque > 0) - (x.estoque > 0)).slice(0, 4);
 }
 const cdR = () => { if (D.cad) { try { renderCad(); } catch(e){ setErr("cad", "Não consegui desenhar o cadastro: o formato da aba mudou."); } } };

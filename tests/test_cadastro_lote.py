@@ -836,7 +836,8 @@ PASTA_REAL = os.getenv('CADASTRO_PASTA_LOCAL', '').strip() or r'J:\Meu Drive\Cad
 
 @pytest.mark.skipif(
     not (
-        Path(PASTA_REAL).exists()
+        os.getenv('CADASTRO_TESTAR_FOTOS_REAIS') == 'sim'
+        and Path(PASTA_REAL).exists()
         and CAMINHO_EXEMPLO_REF.exists()
         and CAMINHO_GRAVADAS_REF.exists()
         and any(Path(PASTA_REAL).glob('IMG_20261025_*.jpg'))

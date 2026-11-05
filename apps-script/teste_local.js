@@ -517,7 +517,7 @@ function extrairFuncoesPainel() {
   const CD_PEND = new Set(), CD_SEL = new Set();
   const ctx = { String, Array, Set, JSON, RegExp, Math, Number, Object, parseFloat, isFinite, brl2, brl, int, brDiaC, rpDia, rows, hojeSP, CD_PEND, CD_SEL, D: {} };
   vm.createContext(ctx);
-  vm.runInContext(trechoEsc + '\n' + trechoNum + '\n' + trechoPm + '\n' + trecho + '\n' + trechoRp + '\n' + trechoApag + '\n' + trechoCd + '\n' + trechoIguais + '\nthis.exports = { D, num, esc, pmAddMes, pmDividirParcelas, pmValidarCronograma, pmLerCronograma, pmRateioNoMes, rpCodigoOrigem, rpOrigensLista, rpCanalDe, rpCanalJogada, rpNomeCanal, rpJogadas, rpEstado, rpStats, rpPodeApagarStatus, rpTextoConfirmarExclusao, cdEhLivro, cdNovo, cdPreVenda, cdPodeInfinito, cdEhInfinito, cdVaiPublicar, cdTemPendenciaAviso, cdCard, cdCardMarcarVinil, cdSugestoesCategorias, cdFotosLinhas, cdFotosEditor, cdIguais, CD_CAPA_GRADES, CD_PAPEIS, CD_FILTROS };', ctx);
+  vm.runInContext(trechoEsc + '\n' + trechoNum + '\n' + trechoPm + '\n' + trecho + '\n' + trechoRp + '\n' + trechoApag + '\n' + trechoCd + '\n' + trechoIguais + '\nthis.exports = { D, num, esc, pmAddMes, pmDividirParcelas, pmValidarCronograma, pmLerCronograma, pmRateioNoMes, rpCodigoOrigem, rpOrigensLista, rpCanalDe, rpCanalJogada, rpNomeCanal, rpJogadas, rpEstado, rpStats, rpPodeApagarStatus, rpTextoConfirmarExclusao, cdEhLivro, cdNovo, cdPreVenda, cdPodeInfinito, cdEhInfinito, cdVaiPublicar, cdTemPendenciaAviso, cdCard, cdFisicoAtivo, cdCardMarcarVinil, cdSugestoesCategorias, cdFotosLinhas, cdFotosEditor, cdIguais, CD_CAPA_GRADES, CD_PAPEIS, CD_FILTROS };', ctx);
   return ctx.exports;
   return ctx.exports;
 }
@@ -1217,7 +1217,18 @@ teste('cadastro e lista de marcar vinil (D-097): cdEhLivro, cdNovo e filtro marc
   assert.ok(cardHtml.includes('LP A'), 'contém título do disco');
   assert.ok(cardHtml.includes('data-marcar-vinil="2026-10-29-01"'), 'contém checkbox de marcar no vinil');
   assert.ok(cardHtml.includes('cd-marcar-card'), 'contém classe de estilo');
-  assert.ok(cardHtml.includes('Marcar no vinil'), 'texto do checkbox presente');
+  assert.ok(cardHtml.includes('Passei o marcador verde'), 'texto do checkbox presente');
+});
+
+teste('D-099: etiqueta verde só lista visíveis com estoque e fora de Livros', () => {
+  const p = extrairFuncoesPainel();
+  p.D.prodId = [['id'], ['101'], ['102'], ['103']];
+  p.D.prodA = [['nome'], ['A','LP',50,'',1,'','true'], ['B','LP',50,'',0,'','true'], ['C','LP',50,'',1,'','false']];
+  assert.ok(p.cdFisicoAtivo({produto_id:'101',categorias:'LP'}));
+  assert.ok(!p.cdFisicoAtivo({produto_id:'102',categorias:'LP'}));
+  assert.ok(!p.cdFisicoAtivo({produto_id:'103',categorias:'LP'}));
+  assert.ok(!p.cdFisicoAtivo({produto_id:'101',categorias:'Livros'}));
+  assert.ok(p.CD_PAPEIS.includes('referencia') && p.CD_PAPEIS.includes('codigo_barras') && p.CD_PAPEIS.includes('oficial'));
 });
 
 (async () => {

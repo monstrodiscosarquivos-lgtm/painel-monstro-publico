@@ -1,5 +1,20 @@
 # Cadastro de discos por IA · manual para o agente
 
+## Fluxo atualizado D-099 (05/11/2026)
+
+1. Crie uma subpasta por sessão dentro de `entrada`, por exemplo `entrada/sessao-05-11`.
+2. Configure a câmera em JPG. Para usado, fotografe etiqueta, capa, contracapa e disco; inclua rótulo legível se houver dúvida de edição. Para lacrado, fotografe capa e código de barras.
+3. Rode `python scripts/cadastro_lote.py folhas --pasta "entrada/sessao-05-11"`.
+4. O agente agrupa e identifica as fotos. Em lacrado usa `referencia` para fotos próprias e `codigo_barras` para barcode; lê o número e preenche `barcode`. Se houver rótulo, preenche `rotulo_titulo` com o título lido, sem inventar quando ilegível. Informe `preco_etiqueta` apenas quando realmente lido da etiqueta. Preço de planilha continua sendo preço de planilha.
+5. Rode `python scripts/cadastro_lote.py conferir caminho/lote.json --pasta "entrada/sessao-05-11"`. Com token Discogs, o comando busca e baixa as oficiais antes de conferir; capas são comparadas automaticamente. Imagens oficiais de lacrado são até quatro, capa primeiro. Use somente JPG na sessão.
+6. Confira relatório e prévias. Rode `python scripts/cadastro_lote.py gravar caminho/lote.json --pasta "entrada/sessao-05-11" --confirmar`. Sem confirmar, simula as escritas na planilha. Depois de gravar as duas abas, move as fotos usadas para `entrada/processadas/<lote>`. Não apaga fotos. Não mova nem renomeie manualmente durante a operação.
+7. No Painel, revise fotos lado a lado, preço, alertas e visibilidade. Publicação inicial só vem marcada com capa conferida, preço da etiqueta e confiança alta, sem alerta. A configuração `Cadastro: publicar direto quando não houver alerta` permite desligar esse padrão.
+8. Para lacrado repetido, confira edição, catálogo, país e ano. Use “Sim, somar N ao estoque deste produto” somente para a mesmíssima edição. Estoque infinito não é alterado. Resultado incerto deve ser conferido, sem apagar o diário.
+9. Abra “Etiqueta verde”, passe o marcador físico e tique “Passei o marcador verde”. Em “Conferência completa”, use “Conferido hoje”. Ambas têm “Imprimir lista”. Produtos esgotados ou ocultos saem após a sincronização da loja.
+
+Este fluxo substitui as instruções anteriores sobre não mover fotos, não usar imagens oficiais em lacrados e não somar estoque. O agente continua sem criar produtos diretamente; a rotina executa somente o que foi confirmado no Painel.
+
+
 Vale para qualquer agente que rode neste computador (Antigravity, Codex, Claude Code). Leia o `AGENTS.md` antes. Este manual substitui o trabalho que o Cowork fazia na etapa 2 do `docs/CADASTRO.md`: olhar as fotos novas, identificar cada disco e gravar os rascunhos no Painel.
 
 O pedido do Túlio costuma ser curto, por exemplo: "Leia docs/CADASTRO_IA.md e cadastre os discos novos da pasta entrada."

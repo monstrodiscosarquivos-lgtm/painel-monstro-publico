@@ -1,3 +1,15 @@
+# Atualização de sessão D-099, 05/11/2026
+
+Implementação local preparada na pasta pública, sem commit ou chamadas reais. Cadastro com referências privadas, oficiais de lacrado, busca barcode, comparação pHash e conferência de título do rótulo lido pelo agente. Soma de estoque exige confirmação de edição e diário; resultado incerto bloqueia nova tentativa. Checklist físico cruza visibilidade/estoque e registra conferido_em.
+
+Verificação final: 792 testes Python passaram, 1 ignorado; 54 testes JS passaram; Painel.html remontado; auditoria com 0 problemas em 136 arquivos versionados.
+
+Próximo passo: Túlio revisar as mudanças locais e as prévias com dados de teste antes de atualizar a versão do Apps Script em uso. Nenhuma pendência de autorização de negócio para as mudanças da D-099. Implantação e execução reais não foram feitas.
+
+## Avisar o Cowork
+
+D-099: filtros Etiqueta verde/Conferência completa; papéis referencia, codigo_barras e oficial; nova configuração de publicação; colunas capa_discogs_url e conferido_em no fim de cadastro_rascunhos; estados somar_estoque/estoque_somado. Painel.html deve ser atualizado manualmente no Apps Script após revisão. Conferência usa a última sincronização dos produtos. OCR fica com o agente visual, via barcode e rotulo_titulo no JSON.
+
 # Estado do projeto
 
 Atualize este arquivo ao fim de toda sessão. Ele responde a uma pergunta: onde o projeto está agora?

@@ -29,13 +29,14 @@ from painel_monstro.saidas import cadastro as cad, fotos as mod_fotos
 from painel_monstro.saidas.cadastro import (
     ABA,
     COLUNAS,
+    texto_normal,
+    publicar_sem_alerta,
     FOTOS,
     identidade_titulo,
     ler,
     numero,
     peso_padrao,
     preparar_abas,
-    texto_normal,
 )
 from painel_monstro.saidas.planilha_google import PlanilhaGoogle, _letra
 
@@ -50,7 +51,7 @@ ORDEM_PAPEIS = {
     'disco': 8,
     'disco lado B': 9,
 }
-PAPEIS_VALIDOS = {'etiqueta', 'descartar', *ORDEM_PAPEIS}
+PAPEIS_VALIDOS = {'etiqueta', 'descartar', 'referencia', 'codigo_barras', 'oficial', *ORDEM_PAPEIS}
 NOTAS_GOLDMINE = {'M', 'NM', 'VG+', 'VG', 'G+', 'G', 'F'}
 GENEROS_ACEITOS = {
     'Classic Rock',
@@ -830,7 +831,7 @@ def derivar_lote(
 
         pend = [str(o.get('pendencias', '')).strip()] if str(o.get('pendencias', '')).strip() else []
 
-        if not any(f.get('papel') == 'capa' for f in fs):
+        if formato == 'usado' and not any(f.get('papel') == 'capa' for f in fs):
             et = [f for f in fs if f.get('papel') == 'etiqueta']
             if et:
                 et[0]['papel'] = 'capa'
@@ -866,16 +867,36 @@ def derivar_lote(
         if str(o.get('confianca', '')).strip().lower() == 'baixa' and PENDENCIA_INCERTA not in pend:
             pend.append(PENDENCIA_INCERTA)
 
-        etiquetas = [f for f in fs if f.get('papel') == 'etiqueta']
-        site = [f for f in fs if f.get('papel') != 'etiqueta']
+        if formato == 'lacrado':
+            for f in fs:
+                if f.get('papel') not in ('oficial', 'codigo_barras'):
+                    f['papel'] = 'referencia'
+        etiquetas = [f for f in fs if f.get('papel') in ('etiqueta', 'referencia', 'codigo_barras')]
+        site = [f for f in fs if f not in etiquetas]
+        capa_confere = False
+        if discogs_url and pasta_local:
+            from painel_monstro.saidas.fotos import distancia_capas
+            propria = next((f for f in fs if f.get('papel') in ('capa', 'referencia')), None)
+            oficial = o.get('capa_discogs_arquivo') or next((f.get('arquivo') for f in fs if f.get('papel') == 'oficial'), '')
+            try:
+                capa_confere = bool(propria and oficial and distancia_capas(
+                    (pasta_local / propria['arquivo']).read_bytes(), (pasta_local / oficial).read_bytes()) <= 18)
+                if not capa_confere:
+                    pend.append('capa não confere com o Discogs')
+            except (OSError, ValueError):
+                pend.append('conferir capa com o Discogs: imagem indisponível')
+        rotulo = str(o.get('rotulo_titulo') or '').strip()
+        if rotulo and texto_normal(rotulo) != texto_normal(alb):
+            pend.append('rótulo do vinil é de outro disco')
+
         site.sort(key=lambda f: (ORDEM_PAPEIS.get(f.get('papel', ''), 7.5), str(f.get('arquivo', ''))))
 
         for idx_et, f in enumerate(etiquetas, 1):
             arq_orig = str(f.get('arquivo', ''))
             suf = '' if idx_et == 1 else f' {idx_et}'
-            nome_novo = f'{id_} 00 etiqueta{suf}.jpg'
+            nome_novo = f'{id_} 00 {f["papel"]}{suf}.jpg'
             obs = nome_novo if usar_nomes_novos else arq_orig
-            fotos_rows.append([id_, '0', 'etiqueta', '', '', obs])
+            fotos_rows.append([id_, '0', f['papel'], '', '', obs])
             renomeacoes.append({'disco': o.get('disco', ''), 'id_disco': id_, 'antigo': arq_orig, 'novo': nome_novo, 'feito': False})
 
         nomes_site = []
@@ -890,7 +911,7 @@ def derivar_lote(
             can = None
             falhou_auto = False
             if detectar_recortes and pasta_local is not None:
-                if formato == 'livro' or str(f.get('recorte', '')).lower() == 'inteira':
+                if formato == 'livro' or p == 'oficial' or str(f.get('recorte', '')).lower() == 'inteira':
                     can, falhou_auto = None, False
                 else:
                     can, falhou_auto = calcular_cantos_foto(pasta_local / arq_orig, p, f)
@@ -1000,6 +1021,7 @@ def derivar_lote(
             'largura_cm': larg_cm,
             'comprimento_cm': comp_cm,
             'discogs_url': discogs_url,
+            'capa_discogs_url': str(o.get('capa_discogs_url') or ''),
             'discogs_id': str(o.get('discogs_id') or '').strip(),
             'faixas': str(o.get('faixas') or '').strip(),
             'pendencias': ' | '.join(pend),
@@ -1012,6 +1034,12 @@ def derivar_lote(
             'estoque': estoque_linha,
             'publicar': str(o.get('publicar') or '').strip(),
         })
+        linha_dict['discogs_confianca'] = str(o.get('discogs_confianca') or o.get('confianca') or 'baixa')
+        if o.get('preco_etiqueta') is not None and tem_preco:
+            linha_dict['preco_origem'] = 'etiqueta'
+        cfg = {r[0]: r[1] for r in ler(planilha, 'Configuração') if len(r)>1} if planilha else {}
+        habilitado = texto_normal(cfg.get('Cadastro: publicar direto quando não houver alerta', 'sim')) == 'sim'
+        linha_dict['publicar'] = 'sim' if publicar_sem_alerta(linha_dict, capa_confere, habilitado) else 'nao'
         rascunhos_dicts.append(linha_dict)
         rascunhos_rows.append([linha_dict.get(c, '') for c in COLUNAS])
         detalhes_discos.append({
@@ -1148,7 +1176,7 @@ def validar_lote(
         if acao != 'cadastrar':
             continue
 
-        if not any(p in ('capa', 'contracapa', 'etiqueta') for p in papeis_uteis):
+        if not any(p in ('capa', 'contracapa', 'etiqueta', 'referencia', 'oficial') for p in papeis_uteis):
             erros.append((rotulo_d, 'Disco a cadastrar sem nenhuma foto de capa, contracapa ou etiqueta.'))
 
         formato = str(o.get('formato') or 'usado').strip().lower()
@@ -1496,6 +1524,20 @@ def gravar_lote(
     ]
     n_fotos = _escrever_aba_abaixo(planilha, 'cadastro_fotos', FOTOS, novas_fotos)
 
+    # Move somente depois de ambas as abas confirmadas. Retomada não duplica arquivos.
+    entrada = pasta_local if pasta_local.name.lower() == 'entrada' else pasta_local.parent
+    destino = entrada / 'processadas' / lote
+    if not destino.resolve().is_relative_to(entrada.resolve()):
+        raise ErroLote('Lote fora da pasta de entrada')
+    destino.mkdir(parents=True, exist_ok=True)
+    for item in plano['renomeacoes']:
+        src = pasta_local / item['novo']
+        dst = destino / item['novo']
+        if src.exists():
+            if dst.exists(): raise ErroLote('Foto já existe em processadas; conferir antes de mover')
+            src.rename(dst)
+        elif not dst.exists(): raise ErroLote('Foto ausente ao arquivar')
+
     # Passo 4: marcar plano como concluído
     plano['concluido'] = True
     caminho_plano.write_text(json.dumps(plano, ensure_ascii=False, indent=2), encoding='utf-8')
@@ -1766,6 +1808,60 @@ def recortar_lote_fotos(
     }
 
 
+def preparar_imagens_discogs(caminho, pasta, cliente):
+    """Preparação explícita do CLI; derivação e testes permanecem sem rede."""
+    import io
+    import requests
+    caminho = Path(caminho)
+    if caminho.is_dir(): caminho = caminho / 'lote.json'
+    dados = json.loads(caminho.read_text(encoding='utf-8'))
+    for grupo, disco in enumerate(dados.get('discos', []), 1):
+        if disco.get('acao') != 'cadastrar' or disco.get('formato') == 'livro': continue
+        if not disco.get('discogs_url') and not disco.get('barcode'): continue
+        try:
+            info = cliente.buscar(disco.get('album', ''), disco.get('catalogo', ''),
+                                  disco.get('discogs_url', ''), barcode=disco.get('barcode', ''))
+            disco.update(info)
+            if not info.get('discogs_id'): continue
+            release = cliente.get('/releases/' + info['discogs_id'])
+            imagens = sorted(release.get('images', []), key=lambda x: x.get('type') != 'primary')[:4]
+            if disco.get('formato', 'usado') != 'lacrado': imagens = imagens[:1]
+            oficiais = []
+            for i, imagem in enumerate(imagens, 1):
+                nome = f'discogs_{info["discogs_id"]}_{grupo:02d}_{i:02d}.jpg'
+                destino = pasta / nome
+                if not destino.exists():
+                    from urllib.parse import urlparse
+                    url = imagem.get('uri', '')
+                    host = urlparse(url)
+                    if host.scheme != 'https' or host.hostname != 'i.discogs.com':
+                        raise ErroLote('Endereço da imagem oficial inválido')
+                    r = requests.get(url, timeout=30, allow_redirects=False)
+                    if r.status_code != 200: raise ErroLote('Imagem oficial indisponível')
+                    with Image.open(io.BytesIO(r.content)) as im:
+                        im.convert('RGB').save(destino, 'JPEG', quality=92)
+                oficiais.append({'papel': 'oficial', 'arquivo': nome, 'recorte': 'inteira'})
+            if oficiais:
+                disco['capa_discogs_arquivo'] = oficiais[0]['arquivo']
+                disco['capa_discogs_url'] = imagens[0].get('uri', '')
+                if disco.get('formato') == 'lacrado':
+                    disco['fotos'] = [f for f in disco.get('fotos', []) if f.get('papel') != 'oficial'] + oficiais
+        except Exception:
+            disco['pendencias'] = (str(disco.get('pendencias') or '') + ' | conferir imagens do Discogs').strip(' |')
+    caminho.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding='utf-8')
+
+
+def pasta_sessao(entrada, subpasta):
+    entrada = Path(entrada).resolve()
+    partes = Path(subpasta).parts
+    if partes and partes[0].lower() == 'entrada':
+        partes = partes[1:]
+    destino = entrada.joinpath(*partes).resolve()
+    if not destino.is_relative_to(entrada) or destino == entrada or 'processadas' in destino.relative_to(entrada).parts:
+        raise ErroLote('Escolha uma subpasta dentro de entrada, fora de processadas.')
+    return destino
+
+
 # ----------------------------------------------------------------------------
 # CLI
 # ----------------------------------------------------------------------------
@@ -1776,6 +1872,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_folhas = sub.add_parser('folhas')
     p_folhas.add_argument('--lote', default='')
+    p_folhas.add_argument('--pasta', default='')
 
     p_rec = sub.add_parser('recorte')
     p_rec.add_argument('arquivo')
@@ -1787,9 +1884,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_conf = sub.add_parser('conferir')
     p_conf.add_argument('json_lote')
+    p_conf.add_argument('--pasta', default='')
 
     p_grav = sub.add_parser('gravar')
     p_grav.add_argument('json_lote')
+    p_grav.add_argument('--pasta', default='')
     p_grav.add_argument('--confirmar', action='store_true')
 
     p_ren = sub.add_parser('renomear-lote')
@@ -1808,6 +1907,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     cfg = carregar()
     pasta = pasta_entrada(cfg)
+    if getattr(args, 'pasta', ''):
+        pasta = pasta_sessao(pasta, args.pasta)
+
 
     if args.comando == 'converter-heic':
         origem = Path(args.origem) if args.origem else (pasta / 'Discos Monstro')
@@ -1838,6 +1940,10 @@ def main(argv: list[str] | None = None) -> int:
         res = gerar_folhas(pasta, planilha, args.lote or None)
         print(f'{res["fotos"]} foto(s) nova(s), {res["folhas"]} folha(s) gerada(s) em {res["fotos_txt"].parent}.')
         return 0
+
+    if args.comando in ('conferir', 'gravar') and cfg.discogs_token:
+        from painel_monstro.coletor.discogs import Discogs
+        preparar_imagens_discogs(args.json_lote, pasta, Discogs(cfg.discogs_token))
 
     if args.comando == 'conferir':
         res = validar_lote(args.json_lote, pasta, planilha, gerar_previas=True)

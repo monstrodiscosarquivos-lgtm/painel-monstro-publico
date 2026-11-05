@@ -29,7 +29,7 @@ from painel_monstro.saidas.planilha_google import _letra
 
 ABA='cadastro_rascunhos'
 BASE='id lote pasta status titulo marca categorias ficha descricao capa vinil preco preco_referencia peso_kg altura_cm largura_cm comprimento_cm discogs_url discogs_confianca pendencias fotos seo_titulo seo_descricao tags produto_id link_loja observacao_tulio atualizado_em'.split()
-EXTRAS='discogs_id faixas creditos discogs_menor_preco discogs_a_venda faixas_na_descricao preco_origem cadastro_execucao fotos_ajustadas estoque publicar marcado_vinil'.split()
+EXTRAS='discogs_id faixas creditos discogs_menor_preco discogs_a_venda faixas_na_descricao preco_origem cadastro_execucao fotos_ajustadas estoque publicar marcado_vinil capa_discogs_url conferido_em'.split()
 COLUNAS=BASE+EXTRAS
 FOTOS='id_disco ordem papel arquivo_drive_id cantos observacao'.split()
 
@@ -198,6 +198,52 @@ def estoque_da_linha(linha):
     return max(1,min(int(n),999)) if n else 1
 
 
+def foto_publicavel(f):
+    return str(f.get('papel', '')).strip().lower() not in ('etiqueta', 'referencia', 'codigo_barras', 'descartar')
+
+
+def publicar_sem_alerta(linha, capa_confere=False, habilitado=True):
+    return bool(habilitado and not str(linha.get('pendencias', '')).strip()
+                and capa_confere and linha.get('preco_origem') == 'etiqueta'
+                and numero(linha.get('preco')) and texto_normal(linha.get('discogs_confianca')) == 'alta')
+
+
+def somar_estoque(linha, loja, gravar, caminho, confirmar=lambda: True):
+    """Intenção durável antes do PUT. Resposta incerta exige conferência manual."""
+    if linha.get('status') != 'somar_estoque' or not re.search(r'lacrad|novo', str(linha.get('categorias', '')), re.I):
+        raise ErroCadastro('soma exige lacrado confirmado no Painel')
+    pid = str(int(linha['produto_id']))
+    qtd = numero(linha.get('estoque'))
+    if qtd is None or not qtd.is_integer() or qtd > 999:
+        raise ErroCadastro('quantidade inválida para soma')
+    estado = json.loads(caminho.read_text(encoding='utf-8')) if caminho.exists() else (json.loads(linha['cadastro_execucao']) if linha.get('cadastro_execucao') else {})
+    if estado:
+        if estado.get('produto_id') != pid or estado.get('quantidade') != int(qtd):
+            raise ErroCadastro('diário de estoque diverge da confirmação')
+        if estado.get('concluido'):
+            gravar({'status': 'estoque_somado'})
+            return
+        raise ErroCadastro('soma anterior incerta; conferir antes de tentar novamente')
+    produto = loja.produto(pid)
+    vs = produto.get('variants', [])
+    if len(vs) != 1:
+        raise ErroCadastro('produto sem variante única; conferir')
+    v = vs[0]
+    if v.get('stock_management') is not True or v.get('stock') is None:
+        raise ErroCadastro('estoque infinito; nenhuma alteração feita')
+    antes = int(v['stock'])
+    if antes < 0 or not confirmar():
+        raise ErroCadastro('confirmação alterada ou estoque inválido')
+    estado = dict(produto_id=pid, variante_id=v['id'], quantidade=int(qtd), antes=antes,
+                  depois=antes+int(qtd), concluido=False)
+    salvar_estado(caminho, estado)
+    gravar({'cadastro_execucao': json.dumps(estado)})
+    loja.estoque(pid, v['id'], estado['depois'])
+    estado['concluido'] = True
+    salvar_estado(caminho, estado)
+    gravar({'cadastro_execucao': json.dumps(estado), 'status': 'estoque_somado'})
+
+
 def deve_publicar(linha):
     """D-082: padrão é publicar ('sim' ou vazio); só 'nao'/'não' mantém oculto."""
     return texto_normal(linha.get('publicar',''))!='nao'
@@ -230,7 +276,7 @@ class LojaCadastro:
         return self._post(f'products/{int(pid)}/images',{'attachment':base64.b64encode(jpeg).decode(),
                                                       'filename':nome,'position':ordem})
     def _put(self,caminho,corpo):
-        if not re.fullmatch(r'products/\d+',caminho) or not isinstance(corpo,dict) or list(corpo.keys())!=['published'] or corpo.get('published') is not True:
+        if not ((re.fullmatch(r'products/\d+',caminho) and corpo == {'published': True}) or (re.fullmatch(r'products/\d+/variants/\d+',caminho) and isinstance(corpo,dict) and list(corpo)==['stock'] and type(corpo['stock']) is int and corpo['stock']>=0)):
             raise ErroCadastro('PUT fora da publicação do cadastro bloqueado')
         self.api._esperar_vaga()
         try:
@@ -241,6 +287,8 @@ class LojaCadastro:
             return r.json()
         except ErroCadastro: raise
         except Exception: raise ErroCadastro('PUT não confirmado') from None
+    def estoque(self,pid,vid,quantidade):
+        return self._put(f'products/{int(pid)}/variants/{int(vid)}', {'stock': quantidade})
     def publicar(self,pid,corpo=None):
         return self._put(f'products/{int(pid)}',{'published':True} if corpo is None else corpo)
 
@@ -280,7 +328,7 @@ class DriveFotos:
     def listar(self,q):
         rs=[]; token=None
         while True:
-            d=self.request('GET','/drive/v3/files',params={'q':q+' and trashed = false','fields':'files(id,name,parents),nextPageToken',
+            d=self.request('GET','/drive/v3/files',params={'q':q+' and trashed = false','fields':'files(id,name,parents,mimeType),nextPageToken',
                    'pageSize':100,'pageToken':token or ''}).json()
             rs+=d.get('files',[]); token=d.get('nextPageToken')
             if not token: return rs
@@ -290,13 +338,23 @@ class DriveFotos:
         if len(rs)>1: raise ErroCadastro('pasta Drive duplicada')
         return rs[0]['id'] if rs else self.request('POST','/drive/v3/files',json={'name':nome,'parents':[pai],
                                                      'mimeType':'application/vnd.google-apps.folder'}).json()['id']
+    def arquivos_entrada(self):
+        pendentes=[self.entrada]; vistos=set(); arquivos=[]
+        while pendentes:
+            pai=pendentes.pop()
+            if pai in vistos: continue
+            vistos.add(pai)
+            for f in self.listar(f"'{pai}' in parents"):
+                if f.get('mimeType')=='application/vnd.google-apps.folder': pendentes.append(f['id'])
+                else: arquivos.append(f)
+        return arquivos
     def baixar(self,fid):
         if not re.fullmatch(r'[\w-]+',fid): raise ErroCadastro('arquivo Drive inválido')
         meta=self.request('GET','/drive/v3/files/'+fid,params={'fields':'mimeType,parents'}).json()
         if not str(meta.get('mimeType','')).startswith('image/'): raise ErroCadastro('original não é imagem')
         # Só os originais da entrada informada, nunca caminho local J: ou arquivo de outra pasta.
         pais=meta.get('parents',[])
-        if self.entrada not in pais: raise ErroCadastro('foto fora da pasta de entrada')
+        if self.entrada not in pais and fid not in {f['id'] for f in self.arquivos_entrada()}: raise ErroCadastro('foto fora da pasta de entrada')
         return self.request('GET','/drive/v3/files/'+fid,params={'alt':'media'}).content
     def guardar(self,id_disco,nome,jpeg):
         destino=self.pasta(self.pasta(self.raiz,'site'),id_disco)
@@ -331,7 +389,7 @@ def preparar_abas(planilha):
     elif ler(planilha,'cadastro_fotos')[0]!=FOTOS: raise ErroCadastro('cabeçalhos das fotos fora da ordem')
     c=ler(planilha,'Configuração'); nomes={r[0] for r in c if r}
     novas=[r for r in [['Cadastro: pasta de entrada Drive (ID)','','ID da pasta entrada compartilhada; cópias em site/<id> da pasta pai. Não usa caminho local.'],
-                       ['Cadastro: publicar direto','Não','D-067: trava atual exige produto sempre oculto; esta chave não libera publicação.']]
+                       ['Cadastro: publicar direto quando não houver alerta','Sim','D-099: exige capa conferida, preço da etiqueta e nenhuma pendência.']]
            if r[0] not in nomes]
     if novas:
         aba,_=planilha._aba('Configuração',len(c)+len(novas)+2,3)
@@ -363,7 +421,7 @@ def resolver_fotos(planilha,drive,fs):
     if not getattr(drive,'entrada',''):
         raise PendenciaFotos('configurar o ID da pasta de entrada')
     try:
-        arquivos=drive.listar(f"'{drive.entrada}' in parents")
+        arquivos=drive.arquivos_entrada() if hasattr(drive,'arquivos_entrada') else drive.listar(f"'{drive.entrada}' in parents")
     except Exception:
         raise PendenciaFotos('não foi possível consultar a pasta de entrada') from None
     indice={}
@@ -385,7 +443,7 @@ def resolver_fotos(planilha,drive,fs):
     for original,fid in resolvidas:
         matches=[(n,dict(zip(FOTOS,r))) for n,r in enumerate(atuais[1:],2)
                  if dict(zip(FOTOS,r)).get('id_disco')==original.get('id_disco')
-                 and dict(zip(FOTOS,r)).get('ordem')==original.get('ordem')]
+                 and all(dict(zip(FOTOS,r)).get(k)==original.get(k) for k in ('ordem','papel','observacao'))]
         if len(matches)!=1 or any(str(matches[0][1].get(k,''))!=str(original.get(k,'')) for k in FOTOS):
             raise PendenciaFotos('linha de foto alterada ou repetida; conferir antes de tentar novamente')
         mudancas.append({'range':f'D{matches[0][0]}','values':[[fid]]})
@@ -405,12 +463,12 @@ def previas_prontas(linha,fs):
     """
     try: refs=json.loads(linha.get('fotos_ajustadas') or '[]')
     except ValueError: return False
-    site=[f for f in fs if not str(f.get('papel','')).strip().lower().startswith('etiqueta')]
+    site=[f for f in fs if foto_publicavel(f)]
     return isinstance(refs,list) and len(refs)>0 and len(refs)==len(site)
 
 
 def ajustar_fotos(id_disco,fs,drive):
-    fotos_site=sorted([f for f in fs if not f.get('papel','').strip().lower().startswith('etiqueta')],key=lambda f:float(f['ordem']))
+    fotos_site=sorted([f for f in fs if foto_publicavel(f)],key=lambda f:float(f['ordem']))
     if not fotos_site: raise ErroCadastro('sem fotos do disco')
     ordens=[int(f['ordem']) for f in fotos_site]
     if len(set(ordens))!=len(ordens) or any(x<=0 for x in ordens): raise ErroCadastro('ordem de fotos inválida ou duplicada')
@@ -517,7 +575,7 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
             atuais=ler(planilha,ABA); matches=[i for i,r in enumerate(atuais[1:],2) if r and r[0]==did]
             if len(matches)!=1: raise ErroCadastro('id duplicado ou removido na planilha')
             n=matches[0]; row=dict(zip(atuais[0],atuais[n-1]))
-            if 'status' in mudancas and row.get('status') not in ('aprovado','criado'):
+            if 'status' in mudancas and row.get('status') not in ('aprovado','criado','somar_estoque'):
                 raise ErroCadastro('status alterado pelo operador; preservado')
             if 'produto_id' in mudancas and row.get('produto_id') and str(row['produto_id'])!=str(mudancas['produto_id']):
                 raise ErroCadastro('produto_id alterado; interrompido')
@@ -529,10 +587,18 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
     previas_feitas=0  # D-090: prévias (baixar e ajustar fotos) por rodada têm limite
     for r in v[1:]:
         l=dict(zip(cab,r)); did=str(l.get('id',''))
-        if not did or l.get('status') not in ('rascunho','aprovado','criado'): continue
+        if not did or l.get('status') not in ('rascunho','aprovado','criado','somar_estoque'): continue
         gravar=gravador(did)
         try:
             if repetidos.count(did)!=1: raise ErroCadastro('id duplicado na planilha')
+            if l['status']=='somar_estoque':
+                def confirmar_soma():
+                    rows=ler(planilha,ABA)
+                    matches=[dict(zip(rows[0],r)) for r in rows[1:] if r and r[0]==did]
+                    return len(matches)==1 and all(matches[0].get(k,'')==l.get(k,'') for k in ('status','produto_id','estoque','categorias'))
+                somar_estoque(l,LojaCadastro(api or NuvemshopAPI(config)),gravar,
+                              Path(pasta_api)/('estoque_'+sku_da_linha(did)+'.json'),confirmar_soma)
+                continue
             if l['status']=='criado' and l.get('produto_id'):
                 loja=LojaCadastro(api or NuvemshopAPI(config))
                 if loja.produto(l['produto_id']).get('published') is True: gravar({'status':'publicado'})
@@ -550,8 +616,7 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                 dados={'preco_referencia':preco_referencia(l.get('titulo',''),tabelas.produtos,pd.Timestamp.now().date())}
                 if pendencias_sem_busca_fotos(l.get('pendencias',''))!=l.get('pendencias',''):
                     dados['pendencias']=pendencias_sem_busca_fotos(l.get('pendencias',''))
-                if numero(l.get('preco')): dados['preco_origem']='etiqueta'
-                elif 'conferir preço' not in dados.get('pendencias',l.get('pendencias','')):
+                if not numero(l.get('preco')) and 'conferir preço' not in dados.get('pendencias',l.get('pendencias','')):
                     dados['pendencias']='; '.join(filter(None,[dados.get('pendencias',l.get('pendencias','')),'conferir preço']))
                 for k,val in dict(peso_kg=peso_padrao(l),altura_cm=2.5,largura_cm=32,comprimento_cm=32).items():
                     if not numero(l.get(k)): dados[k]=val
@@ -573,6 +638,33 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                         aviso=f'conferir fotos/Drive ({motivo})'
                         if aviso not in atual:   # um aviso só, com o motivo; não repetir a cada rodada
                             dados['pendencias']='; '.join(filter(None,[sem_aviso_fotos(atual),aviso]))
+                if l.get('discogs_url') and config.discogs_token and minhas_fotos and previas_feitas<LIMITE_PREVIAS_POR_RODADA:
+                    previas_feitas+=1
+                    pend=dados.get('pendencias',l.get('pendencias',''))
+                    aviso=''
+                    try:
+                        rid=re.search(r'/release/(\d+)',l['discogs_url'])
+                        if not rid: raise ErroCadastro('edição Discogs inválida')
+                        release=cliente_discogs.get('/releases/'+rid[1])
+                        imagens=sorted(release.get('images',[]),key=lambda x:x.get('type')!='primary')
+                        from urllib.parse import urlparse
+                        url=imagens[0]['uri']
+                        parsed=urlparse(url)
+                        if parsed.scheme!='https' or parsed.hostname!='i.discogs.com': raise ErroCadastro('imagem inválida')
+                        resposta=requests.get(url,timeout=30,allow_redirects=False)
+                        if resposta.status_code!=200: raise ErroCadastro('imagem indisponível')
+                        propria=next(f for f in minhas_fotos if f.get('papel') in ('capa','referencia'))
+                        drive=drive or DriveFotos(config,c.get('Cadastro: pasta de entrada Drive (ID)',''))
+                        conteudo=drive.baixar(propria['arquivo_drive_id'])
+                        if propria.get('cantos'): conteudo=fotos.processar(conteudo,'capa',propria['cantos'])
+                        if fotos.distancia_capas(conteudo,resposta.content)>18:
+                            aviso='capa não confere com o Discogs'
+                        dados['capa_discogs_url']=url
+                    except Exception:
+                        aviso='conferir capa com o Discogs: imagem indisponível'
+                    if aviso:
+                        if aviso not in pend: dados['pendencias']='; '.join(filter(None,[pend,aviso]))
+                        dados['publicar']='nao'
                 gravar(dados); resumo['rascunhos']+=1
                 continue
             if not numero(l.get('preco')): raise ErroCadastro('sem preço')

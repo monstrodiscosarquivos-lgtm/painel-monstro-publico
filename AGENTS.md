@@ -221,3 +221,8 @@ Confirmação D-058 (13/10/2026): mesmo VOLTA10<MÊS> no carrinho e email, usado
 - Workflows só schedule, workflow_dispatch e repository_dispatch, contents: read, runner padrão. Nada de pull_request_target. Desligar Actions do antigo antes de ligar o novo; concorrência não é entre repositórios.
 - Vigia lê GITHUB_REPO, GITHUB_TOKEN e PLANILHA_ID de Propriedades do script. Nunca colar emails reais, IDs internos ou segredo do Cofre no código versionado. Atualizar produção manualmente com configuração privada; não apagar Acessos nem reexecutar prepararCofre.
 - Passo a passo, Secrets, permissões e limites de verificação de URLs: docs/MIGRACAO_PUBLICA.md. Nenhuma migração autoriza mudar modo do Brevo ou rodar correção de frete.
+
+
+## Atualização do cadastro D-099 (05/11/2026)
+
+Para este fluxo, aplicar D-099 e o início dos manuais CADASTRO*.md: lacrados podem usar fotos oficiais; referências e barcode nunca sobem. Soma de estoque somente da mesma edição de lacrado confirmada no Painel, só stock da variante, diário durável. Publicação sem alerta segue a nova configuração e revisão do Túlio. Fotos usadas são movidas para processadas após gravação das abas, nunca apagadas. Essas autorizações substituem as restrições anteriores correspondentes.

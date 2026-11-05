@@ -1,5 +1,14 @@
 # Histórico
 
+## 2026-11-05 · Codex · cadastro e checklist físico (D-099)
+- Feito: autorizações registradas; fotos privadas/oficiais, barcode, comparação de capas, título de rótulo lido pelo agente, publicação inicial conservadora, soma de estoque com diário, listas físicas e sessões de fotos. Nenhum acesso real à loja/planilha, nenhum commit.
+- Arquivos alterados: AGENTS.md, docs/CADASTRO*.md, docs/DECISOES.md, docs/ESTADO.md, docs/HISTORICO.md, scripts/cadastro_lote.py, painel_monstro/coletor/discogs.py, painel_monstro/saidas/cadastro.py e fotos.py, apps-script/painel-web/painel-monstro.html e Painel.html, apps-script/teste_local.js, tests/test_cadastro_lote.py e test_cadastro_d099.py.
+- Validação final: 792 testes Python passaram, 1 teste de fotos reais ignorado; 54 testes JS passaram; sintaxe JS válida; Painel.html remontado com o comando solicitado, preservando o montador; auditoria pública com 136 arquivos versionados e 0 problemas; git diff --check limpo.
+- Como conferir: pytest sem rede; node apps-script/teste_local.js; montador do Painel; auditoria pública. Teste com fotos reais agora depende de CADASTRO_TESTAR_FOTOS_REAIS=sim, evitando acesso ao Drive J: durante a coleta normal dos testes.
+- Limites: não foi feita validação visual em navegador conectado nem integração real com APIs. OCR de barcode/rótulo é leitura do agente, não serviço automático. pHash é triagem e pode exigir revisão humana.
+- Próximo passo: revisar o resultado local e atualizar o Apps Script manualmente quando decidido pelo Túlio.
+
+
 Uma entrada por sessão, a mais recente no topo. Nunca apague entradas antigas.
 
 Modelo:

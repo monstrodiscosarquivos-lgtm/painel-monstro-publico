@@ -74,3 +74,12 @@ def processar(conteudo, papel='', cantos=''):
     if not ok:
         raise ValueError('não foi possível codificar JPEG')
     return saida.tobytes()
+
+
+def distancia_capas(a, b):
+    """pHash DCT de 64 bits em imagens reduzidas e orientadas pelo EXIF."""
+    def phash(conteudo):
+        im = ImageOps.exif_transpose(Image.open(io.BytesIO(conteudo))).convert('L').resize((32, 32))
+        dct = cv2.dct(np.asarray(im, dtype=np.float32))[:8, :8].flatten()
+        return dct > np.median(dct[1:])
+    return int(np.count_nonzero(phash(a) != phash(b)))
