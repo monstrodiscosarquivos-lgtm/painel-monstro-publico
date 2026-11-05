@@ -110,3 +110,58 @@ def test_arquivar_so_depois_de_gravar_sem_apagar(tmp_path):
     assert not list(sessao.glob('*.jpg'))
     assert len(list((entrada/'processadas'/dados['lote']).glob('*.jpg')))==4
     assert real['gravados']==sim['gravados']
+
+
+def test_usado_com_cantos_recorta_antes_de_comparar_capa_e_aceita_rotulo(tmp_path):
+    from scripts.cadastro_lote import derivar_lote
+    import numpy as np
+    rng = np.random.default_rng(7)
+    arte = rng.integers(30, 220, (200, 200, 3), dtype=np.uint8)
+    im_of = Image.fromarray(arte)
+    im_of.save(tmp_path / 'oficial.jpg', 'JPEG', quality=95)
+    # Foto própria 500x700 com fundo cinza escuro e a capa no centro (x=150..350, y=250..450)
+    fundo = np.full((700, 500, 3), 60, dtype=np.uint8)
+    fundo[250:450, 150:350] = arte
+    Image.fromarray(fundo).save(tmp_path / 'capa_tapete.jpg', 'JPEG', quality=95)
+    Image.fromarray(arte).save(tmp_path / 'rotulo.jpg', 'JPEG', quality=95)
+    # Sem cantos, o tapete domina o pHash (>18); com cantos, recorta a capa e bate (<=18)
+    assert distancia_capas((tmp_path / 'capa_tapete.jpg').read_bytes(), (tmp_path / 'oficial.jpg').read_bytes()) > 18
+    d = dict(
+        lote='2026-11-05',
+        discos=[dict(
+            acao='cadastrar', formato='usado', artista='Banda', album='Disco',
+            capa='VG+', vinil='VG+', preco_etiqueta=130, genero='Classic Rock',
+            descricao='Texto.\n\n• Capa VG+\n• Vinil VG+', tags='Banda, Disco, LP, LP Usado, Vinil Usado',
+            discogs_url='https://www.discogs.com/release/1', discogs_confianca='alta',
+            capa_discogs_arquivo='oficial.jpg', rotulo_titulo='Disco',
+            fotos=[
+                dict(arquivo='capa_tapete.jpg', papel='capa', cantos=[[150, 250], [350, 250], [350, 450], [150, 450]]),
+                dict(arquivo='rotulo.jpg', papel='rótulo'),
+            ],
+        )],
+    )
+    r = derivar_lote(d, pasta_local=tmp_path, detectar_recortes=True)
+    assert r['rascunhos_dicts'][0]['pendencias'] == ''
+    assert r['rascunhos_dicts'][0]['publicar'] == 'sim'
+    assert [f[2] for f in r['fotos']] == ['capa', 'rótulo']
+def test_ordem_explicita_em_foto_permite_capa_interna_depois_do_disco(tmp_path):
+    from scripts.cadastro_lote import derivar_lote
+    for nome in ('capa.jpg', 'disco.jpg', 'interna.jpg'):
+        Image.new('RGB', (500, 500), (120, 120, 120)).save(tmp_path / nome, 'JPEG')
+    d = dict(
+        lote='2026-11-05',
+        discos=[dict(
+            acao='cadastrar', formato='usado', artista='Vários', album='Caixa Tripla',
+            capa='VG+', vinil='VG+', preco_etiqueta=350, genero='Classic Rock',
+            descricao='Caixa com 3 LPs.\n\n• Caixa com 3 LPs\n• Capa VG+\n• Vinil VG+',
+            tags='Vários, Caixa Tripla, LP, LP Usado, Vinil Usado',
+            fotos=[
+                dict(arquivo='capa.jpg', papel='capa', cantos=[[10, 10], [490, 10], [490, 490], [10, 490]]),
+                dict(arquivo='disco.jpg', papel='disco', cantos=[[10, 10], [490, 10], [490, 490], [10, 490]]),
+                dict(arquivo='interna.jpg', papel='capa interna', ordem=9, cantos=[[10, 10], [490, 10], [490, 490], [10, 490]]),
+            ],
+        )],
+    )
+    r = derivar_lote(d, pasta_local=tmp_path, detectar_recortes=True)
+    assert [(f[1], f[2]) for f in r['fotos']] == [('1', 'capa'), ('2', 'disco'), ('3', 'capa interna')]
+    assert r['rascunhos_dicts'][0]['fotos'] == '01 capa.jpg | 02 disco.jpg | 03 capa interna.jpg'

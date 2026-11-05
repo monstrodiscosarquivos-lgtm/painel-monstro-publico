@@ -1,3 +1,21 @@
+# Atualização de sessão · Cadastro do lote 2026-11-05 (`entrada\261105a`), 05/11/2026
+
+Gravação (`gravar --confirmar`) concluída para os 7 discos usados da pasta `J:\Meu Drive\Cadastro de Discos\entrada\261105a` (35 fotos originais: 34 do site + 1 descartada desfocada):
+- `2026-11-05-01`: `LP Supertramp - Paris (1980) - (Vinil Usado, Duplo)` (R$ 130, `VG+/VG+`, 9 fotos, `publicar=sim`).
+- `2026-11-05-02`: `LP Alice Cooper - Killer (1971) - (Vinil Usado)` (R$ 130, `VG+/VG+`, 4 fotos, `publicar=sim`).
+- `2026-11-05-03`: `LP Lou Reed - Mistrial (1986) - (Vinil Usado)` (R$ 130, `VG+/VG+`, 5 fotos + 1 descartada, `publicar=sim`).
+- `2026-11-05-04`: `LP Jeff Beck - Blow By Blow (1975) - (Vinil Usado)` (R$ 100, `VG/VG+`, 4 fotos, `publicar=sim`).
+- `2026-11-05-05`: `LP Rush - Hemispheres (1978) - (Vinil Usado)` (R$ 80, `G+/VG+`, 4 fotos, `publicar=nao`, alerta `capa não confere com o Discogs`).
+- `2026-11-05-06`: `LP Vários - The Concert For Bangla Desh (1971) - (Vinil Usado)` (R$ 350, `VG+/VG+`, 4 fotos: capa, contracapa lisa, 3 discos recortados em proporção `2,55` e `capa interna` de `IMG_3221.JPG` depois dos discos; descrição `"Caixa com 3 LPs"`, `publicar=nao`, alerta `capa não confere com o Discogs`).
+- `2026-11-05-07`: `LP The Velvet Underground - Now Playing (2024) (Vinil Cinza) - (Vinil Usado)` (R$ 300, `NM/NM`, 4 fotos, `publicar=sim`).
+- Planilha Google: 7 rascunhos gravados em `cadastro_rascunhos` e 34 linhas em `cadastro_fotos`.
+- Arquivos movidos para `J:\Meu Drive\Cadastro de Discos\entrada\processadas\2026-11-05\` (35 fotos renomeadas + 7 capas auxiliares `discogs_*.jpg`; nenhuma foto apagada).
+- Ajustes de motor: `fotos.py` e `cadastro_lote.py` aceitam proporção entre 1 e 3 em `cantos` (para fotos de 3 discos lado a lado), recorte antes do cálculo de `distancia_capas`, papel `rótulo` em `ORDEM_PAPEIS`, ordem manual opcional por foto em `lote.json` e `User-Agent` ao baixar capa do Discogs.
+
+Verificação: 800 testes Python passaram, 1 ignorado; auditoria de publicação com 139 arquivos versionados e 0 problemas.
+
+Próximo passo: Túlio revisar e aprovar os rascunhos na aba Cadastro do Painel (as miniaturas e links do Drive entram na próxima rodada da rotina).
+
 # Atualização de sessão D-100, 05/11/2026
 
 Troca de fotos oficiais do Discogs concluída com 100% de sucesso para todos os 23 produtos lacrados do lote 2026-11-03 na Nuvemshop.

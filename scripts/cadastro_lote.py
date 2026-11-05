@@ -50,6 +50,8 @@ ORDEM_PAPEIS = {
     'capa interna verso': 7,
     'disco': 8,
     'disco lado B': 9,
+    'rótulo': 10,
+    'rotulo': 10,
 }
 PAPEIS_VALIDOS = {'etiqueta', 'descartar', 'referencia', 'codigo_barras', 'oficial', *ORDEM_PAPEIS}
 NOTAS_GOLDMINE = {'M', 'NM', 'VG+', 'VG', 'G+', 'G', 'F'}
@@ -653,7 +655,7 @@ def cantos_validos_na_imagem(pontos: Any, w: int, h: int) -> bool:
     if not isinstance(pontos, list) or not (4 <= len(pontos) <= 6):
         return False
     proporcao = pontos[4] if len(pontos) > 4 else 1
-    if proporcao not in (1, 2):
+    if isinstance(proporcao, bool) or not isinstance(proporcao, (int, float)) or not (math.isfinite(proporcao) and 1 <= float(proporcao) <= 3):
         return False
     giro = pontos[5] if len(pontos) > 5 else ''
     if giro not in ('', 'cw', 'ccw'):
@@ -674,10 +676,12 @@ def cantos_validos_na_imagem(pontos: Any, w: int, h: int) -> bool:
 def calcular_cantos_foto(caminho: Path, papel: str, foto_cfg: dict[str, Any]) -> tuple[list | None, bool]:
     """Devolve (cantos, falhou_automatico)."""
     p = papel.strip().lower()
-    if p == 'etiqueta' or p == 'descartar':
+    if p in ('etiqueta', 'descartar', 'referencia', 'codigo_barras', 'oficial'):
         return None, False
     if 'cantos' in foto_cfg and foto_cfg['cantos'] is not None:
         return foto_cfg['cantos'], False
+    if p.startswith(('rótulo', 'rotulo')):
+        return None, False
     if str(foto_cfg.get('recorte', '')).strip().lower() == 'inteira':
         return None, False
     if not caminho.is_file():
@@ -879,8 +883,15 @@ def derivar_lote(
             propria = next((f for f in fs if f.get('papel') in ('capa', 'referencia')), None)
             oficial = o.get('capa_discogs_arquivo') or next((f.get('arquivo') for f in fs if f.get('papel') == 'oficial'), '')
             try:
+                bytes_prop = (pasta_local / propria['arquivo']).read_bytes() if propria else b''
+                if propria and oficial:
+                    can_prop = propria.get('cantos')
+                    if can_prop is None and detectar_recortes:
+                        can_prop, _ = calcular_cantos_foto(pasta_local / propria['arquivo'], 'capa', propria)
+                    if can_prop:
+                        bytes_prop = mod_fotos.processar(bytes_prop, 'capa', json.dumps(can_prop))
                 capa_confere = bool(propria and oficial and distancia_capas(
-                    (pasta_local / propria['arquivo']).read_bytes(), (pasta_local / oficial).read_bytes()) <= 18)
+                    bytes_prop, (pasta_local / oficial).read_bytes()) <= 18)
                 if not capa_confere:
                     pend.append('capa não confere com o Discogs')
             except (OSError, ValueError):
@@ -889,7 +900,10 @@ def derivar_lote(
         if rotulo and texto_normal(rotulo) != texto_normal(alb):
             pend.append('rótulo do vinil é de outro disco')
 
-        site.sort(key=lambda f: (ORDEM_PAPEIS.get(f.get('papel', ''), 7.5), str(f.get('arquivo', ''))))
+        site.sort(key=lambda f: (
+            float(f['ordem']) if f.get('ordem') not in (None, '') else ORDEM_PAPEIS.get(f.get('papel', ''), 7.5),
+            str(f.get('arquivo', '')),
+        ))
 
         for idx_et, f in enumerate(etiquetas, 1):
             arq_orig = str(f.get('arquivo', ''))
@@ -1159,6 +1173,11 @@ def validar_lote(
                 erros.append((rotulo_d, f'Papel fora da lista permitida ({papel!r}) em {arq}.'))
             elif papel != 'descartar':
                 papeis_uteis.append(papel)
+
+            if 'ordem' in f and f['ordem'] not in (None, ''):
+                ord_v = f['ordem']
+                if isinstance(ord_v, bool) or not isinstance(ord_v, (int, float)) or not math.isfinite(ord_v) or ord_v <= 0:
+                    erros.append((rotulo_d, f'Ordem manual inválida ({ord_v!r}) em {arq}.'))
 
             if 'cantos' in f and f['cantos'] is not None:
                 if caminho_arq.is_file():
@@ -1537,6 +1556,10 @@ def gravar_lote(
             if dst.exists(): raise ErroLote('Foto já existe em processadas; conferir antes de mover')
             src.rename(dst)
         elif not dst.exists(): raise ErroLote('Foto ausente ao arquivar')
+    for extra in sorted(pasta_local.glob('discogs_*.jpg')):
+        dst_e = destino / extra.name
+        if not dst_e.exists():
+            extra.rename(dst_e)
 
     # Passo 4: marcar plano como concluído
     plano['concluido'] = True
@@ -1836,7 +1859,7 @@ def preparar_imagens_discogs(caminho, pasta, cliente):
                     host = urlparse(url)
                     if host.scheme != 'https' or host.hostname != 'i.discogs.com':
                         raise ErroLote('Endereço da imagem oficial inválido')
-                    r = requests.get(url, timeout=30, allow_redirects=False)
+                    r = requests.get(url, timeout=30, allow_redirects=False, headers={'User-Agent': 'PainelMonstro/1.0 +https://lojamonstro.com.br'})
                     if r.status_code != 200: raise ErroLote('Imagem oficial indisponível')
                     with Image.open(io.BytesIO(r.content)) as im:
                         im.convert('RGB').save(destino, 'JPEG', quality=92)
