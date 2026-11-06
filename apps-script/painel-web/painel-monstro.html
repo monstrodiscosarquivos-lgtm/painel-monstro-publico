@@ -3370,11 +3370,11 @@ function cdMontarChecklistHtml(itens, opcoes){
     </tr>`;
   }).join("\n");
 
-  return `<!doctype html>
-<html lang="pt-BR">
-<head>
+  return `<\!doctype html>
+<\html lang="pt-BR">
+<\head>
   <meta charset="utf-8">
-  <title>Checklist de Discos · Monstro Discos</title>
+  <title>Checklist de Discos · Monstro Discos<\/title>
   <style>
     @page {
       size: A4 portrait;
@@ -3485,9 +3485,9 @@ function cdMontarChecklistHtml(itens, opcoes){
     .pill-ocu { background: #f3f4f6; color: #4b5563; }
     .pill-novo { background: #dcfce7; color: #15803d; }
     .pill-usado { background: #fef3c7; color: #b45309; }
-  </style>
-</head>
-<body>
+  <\/style>
+<\/head>
+<\body>
   <div class="no-print">
     <div><b>Checklist gerado com sucesso.</b> Escolha sua impressora física ou a opção <b>Salvar como PDF</b>.</div>
     <button type="button" onclick="window.print()">Imprimir / Salvar como PDF</button>
@@ -3519,13 +3519,13 @@ function cdMontarChecklistHtml(itens, opcoes){
     <span>Monstro Discos · lojamonstro.com.br</span>
     <span>Checklist de conferência física de estoque</span>
   </div>
-  <script>
+  <\script>
     window.onload = function(){
       setTimeout(function(){ window.print(); }, 350);
     };
-  </script>
-</body>
-</html>`;
+  <\/script>
+<\/body>
+<\/html>`;
 }
 
 function cdAbrirJanelaChecklist(html){
