@@ -272,3 +272,18 @@ eferencia.
 - Implementação e automação:
   - Criado script `scripts/trocar_fotos_recorte.py` com modo simulação por padrão e flag `--aplicar` para execução real após o OK do Túlio nas folhas lado a lado em `dados/correcao_recorte_previas/`. Relatório antes/depois salvo em `dados/troca_fotos_recorte_d101.json` (fora do git).
   - Testes unitários em `tests/test_trocar_fotos_recorte.py` cobrindo modo simulação, preservação da ordem ao trocar subconjunto de posições, upload antes de exclusão e bloqueio de segurança quando o ID da imagem diverge.
+
+
+## D-102 · Troca de fotos de lacrados sem release no Discogs e trava contra foto de referência no site (06/11/2026)
+
+- Autorização única do Túlio:
+  - Cinco discos lacrados do lote `2026-11-03` sem release no Discogs estavam com a foto de referência da equipe (mão segurando o disco na loja): quatro produtos criados na Nuvemshop (`2026-11-03-09` Insanidade `379329047`, `2026-11-03-10` Chaos Synopsis `379329295`, `2026-11-03-15` Lobotomia `379327716` e `2026-11-03-16` Mácula / Reiketsu `379327765`) e um rascunho no Painel (`2026-11-03-26` Vanguart).
+  - Após conferência das folhas lado a lado em `dados/correcao_lacrados_previas/`, o Túlio autorizou:
+    1. Nos 4 produtos da loja (`379329047`, `379329295`, `379327716` e `379327765`): substituir apenas as imagens pelas capas oficiais em alta resolução fora do Discogs (incluindo a contracapa recortada da Brado Records como 2ª foto no `379327765`), enviando todas as novas antes de apagar as antigas e sem alterar estoque, preço, título, descrição, categorias ou visibilidade.
+    2. No rascunho `2026-11-03-26` (Vanguart): atualizar as fotos na planilha com a capa oficial do site da gravadora Deck (`deckdisc.com.br`) e marcar a foto da equipe como `referencia`, mantendo `status = rascunho` sem criar produto.
+- Regra permanente no código:
+  - Disco lacrado sem nenhuma foto com papel `oficial` nunca envia foto de `referencia` (nem foto própria legada) para o site.
+  - Em `scripts/cadastro_lote.py` (`derivar_lote` e `validar_lote`) e em `painel_monstro/saidas/cadastro.py` (`foto_publicavel`, `publicar_sem_alerta`, `passo_rotina` e `processar_linha`), qualquer lacrado sem foto `oficial` recebe automaticamente a pendência `sem foto oficial` e nasce oculto (`publicar = nao`).
+- Implementação e verificação:
+  - Criado script `scripts/trocar_fotos_lacrados_sem_discogs.py` com modo simulação por padrão e flag `--aplicar` para execução real, gerando relatório em `dados/troca_fotos_lacrados_d102.json` (fora do git).
+  - Testes unitários adicionados em `tests/test_lacrado_sem_oficial.py` cobrindo `foto_publicavel(lacrado=True)`, derivação e validação de lote sem foto oficial, rotina de rascunho/aprovação sem upload de referência e fluxo completo de simulação/aplicação da D-102.

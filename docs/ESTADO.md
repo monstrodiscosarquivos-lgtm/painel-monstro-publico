@@ -1,3 +1,22 @@
+# Atualização de sessão · Troca de fotos de lacrados sem Discogs e trava de foto oficial (D-102), 06/11/2026
+
+- **Troca aplicada nos 4 produtos lacrados na Nuvemshop (`scripts/trocar_fotos_lacrados_sem_discogs.py --aplicar`):**
+  - `2026-11-03-09` (`LP Insanidade - Enough to Be a Loser (2021)`, `produto_id = 379329047`): enviada capa oficial reta `1500x1500` (`image_id = 1313989698`) e apagada a foto antiga da equipe (`1313768605`).
+  - `2026-11-03-10` (`LP Chaos Synopsis - Seasons of Red (2022)`, `produto_id = 379329295`): enviada capa oficial reta do Bandcamp da banda `1200x1200` (`image_id = 1313989738`) e apagada a foto antiga (`1313769408`).
+  - `2026-11-03-15` (`LP Lobotomia - Desastre (2020)`, `produto_id = 379327716`): enviada capa oficial reta `1400x1400` (`image_id = 1313989794`) e apagada a foto antiga (`1313764456`).
+  - `2026-11-03-16` (`LP Mácula - Reiketsu (2022)`, `produto_id = 379327765`): enviadas capa oficial da Poeira Maldita (`image_id = 1313989854`, posição 1) e contracapa recortada da Brado Records (`image_id = 1313989874`, posição 2) e apagada a foto antiga (`1313764683`).
+  - Preço, estoque, título, descrição, categorias e visibilidade dos 4 produtos foram mantidos intactos (os 4 já estavam ocultos no admin da Nuvemshop antes da troca e permaneceram ocultos).
+- **Rascunho `2026-11-03-26` (`LP Vanguart - Estação Liberdade (2021)`) atualizado sem criar produto:**
+  - Foto da equipe marcada como `referencia` (`ordem = 0`) e capa oficial do site da Deck (`2400x2400`) adicionada como `oficial` (`ordem = 1`, sincronizada na pasta `entrada` do Google Drive), mantendo `status = rascunho`.
+- **Regra corrigida no código (item 4 da D-102):**
+  - Em `painel_monstro/saidas/cadastro.py` e `scripts/cadastro_lote.py`, lacrado sem nenhuma foto `oficial` nunca usa `referencia` (nem foto própria) no site, recebe a pendência `sem foto oficial` e nasce oculto (`publicar = nao`). Coberto por 7 testes novos em `tests/test_lacrado_sem_oficial.py`.
+- **Conferência pós-aplicação:**
+  - Consultados os 4 produtos na API/CDN da Nuvemshop e as abas `cadastro_rascunhos` e `cadastro_fotos` na Planilha Google: todos exibem apenas as imagens oficiais novas, e as 5 fotos antigas da equipe estão com `ordem = 0` e `papel = referencia`. Relatório salvo em `dados/troca_fotos_lacrados_d102.json`.
+
+Verificação: 812 testes Python passaram, 1 ignorado; auditoria de publicação com 0 problemas.
+
+Próximo passo: Túlio revisar e tornar visíveis no admin da Nuvemshop os produtos ocultos quando desejar, e revisar/aprovar o rascunho `2026-11-03-26` (Vanguart) no Painel.
+
 # Atualização de sessão · Livros 2026-11-05, aplicação D-101, Elis Regina e Chico Buarque (Vida), 05/11/2026
 
 - **Parte A · Lote `2026-11-05-livros` gravado e aprovado (`publicar=nao`):**

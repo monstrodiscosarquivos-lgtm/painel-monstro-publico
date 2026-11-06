@@ -875,6 +875,9 @@ def derivar_lote(
             for f in fs:
                 if f.get('papel') not in ('oficial', 'codigo_barras'):
                     f['papel'] = 'referencia'
+            if not any(f.get('papel') == 'oficial' for f in fs):
+                if 'sem foto oficial' not in pend:
+                    pend.append('sem foto oficial')
         etiquetas = [f for f in fs if f.get('papel') in ('etiqueta', 'referencia', 'codigo_barras')]
         site = [f for f in fs if f not in etiquetas]
         capa_confere = False
@@ -1053,7 +1056,8 @@ def derivar_lote(
             linha_dict['preco_origem'] = 'etiqueta'
         cfg = {r[0]: r[1] for r in ler(planilha, 'Configuração') if len(r)>1} if planilha else {}
         habilitado = texto_normal(cfg.get('Cadastro: publicar direto quando não houver alerta', 'sim')) == 'sim'
-        linha_dict['publicar'] = 'sim' if publicar_sem_alerta(linha_dict, capa_confere, habilitado) else 'nao'
+        tem_oficial = any(f.get('papel') == 'oficial' for f in site) if formato == 'lacrado' else True
+        linha_dict['publicar'] = 'sim' if publicar_sem_alerta(linha_dict, capa_confere, habilitado, tem_oficial=tem_oficial) else 'nao'
         rascunhos_dicts.append(linha_dict)
         rascunhos_rows.append([linha_dict.get(c, '') for c in COLUNAS])
         detalhes_discos.append({
@@ -1285,6 +1289,8 @@ def validar_lote(
         for f_info in det['fotos_site']:
             if f_info['falhou_recorte']:
                 avisos.append((cod, f'Recorte automático falhou (a foto sai inteira): {f_info["arquivo"]} ({f_info["papel"]}).'))
+        if 'sem foto oficial' in det['pendencias']:
+            avisos.append((cod, 'Lacrado sem foto oficial: nasce oculto (publicar = nao) sem usar foto de referência no site.'))
 
     lote_dir = pasta_do_lote(lote or lote_padrao(), base_trabalho)
     lote_dir.mkdir(parents=True, exist_ok=True)

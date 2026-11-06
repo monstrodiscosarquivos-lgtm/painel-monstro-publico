@@ -198,11 +198,36 @@ def estoque_da_linha(linha):
     return max(1,min(int(n),999)) if n else 1
 
 
-def foto_publicavel(f):
-    return str(f.get('papel', '')).strip().lower() not in ('etiqueta', 'referencia', 'codigo_barras', 'descartar')
+PENDENCIA_SEM_FOTO_OFICIAL = 'sem foto oficial'
 
 
-def publicar_sem_alerta(linha, capa_confere=False, habilitado=True):
+def eh_lacrado(linha):
+    texto = f"{linha.get('categorias', '')} {linha.get('titulo', '')}"
+    return bool(re.search(r'lacrad', texto, re.I)) and not bool(re.search(r'\busad', texto, re.I))
+
+
+def tem_foto_oficial(fs):
+    return any(str(f.get('papel', '')).strip().lower() == 'oficial' for f in fs)
+
+
+def _incluir_pendencia(texto, item):
+    atual = str(texto or '').strip()
+    partes = [p.strip() for p in re.split(r'[;|]', atual) if p.strip()]
+    if item in partes:
+        return atual
+    return f'{atual}; {item}' if atual else item
+
+
+def foto_publicavel(f, lacrado=False):
+    papel = str(f.get('papel', '')).strip().lower()
+    if lacrado:
+        return papel == 'oficial'
+    return papel not in ('etiqueta', 'referencia', 'codigo_barras', 'descartar')
+
+
+def publicar_sem_alerta(linha, capa_confere=False, habilitado=True, tem_oficial=True):
+    if eh_lacrado(linha) and not tem_oficial:
+        return False
     return bool(habilitado and not str(linha.get('pendencias', '')).strip()
                 and capa_confere and linha.get('preco_origem') == 'etiqueta'
                 and numero(linha.get('preco')) and texto_normal(linha.get('discogs_confianca')) == 'alta')
@@ -473,12 +498,12 @@ def previas_prontas(linha,fs):
     """
     try: refs=json.loads(linha.get('fotos_ajustadas') or '[]')
     except ValueError: return False
-    site=[f for f in fs if foto_publicavel(f)]
+    site=[f for f in fs if foto_publicavel(f, eh_lacrado(linha))]
     return isinstance(refs,list) and len(refs)>0 and len(refs)==len(site)
 
 
-def ajustar_fotos(id_disco,fs,drive):
-    fotos_site=sorted([f for f in fs if foto_publicavel(f)],key=lambda f:float(f['ordem']))
+def ajustar_fotos(id_disco,fs,drive,lacrado=False):
+    fotos_site=sorted([f for f in fs if foto_publicavel(f, lacrado)],key=lambda f:float(f['ordem']))
     if not fotos_site: raise ErroCadastro('sem fotos do disco')
     ordens=[int(f['ordem']) for f in fotos_site]
     if len(set(ordens))!=len(ordens) or any(x<=0 for x in ordens): raise ErroCadastro('ordem de fotos inválida ou duplicada')
@@ -511,7 +536,12 @@ def processar_linha(linha,fs,loja,drive,gravar,caminho,confirmar=lambda:True):
     if pid and not estado:
         return  # ID existente nunca recebe imagens nem atualização por este fluxo.
     corpo=corpo_produto(linha,loja.categorias())
-    ajustadas,refs=ajustar_fotos(linha['id'],fs,drive)
+    lacrado=eh_lacrado(linha)
+    sem_oficial=lacrado and not tem_foto_oficial(fs)
+    if sem_oficial:
+        ajustadas,refs=[],[]
+    else:
+        ajustadas,refs=ajustar_fotos(linha['id'],fs,drive,lacrado=lacrado)
     gravar({'fotos_ajustadas':json.dumps(refs,ensure_ascii=False)})
     manifesto=[nome for _,nome,_ in ajustadas]
     if estado.get('manifesto') and estado['manifesto']!=manifesto:
@@ -536,6 +566,8 @@ def processar_linha(linha,fs,loja,drive,gravar,caminho,confirmar=lambda:True):
         raise ErroCadastro('produto não pertence a este cadastro; interrompido')
     link_loja=f'https://lojamonstro.com.br/produtos/'+str(_pt(produto.get('handle')) or '')
     pendencias_limpas=pendencias_sem_busca_fotos(linha.get('pendencias',''))
+    if sem_oficial:
+        pendencias_limpas=_incluir_pendencia(pendencias_limpas, PENDENCIA_SEM_FOTO_OFICIAL)
     if produto.get('published') is True:
         if not estado.get('publicacao_pedida'): raise ErroCadastro('produto está visível; interrompido para conferência')
         estado['publicado']=True; persistir()
@@ -551,8 +583,10 @@ def processar_linha(linha,fs,loja,drive,gravar,caminho,confirmar=lambda:True):
         estado['imagem_pendente']=nome; persistir()
         loja.imagem(pid,jpg,pos,nome)
         estado.setdefault('imagens',[]).append(nome); estado.pop('imagem_pendente',None); persistir()
-    if not deve_publicar(linha):
-        gravar({'status':'criado','pendencias':pendencias_limpas})
+    if sem_oficial or not deve_publicar(linha):
+        mud={'status':'criado','pendencias':pendencias_limpas}
+        if sem_oficial: mud['publicar']='nao'
+        gravar(mud)
         return
     aviso_pub='Não consegui deixar visível; publique à mão na Nuvemshop'
     if estado.get('publicacao_pedida'):
@@ -623,23 +657,29 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                     raise PendenciaFotos('não foi possível acessar a pasta de entrada') from None
                 minhas_fotos=resolver_fotos(planilha,drive,minhas_fotos)
             if l['status']=='rascunho':
+                lacrado=eh_lacrado(l)
+                sem_oficial=lacrado and not tem_foto_oficial(minhas_fotos)
                 dados={'preco_referencia':preco_referencia(l.get('titulo',''),tabelas.produtos,pd.Timestamp.now().date())}
                 if pendencias_sem_busca_fotos(l.get('pendencias',''))!=l.get('pendencias',''):
                     dados['pendencias']=pendencias_sem_busca_fotos(l.get('pendencias',''))
                 if not numero(l.get('preco')) and 'conferir preço' not in dados.get('pendencias',l.get('pendencias','')):
                     dados['pendencias']='; '.join(filter(None,[dados.get('pendencias',l.get('pendencias','')),'conferir preço']))
+                if sem_oficial:
+                    dados['pendencias']=_incluir_pendencia(dados.get('pendencias',l.get('pendencias','')),PENDENCIA_SEM_FOTO_OFICIAL)
+                    dados['publicar']='nao'
+                    if l.get('fotos_ajustadas'): dados['fotos_ajustadas']='[]'
                 for k,val in dict(peso_kg=peso_padrao(l),altura_cm=2.5,largura_cm=32,comprimento_cm=32).items():
                     if not numero(l.get(k)): dados[k]=val
                 if not l.get('discogs_id') and config.discogs_token:
                     cat=re.search(r'(?:cat[aá]logo|catno)\s*[:=]\s*([^\n;]+)',l.get('ficha',''),re.I)
                     try: dados.update(cliente_discogs.buscar(l.get('titulo',''),cat[1] if cat else '',l.get('discogs_url','')))
                     except ErroDiscogs: dados['discogs_confianca']='baixa'
-                if minhas_fotos and not previas_prontas(l,minhas_fotos) and previas_feitas<LIMITE_PREVIAS_POR_RODADA:
+                if minhas_fotos and not sem_oficial and not previas_prontas(l,minhas_fotos) and previas_feitas<LIMITE_PREVIAS_POR_RODADA:
                     previas_feitas+=1
                     atual=dados.get('pendencias',l.get('pendencias',''))
                     try:
                         drive=drive or DriveFotos(config,c.get('Cadastro: pasta de entrada Drive (ID)',''))
-                        _,refs=ajustar_fotos(did,minhas_fotos,drive)
+                        _,refs=ajustar_fotos(did,minhas_fotos,drive,lacrado=lacrado)
                         dados['fotos_ajustadas']=json.dumps(refs,ensure_ascii=False)
                         if sem_aviso_fotos(atual)!=atual: dados['pendencias']=sem_aviso_fotos(atual)
                     except Exception as erro:
