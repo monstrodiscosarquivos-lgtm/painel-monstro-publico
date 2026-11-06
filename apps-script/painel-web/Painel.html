@@ -3676,7 +3676,7 @@ function cdCompararCapas(o){
   const propria = fs.find(f => ["capa","referencia"].includes(f.papel));
   const oficial = fs.find(f => f.papel === "oficial");
   const img = (f, label) => `<figure><figcaption>${label}</figcaption>${f && f.arquivo_drive_id ? `<img style="max-width:180px" src="https:\/\/drive.google.com/thumbnail?id=${encodeURIComponent(f.arquivo_drive_id)}&sz=w400" alt="${label}">` : "Imagem indisponível"}</figure>`;
-  return o.discogs_url ? `<div style="display:flex;flex-wrap:wrap">${img(propria,"Capa do Túlio")}${(o.capa_discogs_url && /^https:\/\/i\.discogs\.com\//.test(o.capa_discogs_url) ? `<figure><figcaption>Capa do Discogs</figcaption><img style="max-width:180px" src="${esc(o.capa_discogs_url)}" alt="Capa do Discogs"></figure>` : img(oficial,"Capa do Discogs"))}</div>` : "";
+  return o.discogs_url ? `<div style="display:flex;flex-wrap:wrap">${img(propria,"Capa do Túlio")}${(o.capa_discogs_url && /^https:[/][/]i[.]discogs[.]com[/]/.test(o.capa_discogs_url) ? `<figure><figcaption>Capa do Discogs</figcaption><img style="max-width:180px" src="${esc(o.capa_discogs_url)}" alt="Capa do Discogs"></figure>` : img(oficial,"Capa do Discogs"))}</div>` : "";
 }
 function cdCard(o){
   const g = cdGrupo(o.status), pill = CD_PILL[g], edit = g === "rascunho";
