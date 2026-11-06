@@ -1,3 +1,23 @@
+# Atualização de sessão · Livros 2026-11-05, aplicação D-101, Elis Regina e Chico Buarque (Vida), 05/11/2026
+
+- **Parte A · Lote `2026-11-05-livros` gravado e aprovado (`publicar=nao`):**
+  - `2026-11-05-livros-01`: `Livro 100 Grandes Álbuns do Rock Gaúcho: Influências e vertentes - Cristiano Bastos e Rafael Cony` (R$ 650) -> criado oculto na Nuvemshop (`produto_id = 379343830`).
+  - `2026-11-05-livros-02`: `Livro As Histórias São Iguais: As Aventuras da Relespública na Terra da Garoa e Solidão - Melissa Medroni e Marcelo Dallegrave` (R$ 30) -> criado oculto na Nuvemshop (`produto_id = 379343888`).
+- **Parte B · Aplicação da D-101 (`scripts/trocar_fotos_recorte.py --aplicar`):**
+  - 34 fotos sem recorte substituídas pela versão recortada em pé nos 27 produtos da Nuvemshop, preservando a ordem exata das imagens e enviando cada imagem nova antes de apagar a antiga.
+  - 33 linhas de `cantos` atualizadas em `cadastro_fotos`; relatório salvo em `dados/troca_fotos_recorte_d101.json`.
+- **Parte C · Correção das miniaturas de `2026-10-28-95` (`LP Elis Regina - Essa Mulher (1979)`):**
+  - Causa raiz: o disco não tinha nenhuma linha em `cadastro_fotos` e trazia `arquivo_drive_id: ""` nos 4 itens de `fotos_ajustadas`.
+  - Solução: inseridas as 4 linhas em `cadastro_fotos` (`A698:F701`) apontando para os IDs reais do Google Drive em `entrada` (`2026-10-28-95 01 capa.jpg` a `04 disco.jpg`), já com `cantos` calibrados (incluindo proporção `2` para `encarte aberto`), e limpo `fotos_ajustadas` na linha 145 mantendo `status = "rascunho"`.
+- **Parte D · Reidentificação e atualização pontual de `2026-11-03-23` (`Chico Buarque - Vida`, `produto_id = 379329375`, D-101):**
+  - Com autorização única do Túlio registrada na D-101, atualizado o produto oculto `379329375` na Nuvemshop para `LP Chico Buarque - Vida (2024) - (Novo/Lacrado)` (release Discogs `30492835`, Philips / Universal Music, 2024), sem prometer cor do vinil no título, descrição, SEO ou tags.
+  - Enviadas primeiro as 3 fotos oficiais autorizadas do release `30492835` na ordem capa (`1313827496`), contracapa (`1313827503`) e encarte com letras (`1313827523`, sem a foto do vinil verde), e apagadas em seguida as 4 imagens antigas. Preço (`R$ 280,00`), estoque (`1`), categorias e visibilidade oculta (`published = false`) mantidos intactos.
+  - Planilha atualizada em `cadastro_rascunhos` (linha 168) e `cadastro_fotos` (foto da equipe marcada como `referencia`, 3 fotos antigas do *Almanaque* como `descartar` e 3 fotos oficiais do *Vida* em `A702:F704` com IDs do Drive sincronizados). Relatório em `dados/atualizacao_379329375_d101.json`.
+
+Verificação: 805 testes Python passaram, 1 ignorado; auditoria de publicação com 0 problemas.
+
+Próximo passo: Túlio revisar e publicar no admin da Nuvemshop os produtos ocultos `379343830`, `379343888` e `379329375` quando desejar, e definir preço/aprovação do rascunho `2026-10-28-95` no Painel.
+
 # Atualização de sessão · Cadastro do lote 2026-11-05 (`entrada\261105a`), 05/11/2026
 
 Gravação (`gravar --confirmar`) concluída para os 7 discos usados da pasta `J:\Meu Drive\Cadastro de Discos\entrada\261105a` (35 fotos originais: 34 do site + 1 descartada desfocada):

@@ -1,6 +1,7 @@
 """Adaptação fiel de referencia/cadastro_piloto/processar.py, sem apagar originais."""
 import io
 import json
+import math
 
 import cv2
 import numpy as np
@@ -15,8 +16,8 @@ def processar(conteudo, papel='', cantos=''):
     if pontos and not (4 <= len(pontos) <= 6):
         raise ValueError('cantos deve conter quatro pontos, proporção e giro opcionais')
     proporcao = float(pontos[4]) if len(pontos) > 4 else 1
-    if proporcao not in (1, 2):
-        raise ValueError('proporção deve ser 1 ou 2')
+    if not (math.isfinite(proporcao) and 1 <= proporcao <= 3):
+        raise ValueError('proporção deve estar entre 1 e 3')
     giro = pontos[5] if len(pontos) > 5 else ''
     if giro not in ('', 'cw', 'ccw'):
         raise ValueError('giro inválido')

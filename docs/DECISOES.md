@@ -250,3 +250,25 @@ eferencia.
   - Adicionado método pagar_imagem na classe LojaCadastro (painel_monstro/saidas/cadastro.py), chamando DELETE /products/{id}/images/{image_id} com controle de taxa de requisições.
   - Criado script scripts/trocar_fotos_lacrados.py com execução padrão em modo simulação (somente leitura) e flag --aplicar para execução real após conferência e autorização do Túlio. Relatório salvo em dados/troca_fotos_lacrados_2026-11-03.json.
   - Testes unitários implementados em 	ests/test_trocar_fotos_lacrados.py cobrindo ordenação de fotos, conversão padronizada para JPEG, filtro de alvos e execução com simulação e aplicação real.
+
+
+## D-101 · Correção pontual de fotos sem recorte na loja e reidentificação do oculto 379329375 (05/11/2026)
+
+- Autorização única do Túlio (capas sem recorte):
+  - Diagnóstico de leitura nos 140 produtos criados pelo cadastro (fora livros) identificou 27 produtos (34 imagens) cujas fotos subiram sem recorte de perspectiva (disco/capa/encarte ocupando menos de cerca de 75% da imagem, com fundo sobrando ao redor).
+  - O Túlio autorizou substituir somente as imagens sem recorte desses produtos pela versão recortada em pé, mantendo exatamente a mesma ordem das fotos do produto.
+- Segurança e integridade (capas sem recorte):
+  - Ordem das operações: para cada produto, envia primeiro as novas imagens recortadas em ordem decrescente de posição (`position`) e somente após o upload confirmado de todas as novas apaga as imagens antigas substituídas. Isso preserva a ordem exata `1..N` das demais fotos e garante que o produto nunca fique sem imagem.
+  - Campos preservados: nome, preço, estoque, descrição, categorias, tags e visibilidade não são alterados.
+  - Planilha: atualiza a coluna `cantos` das fotos correspondentes na aba `cadastro_fotos`.
+- Autorização única complementar do Túlio (produto oculto `379329375`, `2026-11-03-23`):
+  - O disco lacrado `2026-11-03-23` havia sido cadastrado originalmente por engano como *Almanaque* e criado oculto pela rotina das 20h02 (`produto_id = 379329375`, `published = false`), quando na verdade a foto da equipe mostra o álbum *Vida* (release Discogs `30492835`, Philips / Universal Music, 2024).
+  - Como o exemplar está lacrado e não é possível confirmar visualmente a cor do vinil por dentro, o Túlio autorizou atualizar apenas esse produto oculto (`379329375`), uma única vez:
+    - Título: `LP Chico Buarque - Vida (2024) - (Novo/Lacrado)` (sem prometer cor).
+    - Descrição, faixas, SEO e tags do álbum *Vida* sem mencionar cor do vinil nem tag `Vinil Colorido`.
+    - Fotos do site: apenas 3 imagens oficiais do release `30492835` na ordem capa, contracapa e encarte com letras (sem a foto do vinil verde), enviando as 3 novas antes de apagar as 4 antigas.
+    - Preço (`R$ 280,00`), estoque (`1`), categorias e visibilidade oculta (`published = false`) preservados sem alteração.
+    - Planilha (`cadastro_rascunhos` e `cadastro_fotos`) atualizada, marcando a foto da equipe como `referencia` e as 3 fotos antigas do *Almanaque* como `descartar`. Relatório salvo em `dados/atualizacao_379329375_d101.json`.
+- Implementação e automação:
+  - Criado script `scripts/trocar_fotos_recorte.py` com modo simulação por padrão e flag `--aplicar` para execução real após o OK do Túlio nas folhas lado a lado em `dados/correcao_recorte_previas/`. Relatório antes/depois salvo em `dados/troca_fotos_recorte_d101.json` (fora do git).
+  - Testes unitários em `tests/test_trocar_fotos_recorte.py` cobrindo modo simulação, preservação da ordem ao trocar subconjunto de posições, upload antes de exclusão e bloqueio de segurança quando o ID da imagem diverge.

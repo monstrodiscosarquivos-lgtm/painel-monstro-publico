@@ -159,7 +159,8 @@ def test_sem_aprovacao_id_existente_ou_aprovacao_revogada_nunca_post(tmp_path):
 @pytest.mark.parametrize('cantos,esperado', [('',(1333,1600)),
     ('[[10,10],[490,10],[490,490],[10,490]]',(1600,1600)),
     ('[[10,10],[490,10],[490,490],[10,490],2]',(1600,800)),
-    ('[[10,10],[490,10],[490,490],[10,490],2,"ccw"]',(800,1600))])
+    ('[[10,10],[490,10],[490,490],[10,490],2,"ccw"]',(800,1600)),
+    ('[[10,10],[490,10],[490,202],[10,202],2.5]',(1600,640))])
 def test_fotos_com_sem_cantos_proporcao_e_giro(cantos,esperado):
     original=jpeg(); saida=fotos.processar(original,'capa',cantos)
     im=Image.open(io.BytesIO(saida)); assert im.size==esperado and im.format=='JPEG'
