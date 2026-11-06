@@ -1,3 +1,26 @@
+# Atualização de sessão · Cadastro dos novos lotes 2026-11-06-a e 2026-11-06-b, 06/11/2026
+
+- **Parte 1 · Ajuste de Chico Buarque - Vida (produto 379329375 e rascunho 2026-11-03-23):**
+  - Título refinado para: `LP Chico Buarque - Vida (2024) - (Vinil Verde Translúcido Marmorizado) (Novo/Lacrado)`.
+  - Descrição atualizada na loja e planilha para: `Edição em vinil colorido (Verde Translúcido Marmorizado).`.
+  - Tags atualizadas incluindo `Vinil Marmorizado` e SEO ajustado com a cor completa.
+  - Produto mantido oculto (`published = False`), estoque 1 e preço R$ 280,00 preservados.
+
+- **Parte 2 · Cadastro dos dois lotes novos (subpastas 261106a e 261106b do Drive):**
+  - **Lote 2026-11-06-a (53 discos, 193 fotos):**
+    - Todos os 53 discos cadastrados como `rascunho` na aba `cadastro_rascunhos` (`2026-11-06-a-01` a `53`) e 193 linhas de fotos em `cadastro_fotos`.
+    - 193 fotos renomeadas e movidas junto com 53 capas do Discogs para `J:\Meu Drive\Cadastro de Discos\entrada\processadas\2026-11-06-a\`.
+    - Destaques que exigem decisão do Túlio: `d36` (Baby Animals) está sem preço (só ponto vermelho na capa, sem etiqueta); `d26` (The Apples) tem assinatura à caneta na etiqueta do vinil ("Mildo-MYX", marcado como `marcado_vinil: sim`); 7 discos já existem na loja com estoque 1 ativo (Beatles Rock 'N' Roll Music, Santana Freedom, Paul McCartney Broad Street, Simply Red Men and Women, Beatles Hollywood Bowl, Simple Minds Live, Nina Hagen Fearless).
+  - **Lote 2026-11-06-b (51 discos, 252 fotos):**
+    - Todos os 51 discos cadastrados como `rascunho` na aba `cadastro_rascunhos` (`2026-11-06-b-01` a `51`) e 252 linhas de fotos em `cadastro_fotos`.
+    - 252 fotos renomeadas e movidas junto com 51 capas do Discogs para `J:\Meu Drive\Cadastro de Discos\entrada\processadas\2026-11-06-b\`.
+    - Destaques que exigem decisão do Túlio: 3 cópias distintas de *Caetano Veloso - Velô* (`d39` R$ 100, `d40` R$ 120 com encarte de letras e assinatura "Euler" no vinil, `d45` R$ 80 com marcas do tempo na capa); 8 repetidos na loja com estoque 1 ativo (Santana Beyond Appearances, Jimi Hendrix Rare Hendrix, The Police Singles, Elis Regina Elis 1974 dupla, Maria Bethânia Talismã, Maria Bethânia Pássaro da Manhã, Maria Bethânia Recital Boite Barroco, Caetano Veloso Caetano 1987); edição histórica de Luiz Gonzaga *Ô Véio Macho* (1962, RCA Victor BBL-1175 com rótulo azul original).
+  - **Nenhum produto foi criado na Nuvemshop.** Todos os 104 discos estão gravados como rascunho na planilha para revisão e aprovação do Túlio no Painel.
+
+Verificação: 813 testes Python passaram, 1 ignorado; auditoria de publicação com 143 arquivos versionados e 0 problemas.
+
+Próximo passo: Túlio revisar os rascunhos no Painel, definir o preço de Baby Animals (`2026-11-06-a-36`), conferir os repetidos na loja e aprovar os produtos.
+
 # Atualização de sessão · Chico Buarque - Vida (vinil verde, produto 379329375), 06/11/2026
 
 - **Correção da cor do vinil de Chico Buarque - Vida (produto 379329375 e rascunho 2026-11-03-23):**
