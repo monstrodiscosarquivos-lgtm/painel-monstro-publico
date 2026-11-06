@@ -1,3 +1,17 @@
+# Atualização de sessão · Chico Buarque - Vida (vinil verde, produto 379329375), 06/11/2026
+
+- **Correção da cor do vinil de Chico Buarque - Vida (produto 379329375 e rascunho 2026-11-03-23):**
+  - Título ajustado no padrão dos demais lacrados coloridos da loja para: `LP Chico Buarque - Vida (2024) - (Vinil Verde) (Novo/Lacrado)`.
+  - Descrição atualizada incluindo a menção `Edição em vinil colorido (Verde).` tanto na Nuvemshop (com faixas em HTML) quanto na planilha Google.
+  - Tags atualizadas incluindo `Vinil Colorido, Vinil Verde` e SEO atualizado para `LP Chico Buarque Vida (2024) - Vinil Verde - Novo Lacrado`.
+  - Linha correspondente em `cadastro_rascunhos` (linha 168) atualizada para manter a planilha perfeitamente sincronizada com a loja.
+  - Discogs verificado: o release 30492835 (Philips / Universal Music, 2024) é a edição em vinil verde ("Green Translucent Marbled"); as fotos presentes no produto são as fotos oficiais de capa, contracapa e encarte desse mesmo release, mantidas sem alteração.
+  - Produto mantido oculto (`published = False`), estoque 1 e preço R$ 280,00 preservados.
+
+Verificação: 813 testes Python passaram, 1 ignorado; auditoria de publicação com 143 arquivos versionados e 0 problemas.
+
+Próximo passo: Túlio revisar o produto no admin da Nuvemshop e publicá-lo quando desejar.
+
 # Atualização de sessão · Conclusão dos 21 discos corrigidos da D-098 na loja, 06/11/2026
 
 - **Diagnóstico e resolução dos 21 discos do lote `2026-10-28`:**
