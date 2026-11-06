@@ -607,3 +607,71 @@ def test_previas_prontas_d090():
     assert not previas_prontas({'fotos_ajustadas':''},fs)
     assert not previas_prontas({'fotos_ajustadas':'[{"ordem":1}]'},fs)
     assert not previas_prontas({'fotos_ajustadas':'xx'},fs)
+
+
+
+def test_processar_linha_foto_vertical_exif_8_com_cantos(tmp_path):
+    """Garante que a rotina processa ponta a ponta fotos verticais EXIF 8 sem estourar cantos fora da imagem."""
+    import io
+    import json
+    from PIL import Image
+
+    # Imagem sintética 260x462 com EXIF Orientation 8
+    img = Image.new('RGB', (260, 462), color=(200, 100, 50))
+    exif = img.getexif()
+    exif[274] = 8  # Orientation: 8
+    buf = io.BytesIO()
+    img.save(buf, format='JPEG', exif=exif)
+    conteudo_jpeg = buf.getvalue()
+
+    # Cantos calculados em relação à imagem crua com giro ccw (padrão D-098)
+    cantos = json.dumps([[50, 100], [200, 100], [200, 400], [50, 400], 1, 'ccw'])
+    fs = [
+        {'id_disco': '2026-10-28-08', 'ordem': '1', 'papel': 'capa', 'arquivo_drive_id': 'fid_capa', 'cantos': cantos},
+        {'id_disco': '2026-10-28-08', 'ordem': '2', 'papel': 'disco', 'arquivo_drive_id': 'fid_disco', 'cantos': ''},
+    ]
+
+    class DriveFake:
+        def baixar(self, fid):
+            return conteudo_jpeg
+        def guardar(self, id_disco, nome, jpg):
+            return f'drive_{id_disco}_{nome}'
+
+    class LojaFake:
+        def __init__(self):
+            self.criados = []
+            self.imagens = []
+            self.publicados = []
+        def categorias(self):
+            return [dict(id=1, name={'pt': 'LP'}, parent=None), dict(id=2, name={'pt': 'Usado'}, parent=1)]
+        def buscar(self, sku):
+            return None
+        def criar(self, corpo):
+            self.criados.append(corpo)
+            return {'id': 99123, 'handle': {'pt': 'lp-teste'}}
+        def produto(self, pid):
+            return {'id': int(pid), 'published': False, 'handle': {'pt': 'lp-teste'},
+                    'variants': [{'sku': c.sku_da_linha('2026-10-28-08')}]}
+        def imagem(self, pid, jpg, pos, nome):
+            self.imagens.append((pid, pos, nome, len(jpg)))
+            return {'id': pos}
+        def publicar(self, pid):
+            self.publicados.append(pid)
+            return {'id': int(pid), 'published': True}
+
+    gravados = []
+    l = linha(
+        id='2026-10-28-08',
+        titulo='LP René & Ronaldo - René & Ronaldo (1989) - (Vinil Usado)',
+        status='aprovado',
+        preco='90',
+        estoque='1',
+        publicar='sim',
+        categorias='LP, Usado',
+    )
+    caminho_estado = tmp_path / 'estado_teste.json'
+    c.processar_linha(l, fs, LojaFake(), DriveFake(), lambda mud: gravados.append(mud), caminho_estado)
+
+    # Confirmar que terminou publicado com sucesso e gravou as fotos ajustadas
+    assert any(g.get('status') == 'publicado' for g in gravados)
+    assert any('fotos_ajustadas' in g for g in gravados)
