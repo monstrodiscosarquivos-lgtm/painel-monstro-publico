@@ -419,26 +419,26 @@ footer a{color:var(--muted)}
     <div class="fl-list" id="cd-lista"><div class="empty skel">Carregando…</div></div>
     <div class="secerr" id="e-cad" hidden></div>
   </section>
-  <div id="cd-modal-checklist" class="no-print" hidden style="position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
-    <div style="background:var(--surface,#fff);color:var(--text,#111);border:1px solid var(--line,#ddd);border-radius:14px;max-width:520px;width:100%;padding:22px;box-shadow:0 12px 32px rgba(0,0,0,0.35)">
+  <div id="cd-modal-checklist" class="no-print" style="position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:none;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--bg);color:var(--fg);border:1px solid var(--line,#ddd);border-radius:14px;max-width:520px;width:100%;padding:22px;box-shadow:0 12px 32px rgba(0,0,0,0.35)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid var(--line,#ddd);padding-bottom:10px">
         <h3 style="margin:0;font-size:18px">Gerar Checklist para Impressão / PDF</h3>
         <button type="button" onclick="cdFecharModalChecklist()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);line-height:1;padding:0 6px">×</button>
       </div>
       <div style="margin-bottom:14px">
-        <label style="font-weight:700;font-size:14px;display:block;margin-bottom:6px">Discos a incluir:</label>
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px">Discos a incluir:</div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
-            <input type="radio" name="cd-chk-modo" value="pendentes" checked style="cursor:pointer"> Só os ainda não conferidos (sem etiqueta verde ou conferido_em vazio)
+            <input type="radio" name="cd-chk-modo" value="pendentes" checked style="cursor:pointer;width:auto;flex:none;margin:0"> Só os ainda não conferidos (sem etiqueta verde ou conferido_em vazio)
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
-            <input type="radio" name="cd-chk-modo" value="todos" style="cursor:pointer"> Todos os discos físicos
+            <input type="radio" name="cd-chk-modo" value="todos" style="cursor:pointer;width:auto;flex:none;margin:0"> Todos os discos físicos
           </label>
         </div>
       </div>
       <div style="margin-bottom:14px">
         <label for="cd-chk-lote" style="font-weight:700;font-size:14px;display:block;margin-bottom:6px">Filtrar por lote:</label>
-        <select id="cd-chk-lote" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px">
+        <select id="cd-chk-lote" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-size:14px">
           <option value="">Todos os lotes</option>
         </select>
       </div>
@@ -447,11 +447,11 @@ footer a{color:var(--muted)}
         <div style="display:flex;gap:10px;align-items:center">
           <div style="flex:1">
             <span class="s" style="display:block;margin-bottom:2px">De:</span>
-            <input type="date" id="cd-chk-de" style="width:100%;padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px">
+            <input type="date" id="cd-chk-de" style="width:100%;padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-size:14px">
           </div>
           <div style="flex:1">
             <span class="s" style="display:block;margin-bottom:2px">Até:</span>
-            <input type="date" id="cd-chk-ate" style="width:100%;padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px">
+            <input type="date" id="cd-chk-ate" style="width:100%;padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-size:14px">
           </div>
         </div>
       </div>
@@ -3552,12 +3552,12 @@ function cdAbrirModalChecklist(){
         return `<option value="${esc(lot)}">${esc(lot)} (${qtd} discos)</option>`;
       }).join("");
   }
-  m.hidden = false;
+  m.style.display = "flex";
 }
 
 function cdFecharModalChecklist(){
   const m = $("cd-modal-checklist");
-  if (m) m.hidden = true;
+  if (m) m.style.display = "none";
 }
 
 function cdDispararGeracaoChecklist(){
