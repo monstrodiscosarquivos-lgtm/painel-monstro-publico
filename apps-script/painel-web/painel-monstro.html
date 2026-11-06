@@ -404,14 +404,63 @@ footer a{color:var(--muted)}
 
 <div id="view-cad" hidden>
   <section>
-    <h2>Cadastro de discos</h2>
-    <p class="sub">Rascunhos feitos pelo Claude a partir das fotos. Confira o vinil e o preço, leia as pendências e aprove. A rotina cria o produto <b>oculto</b> na Nuvemshop, com as fotos na ordem; você confere no administrador da loja e publica.</p>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:8px">
+      <div>
+        <h2 style="margin:0">Cadastro de discos</h2>
+        <p class="sub">Rascunhos feitos pelo Claude a partir das fotos. Confira o vinil e o preço, leia as pendências e aprove. A rotina cria o produto <b>oculto</b> na Nuvemshop, com as fotos na ordem; você confere no administrador da loja e publica.</p>
+      </div>
+      <button type="button" class="btn primary no-print" id="cd-btn-abrir-checklist" onclick="cdAbrirModalChecklist()" style="display:inline-flex;align-items:center;gap:6px;font-weight:700;padding:8px 16px;white-space:nowrap;margin-top:2px">
+        Checklist em PDF
+      </button>
+    </div>
     <div class="seg" id="cd-filtro" role="group" aria-label="Situação"></div>
     <p class="fl-note" id="cd-nota"></p>
     <div id="cd-lote" hidden style="position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0;border-bottom:1px solid var(--line);margin-bottom:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center"></div>
     <div class="fl-list" id="cd-lista"><div class="empty skel">Carregando…</div></div>
     <div class="secerr" id="e-cad" hidden></div>
   </section>
+  <div id="cd-modal-checklist" class="no-print" hidden style="position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--surface,#fff);color:var(--text,#111);border:1px solid var(--line,#ddd);border-radius:14px;max-width:520px;width:100%;padding:22px;box-shadow:0 12px 32px rgba(0,0,0,0.35)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid var(--line,#ddd);padding-bottom:10px">
+        <h3 style="margin:0;font-size:18px">Gerar Checklist para Impressão / PDF</h3>
+        <button type="button" onclick="cdFecharModalChecklist()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);line-height:1;padding:0 6px">×</button>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-weight:700;font-size:14px;display:block;margin-bottom:6px">Discos a incluir:</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
+            <input type="radio" name="cd-chk-modo" value="pendentes" checked style="cursor:pointer"> Só os ainda não conferidos (sem etiqueta verde ou conferido_em vazio)
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
+            <input type="radio" name="cd-chk-modo" value="todos" style="cursor:pointer"> Todos os discos físicos
+          </label>
+        </div>
+      </div>
+      <div style="margin-bottom:14px">
+        <label for="cd-chk-lote" style="font-weight:700;font-size:14px;display:block;margin-bottom:6px">Filtrar por lote:</label>
+        <select id="cd-chk-lote" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px">
+          <option value="">Todos os lotes</option>
+        </select>
+      </div>
+      <div style="margin-bottom:18px">
+        <label style="font-weight:700;font-size:14px;display:block;margin-bottom:6px">Período de cadastro (opcional):</label>
+        <div style="display:flex;gap:10px;align-items:center">
+          <div style="flex:1">
+            <span class="s" style="display:block;margin-bottom:2px">De:</span>
+            <input type="date" id="cd-chk-de" style="width:100%;padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px">
+          </div>
+          <div style="flex:1">
+            <span class="s" style="display:block;margin-bottom:2px">Até:</span>
+            <input type="date" id="cd-chk-ate" style="width:100%;padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px">
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--line,#ddd);padding-top:14px">
+        <button type="button" class="btn" onclick="cdFecharModalChecklist()">Cancelar</button>
+        <button type="button" class="btn primary" onclick="cdDispararGeracaoChecklist()" style="font-weight:700">Gerar Checklist</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div id="view-k7" hidden>
@@ -3200,7 +3249,10 @@ function renderCad(){
     }
     const topoHtml = `<div class="cd-marcar-topo no-print" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:12px">
       <div><b>${pendentesVinil.length} ${pendentesVinil.length === 1 ? "disco pendente" : "discos pendentes"}</b> para marcar no vinil físico</div>
-      <button type="button" class="btn primary" onclick="window.print()">Imprimir lista</button>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn" onclick="window.print()">Imprimir lista</button>
+        <button type="button" class="btn primary" onclick="cdAbrirModalChecklist()">Checklist em PDF</button>
+      </div>
     </div><div id="cd-desfazer-box"></div>`;
     $("cd-lista").innerHTML = topoHtml + pendentesVinil.map(cdCardMarcarVinil).join("");
     $("cd-lista").querySelectorAll("[data-marcar-vinil]").forEach(chk => {
@@ -3229,6 +3281,303 @@ const cdPodeInfinito = o => (cdNovo(o) || cdPreVenda(o)) && !/usad/i.test(String
 const cdEhInfinito = v => /^(infinito|∞|sob[- ]?demanda)$/i.test(String(v || "").trim());
 const cdVaiPublicar = o => !/^n[aã]o$/i.test(String((o && o.publicar) || "").trim());
 const cdTemPendenciaAviso = o => /j[aá]\s+existe\s+na\s+loja|sem\s+etiqueta\s+de\s+pre[cç]o/i.test(String((o && o.pendencias) || ""));
+
+function cdExtrairArtista(o){
+  if (!o) return "";
+  if (o.artista && String(o.artista).trim()) return String(o.artista).trim();
+  if (o.marca && String(o.marca).trim()) return String(o.marca).trim();
+  let tit = String(o.titulo || "").trim();
+  tit = tit.replace(/^\s*(lp|cd|compacto|fita\s*k7|fita|livro)\s*[-:]?\s*/i, "");
+  const partes = tit.split(/\s+-\s+/);
+  if (partes.length > 1 && partes[0].trim()) {
+    return partes[0].trim();
+  }
+  return tit;
+}
+
+function cdFiltrarChecklist(L, opcoes){
+  opcoes = opcoes || {};
+  const modo = opcoes.modo || "pendentes";
+  const lote = (opcoes.lote || "").trim();
+  const dtIni = (opcoes.dataInicio || "").trim();
+  const dtFim = (opcoes.dataFim || "").trim();
+
+  return (L || []).filter(o => {
+    if (cdEhLivro(o)) return false;
+    const conferido = Boolean(String(o.marcado_vinil || "").trim() || String(o.conferido_em || "").trim());
+    if (modo === "pendentes" && conferido) return false;
+    if (lote) {
+      const lotePref = String(o.id || "").replace(/-\d+$/, "");
+      if (lotePref !== lote && !String(o.id || "").startsWith(lote)) return false;
+    }
+    const dt = String(o.id || "").slice(0, 10);
+    if (dtIni && dt < dtIni) return false;
+    if (dtFim && dt > dtFim) return false;
+    return true;
+  }).sort((a, b) => {
+    const artA = cdExtrairArtista(a), artB = cdExtrairArtista(b);
+    const c = artA.localeCompare(artB, "pt-BR", { sensitivity: "base" });
+    if (c !== 0) return c;
+    return String(a.titulo || "").localeCompare(String(b.titulo || ""), "pt-BR", { sensitivity: "base" });
+  });
+}
+
+function cdMontarChecklistHtml(itens, opcoes){
+  opcoes = opcoes || {};
+  const modo = opcoes.modo || "pendentes";
+  const lote = (opcoes.lote || "").trim();
+  const dtIni = (opcoes.dataInicio || "").trim();
+  const dtFim = (opcoes.dataFim || "").trim();
+  const horaAtual = (typeof hhmm === "function" ? hhmm() : new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+  const agora = hojeSP().split("-").reverse().join("/") + " às " + horaAtual;
+
+  const total = itens.length;
+  const nNovos = itens.filter(cdNovo).length;
+  const nUsados = total - nNovos;
+
+  const descFiltro = [
+    modo === "pendentes" ? "Não conferidos (sem etiqueta verde ou conferido_em vazio)" : "Todos os discos",
+    lote ? ("Lote: " + lote) : "Todos os lotes",
+    (dtIni || dtFim) ? ("Período: " + (dtIni || "início") + " até " + (dtFim || "hoje")) : ""
+  ].filter(Boolean).join(" · ");
+
+  const linhas = itens.map((o) => {
+    const art = cdExtrairArtista(o);
+    const pAtual = cdProdutoAtual(o);
+    const pr = num(pAtual ? pAtual[2] : o.preco);
+    const prTxt = pr ? brl2(pr) : (o.preco ? "R$ " + o.preco : "sem preço");
+    const novo = cdNovo(o);
+    const estTxt = novo ? "Novo" : "Usado";
+    const estCls = novo ? "pill-novo" : "pill-usado";
+    let sitTxt = "Oculto";
+    let sitCls = "pill-ocu";
+    if (o.produto_id && pAtual) {
+      if (/^true$/i.test(pAtual[6])) { sitTxt = "Visível"; sitCls = "pill-vis"; }
+    } else if (o.status === "publicado") {
+      sitTxt = "Visível"; sitCls = "pill-vis";
+    }
+    return `<tr>
+      <td style="text-align:center"><span class="chk-box"></span></td>
+      <td>
+        <div style="font-weight:700;font-size:9pt">${esc(art)}</div>
+        <div style="font-size:8pt;color:#333">${esc(o.titulo)}</div>
+      </td>
+      <td style="text-align:right;font-weight:700;font-size:8.5pt">${esc(prTxt)}</td>
+      <td style="text-align:center"><span class="pill ${estCls}">${esc(estTxt)}</span></td>
+      <td style="text-align:center" class="mono">${esc(o.id)}</td>
+      <td style="text-align:center" class="mono">${esc(o.produto_id || "-")}</td>
+      <td style="text-align:center"><span class="pill ${sitCls}">${esc(sitTxt)}</span></td>
+    </tr>`;
+  }).join("\n");
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Checklist de Discos · Monstro Discos</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 10mm 8mm 12mm 8mm;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #111;
+      background: #fff;
+      font-size: 8.5pt;
+      line-height: 1.25;
+    }
+    .no-print {
+      position: sticky;
+      top: 0;
+      z-index: 999;
+      background: #24292e;
+      color: #fff;
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #2563eb;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .no-print button {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 7px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .no-print button:hover { background: #1d4ed8; }
+    @media print {
+      .no-print { display: none !important; }
+      body { font-size: 8pt; }
+      thead { display: table-header-group; }
+      tr { page-break-inside: avoid; }
+    }
+    .header {
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #111;
+    }
+    .header h1 {
+      font-size: 13pt;
+      margin: 0 0 4px 0;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+    }
+    .header .meta {
+      font-size: 8pt;
+      color: #444;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th {
+      border-bottom: 1.5px solid #111;
+      text-align: left;
+      padding: 4px 3px;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #222;
+    }
+    td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 4px 3px;
+      vertical-align: middle;
+    }
+    tr:nth-child(even) td {
+      background-color: #fafafa;
+    }
+    .chk-box {
+      display: inline-block;
+      width: 13px;
+      height: 13px;
+      border: 1.5px solid #222;
+      border-radius: 2px;
+      vertical-align: middle;
+    }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 7.5pt;
+    }
+    .pill {
+      display: inline-block;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 7pt;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .pill-vis { background: #e0f2fe; color: #0369a1; }
+    .pill-ocu { background: #f3f4f6; color: #4b5563; }
+    .pill-novo { background: #dcfce7; color: #15803d; }
+    .pill-usado { background: #fef3c7; color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <div><b>Checklist gerado com sucesso.</b> Escolha sua impressora física ou a opção <b>Salvar como PDF</b>.</div>
+    <button type="button" onclick="window.print()">Imprimir / Salvar como PDF</button>
+  </div>
+  <div class="header">
+    <h1>Monstro Discos · Checklist de Conferência de Discos Físicos</h1>
+    <div class="meta">
+      <div><b>Total:</b> ${total} discos (${nNovos} novos/lacrados, ${nUsados} usados) · <b>Filtros:</b> ${esc(descFiltro)}</div>
+      <div><b>Gerado em:</b> ${esc(agora)} · <b>Ordem:</b> Artista (A-Z)</div>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:28px;text-align:center">✓</th>
+        <th>Artista / Álbum (Título)</th>
+        <th style="width:72px;text-align:right">Preço</th>
+        <th style="width:62px;text-align:center">Estado</th>
+        <th style="width:115px;text-align:center">ID Lote</th>
+        <th style="width:85px;text-align:center">ID Loja</th>
+        <th style="width:65px;text-align:center">No Site</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${linhas}
+    </tbody>
+  </table>
+  <div style="margin-top:12px;padding-top:6px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:7.5pt;color:#666">
+    <span>Monstro Discos · lojamonstro.com.br</span>
+    <span>Checklist de conferência física de estoque</span>
+  </div>
+  <script>
+    window.onload = function(){
+      setTimeout(function(){ window.print(); }, 350);
+    };
+  </script>
+</body>
+</html>`;
+}
+
+function cdAbrirJanelaChecklist(html){
+  const w = window.open("", "_blank");
+  if (!w) {
+    alert("O navegador bloqueou a abertura da janela de impressão. Permita pop-ups para o Painel e tente novamente.");
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
+function cdAbrirModalChecklist(){
+  const m = $("cd-modal-checklist");
+  if (!m) return;
+  const L = cdLinhas().filter(o => !cdEhLivro(o));
+  const lotes = [...new Set(L.map(o => String(o.id || "").replace(/-\d+$/, "")).filter(Boolean))].sort().reverse();
+  const sel = $("cd-chk-lote");
+  if (sel) {
+    sel.innerHTML = `<option value="">Todos os lotes (${L.length} discos)</option>` +
+      lotes.map(lot => {
+        const qtd = L.filter(o => String(o.id || "").startsWith(lot)).length;
+        return `<option value="${esc(lot)}">${esc(lot)} (${qtd} discos)</option>`;
+      }).join("");
+  }
+  m.hidden = false;
+}
+
+function cdFecharModalChecklist(){
+  const m = $("cd-modal-checklist");
+  if (m) m.hidden = true;
+}
+
+function cdDispararGeracaoChecklist(){
+  const L = cdLinhas().filter(o => !cdEhLivro(o));
+  const modoRadio = document.querySelector('input[name="cd-chk-modo"]:checked');
+  const modo = modoRadio ? modoRadio.value : "pendentes";
+  const lote = ($("cd-chk-lote") ? $("cd-chk-lote").value : "").trim();
+  const dataInicio = ($("cd-chk-de") ? $("cd-chk-de").value : "").trim();
+  const dataFim = ($("cd-chk-ate") ? $("cd-chk-ate").value : "").trim();
+
+  const filtrados = cdFiltrarChecklist(L, { modo, lote, dataInicio, dataFim });
+  if (!filtrados.length) {
+    alert("Nenhum disco encontrado com os filtros selecionados.");
+    return;
+  }
+  cdFecharModalChecklist();
+  const html = cdMontarChecklistHtml(filtrados, { modo, lote, dataInicio, dataFim });
+  cdAbrirJanelaChecklist(html);
+}
+
 function cdSugestoesCategorias(o, iq){
   const lista = (iq || cdIguais(o)).map(x => x.categorias).filter(Boolean);
   if (!lista.length) return "";

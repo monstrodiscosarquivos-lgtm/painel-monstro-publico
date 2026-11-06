@@ -1,3 +1,26 @@
+# Atualização de sessão · Checklist em PDF no Painel Web, 06/11/2026
+
+- **Checklist de conferência física em PDF no Painel Web:**
+  - Criado botão "Checklist em PDF" no cabeçalho do cadastro de discos e na barra superior da lista de conferência (`cd-marcar-topo`).
+  - Adicionado modal interativo de configuração (`cd-modal-checklist`) com opções de filtros:
+    - Escopo: apenas discos ainda não conferidos (sem etiqueta verde ou com `conferido_em` vazio) ou todos os discos físicos.
+    - Filtro por lote: lista suspensa dinâmica contendo todos os lotes cadastrados na planilha ou opção "Todos os lotes".
+    - Filtro por período: campos de data inicial e data final (com base no ID do disco `AAAA-MM-DD`).
+  - Conteúdo e layout do checklist gerado:
+    - Formato A4 em retrato com margens otimizadas para impressão.
+    - Cabeçalho repetido em todas as páginas (`thead { display: table-header-group; }`) e paginação no rodapé (`@page { @bottom-right { content: counter(page); } }`).
+    - Colunas: quadradinho para marcar à caneta (`.chk-box`), artista e título do álbum em destaque, preço, estado (Novo ou Usado), ID do lote, ID na Nuvemshop e situação no site (Visível ou Oculto).
+    - Ordenação natural por Artista (A-Z) para conferência direta nas prateleiras da loja física.
+    - Resumo no topo com total de discos, contagem de novos e usados, filtros aplicados e data/hora exata da geração.
+    - Barra superior com botão "Imprimir / Salvar como PDF", acionamento automático de impressão via navegador e suporte nativo para salvar em arquivo PDF.
+    - Dados sempre lidos na hora diretamente da planilha e da loja, sem listas guardadas desatualizadas.
+  - Testes e validação:
+    - 55 testes do script local passaram (`apps-script/teste_local.js`), cobrindo extração de artista, filtros, ordenação e estrutura HTML do checklist.
+    - Suite de 813 testes do Python passou (1 ignorado).
+    - Auditoria de publicação (`scripts/auditar_publicacao.py`) confirmou 143 arquivos versionados e 0 problemas.
+
+Próximo passo: Túlio atualizar o arquivo `Painel.html` no Google Apps Script seguindo o passo a passo e testar a geração do checklist.
+
 # Atualização de sessão · Cadastro dos novos lotes 2026-11-06-a e 2026-11-06-b, 06/11/2026
 
 - **Parte 1 · Ajuste de Chico Buarque - Vida (produto 379329375 e rascunho 2026-11-03-23):**

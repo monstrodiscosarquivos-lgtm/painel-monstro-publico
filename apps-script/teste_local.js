@@ -517,7 +517,7 @@ function extrairFuncoesPainel() {
   const CD_PEND = new Set(), CD_SEL = new Set();
   const ctx = { String, Array, Set, JSON, RegExp, Math, Number, Object, parseFloat, isFinite, brl2, brl, int, brDiaC, rpDia, rows, hojeSP, CD_PEND, CD_SEL, D: {} };
   vm.createContext(ctx);
-  vm.runInContext(trechoEsc + '\n' + trechoNum + '\n' + trechoPm + '\n' + trecho + '\n' + trechoRp + '\n' + trechoApag + '\n' + trechoCd + '\n' + trechoIguais + '\nthis.exports = { D, num, esc, pmAddMes, pmDividirParcelas, pmValidarCronograma, pmLerCronograma, pmRateioNoMes, rpCodigoOrigem, rpOrigensLista, rpCanalDe, rpCanalJogada, rpNomeCanal, rpJogadas, rpEstado, rpStats, rpPodeApagarStatus, rpTextoConfirmarExclusao, cdEhLivro, cdNovo, cdPreVenda, cdPodeInfinito, cdEhInfinito, cdVaiPublicar, cdTemPendenciaAviso, cdCard, cdFisicoAtivo, cdCardMarcarVinil, cdSugestoesCategorias, cdFotosLinhas, cdFotosEditor, cdIguais, CD_CAPA_GRADES, CD_PAPEIS, CD_FILTROS };', ctx);
+  vm.runInContext(trechoEsc + '\n' + trechoNum + '\n' + trechoPm + '\n' + trecho + '\n' + trechoRp + '\n' + trechoApag + '\n' + trechoCd + '\n' + trechoIguais + '\nthis.exports = { D, num, esc, pmAddMes, pmDividirParcelas, pmValidarCronograma, pmLerCronograma, pmRateioNoMes, rpCodigoOrigem, rpOrigensLista, rpCanalDe, rpCanalJogada, rpNomeCanal, rpJogadas, rpEstado, rpStats, rpPodeApagarStatus, rpTextoConfirmarExclusao, cdEhLivro, cdNovo, cdPreVenda, cdPodeInfinito, cdEhInfinito, cdVaiPublicar, cdTemPendenciaAviso, cdCard, cdFisicoAtivo, cdCardMarcarVinil, cdSugestoesCategorias, cdFotosLinhas, cdFotosEditor, cdIguais, cdExtrairArtista, cdFiltrarChecklist, cdMontarChecklistHtml, CD_CAPA_GRADES, CD_PAPEIS, CD_FILTROS };', ctx);
   return ctx.exports;
   return ctx.exports;
 }
@@ -1229,6 +1229,64 @@ teste('D-099: etiqueta verde só lista visíveis com estoque e fora de Livros', 
   assert.ok(!p.cdFisicoAtivo({produto_id:'103',categorias:'LP'}));
   assert.ok(!p.cdFisicoAtivo({produto_id:'101',categorias:'Livros'}));
   assert.ok(p.CD_PAPEIS.includes('referencia') && p.CD_PAPEIS.includes('codigo_barras') && p.CD_PAPEIS.includes('oficial'));
+});
+
+
+teste('Checklist em PDF: extracao de artista, filtros (lote, periodo, pendentes) e ordenacao', () => {
+  const p = extrairFuncoesPainel();
+  p.D.prodId = [['id'], ['201'], ['202'], ['203']];
+  p.D.prodA = [
+    ['nome'],
+    ['LP Secos & Molhados - Secos & Molhados', 'LP, Usado', 150, '', 1, '', 'true'],
+    ['LP Belchior - Alucinacao', 'LP, Usado', 180, '', 1, '', 'true'],
+    ['LP Elis Regina - Elis', 'LP, Usado', 90, '', 0, '', 'false']
+  ];
+
+  // 1. Extracao de artista
+  assert.strictEqual(p.cdExtrairArtista({ titulo: "LP Elis Regina - Elis (1974) - (Vinil Usado)" }), 'Elis Regina');
+  assert.strictEqual(p.cdExtrairArtista({ titulo: "LP The Beatles - Rock 'N' Roll Music" }), 'The Beatles');
+  assert.strictEqual(p.cdExtrairArtista({ artista: 'Caetano Veloso', titulo: 'LP Velo' }), 'Caetano Veloso');
+  assert.strictEqual(p.cdExtrairArtista({ marca: 'Gal Costa', titulo: 'LP Gal Canta Caymmi' }), 'Gal Costa');
+
+  // 2. Base de discos para checklist
+  const lista = [
+    { id: '2026-11-06-a-01', titulo: 'LP Ze Ramalho - A Terceira Lamina', preco: 120, produto_id: '201', marcado_vinil: '', conferido_em: '', categorias: 'LP, Usado' },
+    { id: '2026-11-06-a-02', titulo: 'LP Belchior - Alucinacao', preco: 180, produto_id: '202', marcado_vinil: '2026-11-06 10:00', conferido_em: '', categorias: 'LP, Usado' },
+    { id: '2026-11-06-b-01', titulo: 'LP Caetano Veloso - Velo', preco: 100, produto_id: '203', marcado_vinil: '', conferido_em: '', categorias: 'LP, Usado' },
+    { id: '2026-11-05-livros-01', titulo: 'Livro Rock Gaucho', preco: 650, produto_id: '204', marcado_vinil: '', conferido_em: '', categorias: 'Livros' },
+    { id: '2026-10-28-01', titulo: 'LP Alceu Valenca - Cavalo de Pau', preco: 130, produto_id: '', marcado_vinil: '', conferido_em: '', categorias: 'LP, Usado' }
+  ];
+
+  // Exclusao de livros e ordenacao por artista
+  const todos = p.cdFiltrarChecklist(lista, { modo: 'todos' });
+  assert.strictEqual(todos.length, 4, 'livro excluido');
+  assert.deepStrictEqual(todos.map(p.cdExtrairArtista), ['Alceu Valenca', 'Belchior', 'Caetano Veloso', 'Ze Ramalho']);
+
+  // Filtro so pendentes (sem etiqueta verde e sem conferido_em)
+  const pendentes = p.cdFiltrarChecklist(lista, { modo: 'pendentes' });
+  assert.strictEqual(pendentes.length, 3, 'Belchior excluido porque marcado_vinil preenchido');
+  assert.deepStrictEqual(pendentes.map(x => x.id), ['2026-10-28-01', '2026-11-06-b-01', '2026-11-06-a-01']);
+
+  // Filtro por lote
+  const loteB = p.cdFiltrarChecklist(lista, { modo: 'todos', lote: '2026-11-06-b' });
+  assert.strictEqual(loteB.length, 1);
+  assert.strictEqual(loteB[0].id, '2026-11-06-b-01');
+
+  // Filtro por periodo
+  const periodo = p.cdFiltrarChecklist(lista, { modo: 'todos', dataInicio: '2026-11-01', dataFim: '2026-11-06' });
+  assert.strictEqual(periodo.length, 3);
+  assert.ok(!periodo.some(x => x.id === '2026-10-28-01'));
+
+  // 3. Montagem do HTML do checklist
+  const html = p.cdMontarChecklistHtml(pendentes, { modo: 'pendentes' });
+  assert.ok(html.includes('Monstro Discos · Checklist de Conferência de Discos Físicos'));
+  assert.ok(html.includes('table-header-group'), 'repeticao de cabecalho na impressao');
+  assert.ok(html.includes('A4 portrait'), 'formato retrato');
+  assert.ok(html.includes('chk-box'), 'quadradinho para caneta');
+  assert.ok(html.includes('130'), 'preco presente');
+  assert.ok(html.includes('2026-11-06-a-01'), 'id do lote presente');
+  assert.ok(html.includes('201'), 'produto_id presente');
+  assert.ok(!html.includes('—'), 'sem travessao');
 });
 
 (async () => {
