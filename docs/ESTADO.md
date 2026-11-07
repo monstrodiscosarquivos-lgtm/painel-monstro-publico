@@ -1,3 +1,37 @@
+# Atualização de sessão · Tela de Conferência física de estoque no Painel Web, 07/11/2026
+
+- **Tela de Conferência na aba Cadastro do Painel Web:**
+  - Criada tela completa de conferência integrada diretamente na aba Cadastro, acionada pelo botão de filtro "Conferência".
+  - Base de dados unificada: consolida todos os discos ativos da loja (aba `produtos`, cerca de 1.941 produtos com estoque positivo) cruzados com a aba `cadastro_rascunhos` para ler ou gravar o status de conferência. Discos cadastrados direto na loja sem rascunho prévio também entram na lista normalmente.
+  - Tabela compacta e responsiva pensada para tela de computador (sem quebrar no celular):
+    - Colunas: miniatura da capa (imagem Nuvemshop com lazy-loading ou ícone reserva), título e artista em destaque, preço (preço de venda ou promocional), estado com etiqueta colorida (Novo/Lacrado ou Usado), estoque (destaque visual se zerado), situação no site (Visível ou Oculto), ID do lote, ID na loja (com links diretos para o painel de produtos da Nuvemshop e para o site público) e coluna de conferência.
+  - Filtros e busca instantânea:
+    - Campo de busca no topo com filtragem em tempo real sem botão, pesquisando por título, artista, ID do lote e ID do produto, ignorando maiúsculas e acentos (`cdNorm`).
+    - Filtro de conferência: só os não conferidos (padrão), todos e só os conferidos.
+    - Filtro de tipo: todos os discos (exclui livros por padrão), só usados, só novos/lacrados, ou todos incluindo livros.
+    - Filtro de situação no site: todos, visíveis ou ocultos.
+    - Filtro de estoque: com estoque (padrão) ou todos.
+    - Filtro por lote: lista suspensa dinâmica com todos os lotes existentes mais a opção "Sem lote (produtos diretos da loja)".
+    - Filtro por período de cadastro: data inicial e data final.
+    - Ordenação: por artista (padrão A-Z, ordem das prateleiras da loja física), por título, por data de cadastro (mais recentes ou mais antigos) e por preço (maior ou menor).
+  - Barra de progresso e contadores em tempo real:
+    - Total de discos listados, quantidade de conferidos, quantidade pendente e barra de progresso com porcentagem visual.
+  - Marcação com um clique e persistência:
+    - Checkbox em cada linha para marcar como conferido, registrando data/hora e autor (`conferido_em` e `conferido_por`) na planilha.
+    - Permite desmarcar a qualquer momento se conferido por engano, limpando a data na planilha.
+    - Se o disco veio direto da loja sem rascunho anterior, o Painel cria a linha de referência permanente na aba `cadastro_rascunhos` com ID `loja-<produto_id>` e status `publicado`, sem disparar criação duplicada na Nuvemshop.
+    - Suporte a seleção múltipla com marcação e desmarcação em lote.
+  - Botão "Imprimir esta lista":
+    - Gera e imprime o checklist A4 com os exatos filtros e busca aplicados na tela, sem abrir janelas pop-up.
+  - Testes e validação:
+    - Teste automatizado com navegador real via Playwright (`tests/test_painel_conferencia.py`) simulando o `google.script.run`, testando navegação, busca instantânea, filtros, marcação/desmarcação e impressão.
+    - Teste de truncamento de comentários confirmando sintaxe 100% válida após corte de `//` em linhas de script.
+    - 56 testes locais do Apps Script passaram (`node apps-script/teste_local.js`).
+    - Suite de 815 testes Python passou (1 ignorado).
+    - Auditoria de publicação (`scripts/auditar_publicacao.py`) confirmou 143 arquivos e 0 problemas.
+
+Próximo passo: Túlio atualizar o arquivo `Painel.html` no Google Apps Script seguindo o passo a passo e testar a conferência física pela tela do computador.
+
 # Atualização de sessão · Checklist em PDF no Painel Web, 06/11/2026
 
 - **Checklist de conferência física em PDF no Painel Web:**

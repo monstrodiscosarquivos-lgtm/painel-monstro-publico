@@ -517,7 +517,7 @@ function extrairFuncoesPainel() {
   const CD_PEND = new Set(), CD_SEL = new Set();
   const ctx = { String, Array, Set, JSON, RegExp, Math, Number, Object, parseFloat, isFinite, brl2, brl, int, brDiaC, rpDia, rows, hojeSP, CD_PEND, CD_SEL, D: {} };
   vm.createContext(ctx);
-  vm.runInContext(trechoEsc + '\n' + trechoNum + '\n' + trechoPm + '\n' + trecho + '\n' + trechoRp + '\n' + trechoApag + '\n' + trechoCd + '\n' + trechoIguais + '\nthis.exports = { D, num, esc, pmAddMes, pmDividirParcelas, pmValidarCronograma, pmLerCronograma, pmRateioNoMes, rpCodigoOrigem, rpOrigensLista, rpCanalDe, rpCanalJogada, rpNomeCanal, rpJogadas, rpEstado, rpStats, rpPodeApagarStatus, rpTextoConfirmarExclusao, cdEhLivro, cdNovo, cdPreVenda, cdPodeInfinito, cdEhInfinito, cdVaiPublicar, cdTemPendenciaAviso, cdCard, cdFisicoAtivo, cdCardMarcarVinil, cdSugestoesCategorias, cdFotosLinhas, cdFotosEditor, cdIguais, cdExtrairArtista, cdFiltrarChecklist, cdMontarChecklistHtml, CD_CAPA_GRADES, CD_PAPEIS, CD_FILTROS };', ctx);
+  vm.runInContext(trechoEsc + '\n' + trechoNum + '\n' + trechoPm + '\n' + trecho + '\n' + trechoRp + '\n' + trechoApag + '\n' + trechoIguais + '\n' + trechoCd + '\nthis.exports = { D, num, esc, pmAddMes, pmDividirParcelas, pmValidarCronograma, pmLerCronograma, pmRateioNoMes, rpCodigoOrigem, rpOrigensLista, rpCanalDe, rpCanalJogada, rpNomeCanal, rpJogadas, rpEstado, rpStats, rpPodeApagarStatus, rpTextoConfirmarExclusao, cdEhLivro, cdNovo, cdPreVenda, cdPodeInfinito, cdEhInfinito, cdVaiPublicar, cdTemPendenciaAviso, cdCard, cdFisicoAtivo, cdCardMarcarVinil, cdSugestoesCategorias, cdFotosLinhas, cdFotosEditor, cdIguais, cdExtrairArtista, cdFiltrarChecklist, cdMontarChecklistHtml, cdDiscosConferencia, cdFiltrarConferencia, CD_CAPA_GRADES, CD_PAPEIS, CD_FILTROS };', ctx);
   return ctx.exports;
   return ctx.exports;
 }
@@ -1287,6 +1287,113 @@ teste('Checklist em PDF: extracao de artista, filtros (lote, periodo, pendentes)
   assert.ok(html.includes('2026-11-06-a-01'), 'id do lote presente');
   assert.ok(html.includes('201'), 'produto_id presente');
   assert.ok(!html.includes('—'), 'sem travessao');
+});
+
+
+teste('Tela de Conferência: consolidação de produtos e rascunhos, filtros, busca e contadores', () => {
+  const p = extrairFuncoesPainel();
+  p.D.prodId = [['id'], ['101'], ['102'], ['103'], ['104']];
+  p.D.prodUrl = [['url'], ['disco-a'], ['disco-b'], ['disco-c'], ['livro-d']];
+  p.D.prodA = [
+    ['nome', 'categorias', 'preco', 'custo', 'estoque', 'tags', 'exibir'],
+    ['LP Secos & Molhados - Secos & Molhados', 'LP, Usado', '150,00', '', '1', '', 'true'],
+    ['LP Belchior - Alucinacao (Novo/Lacrado)', 'LP, Novos e Lacrados', '220,00', '', '2', '', 'true'],
+    ['LP Elis Regina - Elis', 'LP, Usado', '90,00', '', '0', '', 'false'],
+    ['Livro Rock Gaucho', 'Livros', '80,00', '', '5', '', 'true']
+  ];
+  p.D.prodM = [['criado_em'], ['2026-11-01 10:00:00'], ['2026-11-02 12:00:00'], ['2026-10-15 09:00:00'], ['2026-11-03 14:00:00']];
+  p.D.prodImg = [['imagem'], ['https://img.nuvemshop.com/101.jpg'], ['https://img.nuvemshop.com/102.jpg'], [''], ['']];
+
+  p.D.cad = [
+    ['id', 'titulo', 'preco', 'status', 'produto_id', 'conferido_em', 'conferido_por'],
+    ['2026-11-01-01', 'LP Secos & Molhados - Secos & Molhados', '150', 'publicado', '101', '2026-11-05 18:30', 'tulio'],
+    ['2026-11-02-01', 'LP Belchior - Alucinacao (Novo/Lacrado)', '220', 'publicado', '102', '', '']
+  ];
+
+  const itens = p.cdDiscosConferencia();
+  assert.strictEqual(itens.length, 4, '4 produtos da loja');
+
+  const item101 = itens.find(x => x.produto_id === '101');
+  assert.ok(item101);
+  assert.strictEqual(item101.id_lote, '2026-11-01-01');
+  assert.strictEqual(item101.conferido_em, '2026-11-05 18:30');
+  assert.strictEqual(item101.conferido_por, 'tulio');
+  assert.strictEqual(item101.imagem, 'https://img.nuvemshop.com/101.jpg');
+  assert.strictEqual(p.cdNovo(item101), false);
+  assert.strictEqual(p.cdEhLivro(item101), false);
+
+  const item102 = itens.find(x => x.produto_id === '102');
+  assert.strictEqual(item102.conferido_em, '');
+  assert.strictEqual(p.cdNovo(item102), true);
+
+  const item103 = itens.find(x => x.produto_id === '103');
+  assert.strictEqual(item103.id_lote, '');
+  assert.strictEqual(item103.estoque, 0);
+  assert.strictEqual(item103.visivel, false);
+
+  // Filtro padrao: conferência pendentes, fTipo todos, incLivros false, fEst com_estoque, fSit todos
+  const padrao = p.cdFiltrarConferencia(itens, {
+    fConf: 'pendentes',
+    fTipo: 'todos',
+    incLivros: false,
+    fSit: 'todos',
+    fEst: 'com_estoque',
+    fLote: '',
+    dataInicio: '',
+    dataFim: '',
+    busca: '',
+    ordem: 'artista'
+  });
+  // Item 101 ja conferido; Item 103 estoque 0; Item 104 livro -> sobra Item 102
+  assert.strictEqual(padrao.length, 1);
+  assert.strictEqual(padrao[0].produto_id, '102');
+
+  // Filtro busca sem acento
+  const busca = p.cdFiltrarConferencia(itens, {
+    fConf: 'todos',
+    fTipo: 'todos',
+    incLivros: true,
+    fSit: 'todos',
+    fEst: 'todos',
+    fLote: '',
+    dataInicio: '',
+    dataFim: '',
+    busca: 'secos',
+    ordem: 'artista'
+  });
+  assert.strictEqual(busca.length, 1);
+  assert.strictEqual(busca[0].produto_id, '101');
+
+  // Filtro por lote
+  const porLote = p.cdFiltrarConferencia(itens, {
+    fConf: 'todos',
+    fTipo: 'todos',
+    incLivros: true,
+    fSit: 'todos',
+    fEst: 'todos',
+    fLote: '2026-11-01',
+    dataInicio: '',
+    dataFim: '',
+    busca: '',
+    ordem: 'artista'
+  });
+  assert.strictEqual(porLote.length, 1);
+  assert.strictEqual(porLote[0].produto_id, '101');
+
+  // Sem lote
+  const semLote = p.cdFiltrarConferencia(itens, {
+    fConf: 'todos',
+    fTipo: 'todos',
+    incLivros: true,
+    fSit: 'todos',
+    fEst: 'todos',
+    fLote: '__sem_lote__',
+    dataInicio: '',
+    dataFim: '',
+    busca: '',
+    ordem: 'artista'
+  });
+  assert.strictEqual(semLote.length, 2); // 103 e 104
 });
 
 (async () => {

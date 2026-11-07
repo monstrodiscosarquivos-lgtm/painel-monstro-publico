@@ -209,6 +209,19 @@ footer a{color:var(--muted)}
   #view-cad{display:block!important}
   .cd-marcar-card{border:0!important;border-bottom:1px solid #ccc!important;border-radius:0!important;padding:10px 0!important;background:transparent!important;page-break-inside:avoid}
 }
+  @media screen {
+    #cd-print-area { display: none !important; }
+  }
+  @media print {
+    body > *:not(#cd-print-area) { display: none !important; }
+    #cd-print-area { display: block !important; margin: 0; padding: 0; background: #fff; color: #111; }
+  }
+  .cd-conf-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .cd-conf-tbl th { background: var(--surface); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 8px; border-bottom: 2px solid var(--line); font-weight: 700; }
+  .cd-conf-tbl td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .cd-conf-tbl tr:hover { background: var(--track); }
+  .cd-conf-filter-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .cd-conf-filter-row select, .cd-conf-filter-row input[type="date"] { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 13px; }
 </style>
 
 <div class="wrap">
@@ -409,7 +422,7 @@ footer a{color:var(--muted)}
         <h2 style="margin:0">Cadastro de discos</h2>
         <p class="sub">Rascunhos feitos pelo Claude a partir das fotos. Confira o vinil e o preço, leia as pendências e aprove. A rotina cria o produto <b>oculto</b> na Nuvemshop, com as fotos na ordem; você confere no administrador da loja e publica.</p>
       </div>
-      <button type="button" class="btn primary no-print" id="cd-btn-abrir-checklist" onclick="cdAbrirModalChecklist()" style="display:inline-flex;align-items:center;gap:6px;font-weight:700;padding:8px 16px;white-space:nowrap;margin-top:2px">
+      <button type="button" class="btn primary no-print" id="cd-btn-abrir-checklist" style="display:inline-flex;align-items:center;gap:6px;font-weight:700;padding:8px 16px;white-space:nowrap;margin-top:2px">
         Checklist para imprimir
       </button>
     </div>
@@ -423,7 +436,7 @@ footer a{color:var(--muted)}
     <div style="background:var(--bg);color:var(--fg);border:1px solid var(--line,#ddd);border-radius:14px;max-width:520px;width:100%;padding:22px;box-shadow:0 12px 32px rgba(0,0,0,0.35)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid var(--line,#ddd);padding-bottom:10px">
         <h3 style="margin:0;font-size:18px">Gerar Checklist para Impressão / PDF</h3>
-        <button type="button" onclick="cdFecharModalChecklist()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);line-height:1;padding:0 6px">×</button>
+        <button type="button" id="cd-modal-chk-fechar-x" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);line-height:1;padding:0 6px">×</button>
       </div>
       <div style="margin-bottom:14px">
         <div style="font-weight:700;font-size:14px;margin-bottom:6px">Discos a incluir:</div>
@@ -456,8 +469,8 @@ footer a{color:var(--muted)}
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--line,#ddd);padding-top:14px">
-        <button type="button" class="btn" onclick="cdFecharModalChecklist()">Cancelar</button>
-        <button type="button" class="btn primary" onclick="cdDispararGeracaoChecklist()" style="font-weight:700">Gerar Checklist</button>
+        <button type="button" class="btn" id="cd-modal-chk-cancelar">Cancelar</button>
+        <button type="button" class="btn primary" id="cd-modal-chk-gerar" style="font-weight:700">Gerar Checklist</button>
       </div>
     </div>
   </div>
@@ -696,6 +709,7 @@ footer a{color:var(--muted)}
   </section>
 </div>
 
+<div id="cd-print-area" class="cd-print-only"></div>
 <footer>
   Os números vêm da planilha <a data-pm-planilha href="#" target="_blank" rel="noopener">Painel Monstro · dados</a>, que a rotina atualiza de hora em hora. Esta página relê a planilha a cada 10 minutos enquanto está aberta.
 </footer>
@@ -717,7 +731,7 @@ const RANGES = {
   acd: "anuncios_campanha_dia!A1:T3000", ahoje: "anuncios_hoje!A1:K400", aads: "anuncios_anuncios!A1:S300", asem: "anuncios_semana!A1:U600",
   aalert: "anuncios_alertas!A1:F100", ares: "anuncios_resumo!A1:B20", anotas: "anuncios_notas!A1:E400", adir: "anuncios_direcao!A1:C400",
   pedMail: "pedidos!B1:B8000", itens: "itens!C1:I9000", prodA: "produtos!B1:H7000", prodM: "produtos!M1:M7000", prodQ: "produtos!Q1:Q7000",
-  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AO500", cadf: "cadastro_fotos!A1:F3000",
+  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodImg: "produtos!O1:O7000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AO500", cadf: "cadastro_fotos!A1:F3000",
   g4d: "ga4_diario!A1:I15000", g4l: "ga4_links!A1:I400", k7: "k7_resumo!A1:F500",
   itNum: "itens!A1:A9000", prodId: "produtos!L1:L7000", cprod: "comissao_produtos!A1:D300", pman: "pedidos_manuais!A1:N500", cajust: "comissao_ajustes!A1:D200"
 };
@@ -790,7 +804,7 @@ function barChart(host, o){
 /* ---------- estado ---------- */
 const D = {};
 function setErr(sec, msg){ const el = $("e-"+sec); if (!el) return; el.hidden = !msg; el.textContent = msg || ""; }
-const SEC_OF = { itNum:["com"], prodId:["com","cad"], cprod:["com"], pman:["com"], cajust:["com"], g4d:["res"], g4l:["res"], rcamp:["rasp","res"], rjog:["rasp","res"], rev:["rasp"], rlem:["rasp"], reguaLog:["res"], cad:["cad"], cadf:["cad"], pedMail:["res"], itens:["res"], prodA:["res"], prodM:["res"], prodQ:["res"], acd:["ads"], ahoje:["ads"], aads:["ads"], asem:["ads"], aalert:["ads"], ares:["ads"], anotas:["ads"], adir:["ads"], atrib:["valeapena"], ped:["com"], pedNum:["com"], comis:["com"], fila:["fila"], rodada:["fila"], atual:["objetivo","novos","custos"], mensal:["objetivo"], coortes:["novos"], regua:["regua"], reguaRes:["regua"], car:["carrinhos"], vale:["valeapena"], ind:["custos"], res:["carrinhos"], k7:["k7"] };
+const SEC_OF = { itNum:["com"], prodId:["com","cad"], prodImg:["cad","res"], cprod:["com"], pman:["com"], cajust:["com"], g4d:["res"], g4l:["res"], rcamp:["rasp","res"], rjog:["rasp","res"], rev:["rasp"], rlem:["rasp"], reguaLog:["res"], cad:["cad"], cadf:["cad"], pedMail:["res"], itens:["res"], prodA:["res"], prodM:["res"], prodQ:["res"], acd:["ads"], ahoje:["ads"], aads:["ads"], asem:["ads"], aalert:["ads"], ares:["ads"], anotas:["ads"], adir:["ads"], atrib:["valeapena"], ped:["com"], pedNum:["com"], comis:["com"], fila:["fila"], rodada:["fila"], atual:["objetivo","novos","custos"], mensal:["objetivo"], coortes:["novos"], regua:["regua"], reguaRes:["regua"], car:["carrinhos"], vale:["valeapena"], ind:["custos"], res:["carrinhos"], k7:["k7"] };
 
 function renderAtual(){
   const a = rows(D.atual)[0]; if (!a) return;
@@ -3080,7 +3094,7 @@ function cdLote(){
 const CD_GRADES = ["M","NM","VG+","VG","G+","G","P"];
 const CD_CAPA_GRADES = ["M","NM","VG+","VG","G+","G","F"];
 const CD_PAPEIS = ["capa", "contracapa", "encarte frente", "encarte verso", "encarte aberto", "capa interna", "disco", "rótulo", "etiqueta", "referencia", "codigo_barras", "oficial"];
-const CD_FILTROS = [["rascunho","Para revisar"],["aprovado","Aprovados"],["criado","Criados (ocultos)"],["erro","Com erro"],["publicado","Publicados"],["marcar_vinil","Etiqueta verde"],["conferencia","Conferência completa"],["somar_estoque","Soma confirmada"],["estoque_somado","Estoque somado"],["descartado","Descartados"],["todos","Todos"]];
+const CD_FILTROS = [["rascunho","Para revisar"],["aprovado","Aprovados"],["criado","Criados (ocultos)"],["erro","Com erro"],["publicado","Publicados"],["marcar_vinil","Etiqueta verde"],["conferencia","Conferência"],["somar_estoque","Soma confirmada"],["estoque_somado","Estoque somado"],["descartado","Descartados"],["todos","Todos"]];
 const cdGrupo = s => { s = String(s || "").trim().toLowerCase(); if (s.startsWith("erro")) return "erro"; if (s.startsWith("descartado")) return "descartado"; return ["rascunho","aprovado","criado","publicado","somar_estoque","estoque_somado"].includes(s) ? s : "rascunho"; };
 const CD_PILL = {somar_estoque:["p-wait","soma aguardando a rotina"], estoque_somado:["p-ok","estoque somado"], rascunho:["p-wait","para revisar"], aprovado:["p-info","aprovado, aguardando a rotina"], criado:["p-ok","criado oculto na loja"], erro:["p-bad","erro"], publicado:["p-ok","publicado"], descartado:["p-info","descartado"]};
 const colL = n => { let s = ""; n++; while (n > 0){ const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
@@ -3231,15 +3245,21 @@ function renderCad(){
   const L = cdLinhas(), cont = {};
   L.forEach(o => { const g = cdGrupo(o.status); cont[g] = (cont[g] || 0) + 1; });
   cont.todos = L.length;
-  cont.conferencia = L.filter(cdFisicoAtivo).length;
+  cont.conferencia = cdDiscosConferencia().filter(o => !cdEhLivro(o) && (o.estoque_ilimitado || (num(o.estoque) > 0))).length;
   cont.marcar_vinil = L.filter(o => cdFisicoAtivo(o) && !String(o.marcado_vinil || "").trim()).length;
   $("cd-filtro").innerHTML = CD_FILTROS.map(([v,l]) => `<button type="button" data-v="${v}" aria-pressed="${v === CD_FILTRO}">${l} (${cont[v] || 0})</button>`).join("");
   $("cd-filtro").querySelectorAll("button").forEach(b => b.onclick = () => { CD_FILTRO = b.dataset.v; renderCad(); });
   $("cd-nota").textContent = CD_FILTRO === "rascunho" ? "Disco usado é sempre exemplar único: cada rascunho vira um produto novo com estoque 1." :
     CD_FILTRO === "criado" ? "Produto oculto pode não abrir pelo link público. Confira no administrador da Nuvemshop, em Produtos, e publique por lá." :
+    CD_FILTRO === "conferencia" ? "Conferência direta dos discos físicos com a Nuvemshop e planilha." :
     CD_FILTRO === "marcar_vinil" ? "Discos visíveis no site, com estoque, para passar o marcador verde na loja física." : "";
 
-  if (["marcar_vinil","conferencia"].includes(CD_FILTRO)){
+    if (CD_FILTRO === "conferencia"){
+    cdRenderConferencia();
+    cdLote();
+    return;
+  }
+  if (CD_FILTRO === "marcar_vinil"){
     const pendentesVinil = L.filter(o => cdFisicoAtivo(o) && (CD_FILTRO === "conferencia" || !String(o.marcado_vinil || "").trim()))
       .sort((a,b) => String(a.marca || a.titulo || "").localeCompare(String(b.marca || b.titulo || ""), "pt-BR"));
     if (!pendentesVinil.length){
@@ -3320,6 +3340,610 @@ function cdFiltrarChecklist(L, opcoes){
     if (c !== 0) return c;
     return String(a.titulo || "").localeCompare(String(b.titulo || ""), "pt-BR", { sensitivity: "base" });
   });
+}
+
+
+/* ==================== TELA DE CONFERÊNCIA (D-103) ==================== */
+let CD_CONF_BUSCA = "";
+let CD_CONF_F_CONF = "pendentes";
+let CD_CONF_F_TIPO = "todos";
+let CD_CONF_INC_LIVROS = false;
+let CD_CONF_F_SIT = "todos";
+let CD_CONF_F_EST = "com_estoque";
+let CD_CONF_F_LOTE = "";
+let CD_CONF_DE = "";
+let CD_CONF_ATE = "";
+let CD_CONF_ORDEM = "artista";
+const CD_CONF_SEL = new Set();
+
+function cdDiscosConferencia(){
+  const ids = D.prodId || [], a = D.prodA || [], u = D.prodUrl || [], m = D.prodM || [], imgs = D.prodImg || [];
+  const cadRows = cdLinhas();
+  const cadPorPid = new Map();
+  cadRows.forEach(r => {
+    if (r.produto_id) cadPorPid.set(String(r.produto_id).trim(), r);
+  });
+
+  const lista = [];
+  const pidsVistos = new Set();
+
+  for (let i = 1; i < ids.length; i++){
+    const pid = String((ids[i] && ids[i][0]) || "").trim();
+    if (!pid) continue;
+    pidsVistos.add(pid);
+    const prodRow = a[i] || [];
+    const nome = String(prodRow[0] || "").trim();
+    if (!nome) continue;
+    const cats = String(prodRow[1] || "").trim();
+    const preco = num(prodRow[2]) || 0;
+    const precoProm = num(prodRow[3]) || 0;
+    const estVal = num(prodRow[4]);
+    const estIlim = /^true$/i.test(String(prodRow[5] || ""));
+    const visivel = /^true$/i.test(String(prodRow[6] || ""));
+    const url = String((u[i] && u[i][0]) || "").trim();
+    const criadoEm = String((m[i] && m[i][0]) || "").trim();
+    const imgUrl = String((imgs[i] && imgs[i][0]) || "").trim();
+
+    const rasc = cadPorPid.get(pid);
+
+    lista.push({
+      origem: "produtos",
+      produto_id: pid,
+      url: url,
+      titulo: (rasc && rasc.titulo) || nome,
+      nome_loja: nome,
+      artista: (rasc && rasc.marca) || "",
+      categorias: (rasc && rasc.categorias) || cats,
+      preco: preco,
+      preco_promocional: precoProm,
+      estoque: estVal,
+      estoque_ilimitado: estIlim,
+      visivel: visivel,
+      criado_em: criadoEm,
+      imagem: imgUrl || (rasc && rasc.capa_discogs_url) || "",
+      id_lote: (rasc && rasc.id) || "",
+      lote: (rasc && (rasc.lote || String(rasc.id || "").replace(/-\d+$/, ""))) || "",
+      conferido_em: (rasc && rasc.conferido_em) || "",
+      conferido_por: (rasc && rasc.conferido_por) || "",
+      marcado_vinil: (rasc && rasc.marcado_vinil) || "",
+      rascunho_row: rasc ? rasc._row : null,
+      rascunho_obj: rasc || null
+    });
+  }
+
+  cadRows.forEach(r => {
+    const pid = String(r.produto_id || "").trim();
+    if (pid && pidsVistos.has(pid)) return;
+    const titulo = String(r.titulo || "").trim();
+    if (!titulo) return;
+    lista.push({
+      origem: "cadastro",
+      produto_id: pid,
+      url: "",
+      titulo: titulo,
+      nome_loja: titulo,
+      artista: String(r.marca || "").trim(),
+      categorias: String(r.categorias || "").trim(),
+      preco: num(r.preco) || 0,
+      preco_promocional: 0,
+      estoque: cdEhInfinito(r.estoque) ? null : (num(r.estoque) || 1),
+      estoque_ilimitado: cdEhInfinito(r.estoque),
+      visivel: false,
+      criado_em: String(r.atualizado_em || "").slice(0, 10),
+      imagem: String(r.capa_discogs_url || "").trim(),
+      id_lote: String(r.id || "").trim(),
+      lote: String(r.lote || String(r.id || "").replace(/-\d+$/, "")).trim(),
+      conferido_em: String(r.conferido_em || "").trim(),
+      conferido_por: String(r.conferido_por || "").trim(),
+      marcado_vinil: String(r.marcado_vinil || "").trim(),
+      rascunho_row: r._row || null,
+      rascunho_obj: r
+    });
+  });
+
+  return lista;
+}
+
+function cdFiltrarConferencia(lista, opts){
+  opts = opts || {};
+  const busca = String(opts.busca != null ? opts.busca : CD_CONF_BUSCA).trim();
+  const fConf = opts.fConf || CD_CONF_F_CONF || "pendentes";
+  const fTipo = opts.fTipo || CD_CONF_F_TIPO || "todos";
+  const incLivros = opts.incLivros != null ? Boolean(opts.incLivros) : CD_CONF_INC_LIVROS;
+  const fSit = opts.fSit || CD_CONF_F_SIT || "todos";
+  const fEst = opts.fEst || CD_CONF_F_EST || "com_estoque";
+  const fLote = String(opts.fLote != null ? opts.fLote : CD_CONF_F_LOTE).trim();
+  const dtIni = String(opts.dataInicio != null ? opts.dataInicio : CD_CONF_DE).trim();
+  const dtFim = String(opts.dataFim != null ? opts.dataFim : CD_CONF_ATE).trim();
+  const ordem = opts.ordem || CD_CONF_ORDEM || "artista";
+
+  const termos = busca ? cdNorm(busca).split(/\s+/).filter(Boolean) : [];
+
+  const filtrados = lista.filter(o => {
+    if (!incLivros && cdEhLivro(o)) return false;
+
+    const conf = Boolean(String(o.conferido_em || "").trim());
+    if (fConf === "pendentes" && conf) return false;
+    if (fConf === "conferidos" && !conf) return false;
+
+    const novo = cdNovo(o);
+    if (fTipo === "usados" && novo) return false;
+    if (fTipo === "novos" && !novo) return false;
+
+    if (fSit === "visiveis" && !o.visivel) return false;
+    if (fSit === "ocultos" && o.visivel) return false;
+
+    const comEst = o.estoque_ilimitado || (num(o.estoque) > 0);
+    if (fEst === "com_estoque" && !comEst) return false;
+
+    if (fLote){
+      if (fLote === "__sem_lote__"){
+        if (o.lote) return false;
+      } else {
+        if (o.lote !== fLote && !String(o.id_lote || "").startsWith(fLote)) return false;
+      }
+    }
+
+    const dRef = String(o.criado_em || o.id_lote || "").slice(0, 10);
+    if (dtIni && dRef && dRef < dtIni) return false;
+    if (dtFim && dRef && dRef > dtFim) return false;
+
+    if (termos.length){
+      const art = cdExtrairArtista(o);
+      const txt = cdNorm(String(o.titulo || "") + " " + art + " " + String(o.id_lote || "") + " " + String(o.produto_id || ""));
+      for (let t of termos){
+        if (!txt.includes(t)) return false;
+      }
+    }
+
+    return true;
+  });
+
+  filtrados.sort((a, b) => {
+    if (ordem === "artista"){
+      const artA = cdExtrairArtista(a), artB = cdExtrairArtista(b);
+      const c = artA.localeCompare(artB, "pt-BR", { sensitivity: "base" });
+      if (c !== 0) return c;
+      return String(a.titulo || "").localeCompare(String(b.titulo || ""), "pt-BR", { sensitivity: "base" });
+    }
+    if (ordem === "titulo"){
+      return String(a.titulo || "").localeCompare(String(b.titulo || ""), "pt-BR", { sensitivity: "base" });
+    }
+    if (ordem === "data_desc"){
+      const dA = String(a.criado_em || a.id_lote || "");
+      const dB = String(b.criado_em || b.id_lote || "");
+      return dB.localeCompare(dA);
+    }
+    if (ordem === "data_asc"){
+      const dA = String(a.criado_em || a.id_lote || "");
+      const dB = String(b.criado_em || b.id_lote || "");
+      return dA.localeCompare(dB);
+    }
+    if (ordem === "preco_desc"){
+      return (num(b.preco) || 0) - (num(a.preco) || 0);
+    }
+    if (ordem === "preco_asc"){
+      return (num(a.preco) || 0) - (num(b.preco) || 0);
+    }
+    return 0;
+  });
+
+  return filtrados;
+}
+
+function cdRenderConferencia(){
+  const container = $("cd-lista");
+  if (!container) return;
+
+  const todos = cdDiscosConferencia();
+  const lotesExistentes = [...new Set(todos.map(o => o.lote).filter(Boolean))].sort().reverse();
+  const itens = cdFiltrarConferencia(todos);
+
+  const nTotal = itens.length;
+  const nConferidos = itens.filter(o => Boolean(String(o.conferido_em || "").trim())).length;
+  const nFaltam = nTotal - nConferidos;
+  const pct = nTotal > 0 ? Math.round((nConferidos / nTotal) * 100) : 0;
+
+  const todosIdsVisiveis = itens.map(o => o.produto_id || o.id_lote).filter(Boolean);
+  const todosMarcadosNaSelecao = todosIdsVisiveis.length > 0 && todosIdsVisiveis.every(id => CD_CONF_SEL.has(id));
+
+  let html = "";
+
+  // Barra de ferramentas superior
+  html += `<div class="cd-conf-toolbar no-print" style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <input type="search" id="cd-conf-busca" value="${esc(CD_CONF_BUSCA)}" placeholder="Buscar título, artista, lote ou ID na loja..." style="flex:1;min-width:240px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font-size:14px">
+      <button type="button" class="btn primary" id="cd-conf-btn-imprimir" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;padding:9px 16px;white-space:nowrap">
+        Imprimir esta lista
+      </button>
+    </div>
+    <div class="cd-conf-filter-row">
+      <label class="s" style="display:inline-flex;align-items:center;gap:4px">
+        Conferência:
+        <select id="cd-conf-f-conf">
+          <option value="pendentes" ${CD_CONF_F_CONF === "pendentes" ? "selected" : ""}>Só os não conferidos</option>
+          <option value="todos" ${CD_CONF_F_CONF === "todos" ? "selected" : ""}>Todos</option>
+          <option value="conferidos" ${CD_CONF_F_CONF === "conferidos" ? "selected" : ""}>Só os conferidos</option>
+        </select>
+      </label>
+      <label class="s" style="display:inline-flex;align-items:center;gap:4px">
+        Tipo:
+        <select id="cd-conf-f-tipo">
+          <option value="todos" ${CD_CONF_F_TIPO === "todos" ? "selected" : ""}>Todos</option>
+          <option value="usados" ${CD_CONF_F_TIPO === "usados" ? "selected" : ""}>Usados</option>
+          <option value="novos" ${CD_CONF_F_TIPO === "novos" ? "selected" : ""}>Novos / Lacrados</option>
+        </select>
+      </label>
+      <label class="s" style="display:inline-flex;align-items:center;gap:4px;cursor:pointer">
+        <input type="checkbox" id="cd-conf-inc-livros" ${CD_CONF_INC_LIVROS ? "checked" : ""} style="cursor:pointer;margin:0">
+        Incluir livros
+      </label>
+      <label class="s" style="display:inline-flex;align-items:center;gap:4px">
+        No site:
+        <select id="cd-conf-f-sit">
+          <option value="todos" ${CD_CONF_F_SIT === "todos" ? "selected" : ""}>Todos</option>
+          <option value="visiveis" ${CD_CONF_F_SIT === "visiveis" ? "selected" : ""}>Visíveis</option>
+          <option value="ocultos" ${CD_CONF_F_SIT === "ocultos" ? "selected" : ""}>Ocultos</option>
+        </select>
+      </label>
+      <label class="s" style="display:inline-flex;align-items:center;gap:4px">
+        Estoque:
+        <select id="cd-conf-f-est">
+          <option value="com_estoque" ${CD_CONF_F_EST === "com_estoque" ? "selected" : ""}>Com estoque</option>
+          <option value="todos" ${CD_CONF_F_EST === "todos" ? "selected" : ""}>Todos</option>
+        </select>
+      </label>
+      <label class="s" style="display:inline-flex;align-items:center;gap:4px">
+        Lote:
+        <select id="cd-conf-f-lote">
+          <option value="" ${CD_CONF_F_LOTE === "" ? "selected" : ""}>Todos os lotes</option>
+          ${lotesExistentes.map(l => `<option value="${esc(l)}" ${CD_CONF_F_LOTE === l ? "selected" : ""}>${esc(l)}</option>`).join("")}
+          <option value="__sem_lote__" ${CD_CONF_F_LOTE === "__sem_lote__" ? "selected" : ""}>Sem lote (produtos da loja)</option>
+        </select>
+      </label>
+      <label class="s" style="display:inline-flex;align-items:center;gap:4px">
+        De: <input type="date" id="cd-conf-de" value="${esc(CD_CONF_DE)}">
+      </label>
+      <label class="s" style="display:inline-flex;align-items:center;gap:4px">
+        Até: <input type="date" id="cd-conf-ate" value="${esc(CD_CONF_ATE)}">
+      </label>
+      <label class="s" style="display:inline-flex;align-items:center;gap:4px">
+        Ordem:
+        <select id="cd-conf-ordem">
+          <option value="artista" ${CD_CONF_ORDEM === "artista" ? "selected" : ""}>Por artista (A-Z)</option>
+          <option value="titulo" ${CD_CONF_ORDEM === "titulo" ? "selected" : ""}>Por título (A-Z)</option>
+          <option value="data_desc" ${CD_CONF_ORDEM === "data_desc" ? "selected" : ""}>Data (mais recentes)</option>
+          <option value="data_asc" ${CD_CONF_ORDEM === "data_asc" ? "selected" : ""}>Data (mais antigos)</option>
+          <option value="preco_desc" ${CD_CONF_ORDEM === "preco_desc" ? "selected" : ""}>Maior preço</option>
+          <option value="preco_asc" ${CD_CONF_ORDEM === "preco_asc" ? "selected" : ""}>Menor preço</option>
+        </select>
+      </label>
+    </div>
+  </div>`;
+
+  // Barra de contagem e ações em massa
+  html += `<div class="no-print" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--line);border-radius:12px;margin-bottom:12px">
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px">
+      <div><b>Total:</b> <span id="cd-conf-cnt-total" style="font-weight:700">${nTotal}</span> discos</div>
+      <div><span class="pill p-ok" style="font-weight:700">✓ ${nConferidos}</span> conferidos</div>
+      <div><span class="pill p-wait" style="font-weight:700">⏳ ${nFaltam}</span> faltam conferir</div>
+      <div style="width:110px;height:7px;background:var(--line);border-radius:4px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:var(--accent);transition:width 0.3s"></div>
+      </div>
+      <span class="s">${pct}%</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      ${CD_CONF_SEL.size > 0 ? `
+        <span class="s" style="font-weight:700">${CD_CONF_SEL.size} selecionados:</span>
+        <button type="button" class="btn primary" id="cd-conf-bulk-marcar" style="font-size:13px;padding:5px 12px;font-weight:700">Marcar como conferidos</button>
+        <button type="button" class="btn" id="cd-conf-bulk-desmarcar" style="font-size:13px;padding:5px 12px">Desmarcar</button>
+      ` : ""}
+    </div>
+  </div>`;
+
+  // Tabela compacta
+  if (!itens.length){
+    html += `<div class="empty">Nenhum disco encontrado com estes filtros.</div>`;
+  } else {
+    html += `<div class="tbl" style="overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--bg)">
+      <table class="cd-conf-tbl" style="min-width:860px">
+        <thead>
+          <tr>
+            <th style="width:34px;text-align:center">
+              <input type="checkbox" id="cd-conf-sel-todos" ${todosMarcadosNaSelecao ? "checked" : ""} style="cursor:pointer;margin:0" title="Selecionar todos visíveis">
+            </th>
+            <th style="width:48px;text-align:center">Capa</th>
+            <th>Artista / Álbum (Título)</th>
+            <th style="width:85px;text-align:right">Preço</th>
+            <th style="width:75px;text-align:center">Estado</th>
+            <th style="width:75px;text-align:center">Estoque</th>
+            <th style="width:75px;text-align:center">No Site</th>
+            <th style="width:110px;text-align:center">Lote</th>
+            <th style="width:105px;text-align:center">Produto ID</th>
+            <th style="width:145px;text-align:center">Conferido</th>
+          </tr>
+        </thead>
+        <tbody id="cd-conf-tbody">`;
+
+    itens.forEach(o => {
+      const art = cdExtrairArtista(o);
+      const chaveItem = o.produto_id || o.id_lote;
+      const selecionado = CD_CONF_SEL.has(chaveItem);
+      const conf = Boolean(String(o.conferido_em || "").trim());
+      const novo = cdNovo(o);
+      const estTxt = novo ? "Novo" : "Usado";
+      const estPill = novo ? "p-ok" : "p-wait";
+      const sitTxt = o.visivel ? "Visível" : "Oculto";
+      const sitPill = o.visivel ? "p-info" : "p-muted";
+      const prTxt = o.preco ? brl2(o.preco) : (o.preco_promocional ? brl2(o.preco_promocional) : "sem preço");
+      const estqTxt = o.estoque_ilimitado ? "Infinito" : (o.estoque != null ? o.estoque : "-");
+
+      const linkAdmin = o.produto_id ? `https:[/][/]monstrodiscos.lojavirtualnuvem.com.br/admin/products/${esc(o.produto_id)}` : "";
+      const linkLoja = o.url ? `https:[/][/]lojamonstro.com.br/produtos/${esc(o.url)}` : "";
+
+      html += `<tr data-conf-item="${esc(chaveItem)}" style="${conf ? "opacity:0.85;" : ""}">
+        <td style="text-align:center">
+          <input type="checkbox" class="cd-conf-chk-sel" data-chave="${esc(chaveItem)}" ${selecionado ? "checked" : ""} style="cursor:pointer;margin:0">
+        </td>
+        <td style="text-align:center">
+          <div style="width:40px;height:40px;border-radius:6px;overflow:hidden;background:var(--surface);display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line)">
+            ${o.imagem ? `<img src="${esc(o.imagem)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : `<span style="font-size:16px">💿</span>`}
+          </div>
+        </td>
+        <td>
+          <div style="font-weight:700;font-size:14px;line-height:1.25">${esc(art)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(o.titulo)}</div>
+        </td>
+        <td style="text-align:right;font-weight:700">
+          ${esc(prTxt)}
+        </td>
+        <td style="text-align:center">
+          <span class="pill ${estPill}">${esc(estTxt)}</span>
+        </td>
+        <td style="text-align:center">
+          <b style="${num(o.estoque) <= 0 && !o.estoque_ilimitado ? "color:var(--bad)" : ""}">${esc(estqTxt)}</b>
+        </td>
+        <td style="text-align:center">
+          <span class="pill ${sitPill}">${esc(sitTxt)}</span>
+        </td>
+        <td style="text-align:center" class="mono" style="font-size:12px">
+          ${esc(o.id_lote || "-")}
+        </td>
+        <td style="text-align:center">
+          ${o.produto_id ? `
+            <div class="mono" style="font-weight:700;font-size:12px">${esc(o.produto_id)}</div>
+            <div style="display:flex;gap:4px;justify-content:center;margin-top:3px">
+              <a href="${linkAdmin}" target="_blank" rel="noopener" class="btn" style="padding:1px 5px;font-size:10px">Admin</a>
+              ${linkLoja ? `<a href="${linkLoja}" target="_blank" rel="noopener" class="btn" style="padding:1px 5px;font-size:10px">Loja</a>` : ""}
+            </div>
+          ` : `<span class="s">rascunho</span>`}
+        </td>
+        <td style="text-align:center">
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin:0">
+            <input type="checkbox" class="cd-conf-toggle-item" data-chave="${esc(chaveItem)}" ${conf ? "checked" : ""} style="cursor:pointer;width:17px;height:17px;margin:0">
+            <span style="font-weight:700;font-size:12px;color:${conf ? "var(--good)" : "var(--muted)"}">${conf ? "Conferido" : "Pendente"}</span>
+          </label>
+          ${conf ? `<div class="s" style="font-size:11px;color:var(--muted);margin-top:2px">${esc(o.conferido_em)}${o.conferido_por ? " · " + esc(o.conferido_por) : ""}</div>` : ""}
+        </td>
+      </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+  }
+
+  container.innerHTML = html;
+
+  // Ligar eventos com addEventListener (SEM onclick no HTML)
+  const inputBusca = $("cd-conf-busca");
+  if (inputBusca){
+    inputBusca.addEventListener("input", () => {
+      CD_CONF_BUSCA = inputBusca.value;
+      cdRenderConferencia();
+      // manter foco no campo de busca
+      const novoInput = $("cd-conf-busca");
+      if (novoInput){ novoInput.focus(); novoInput.setSelectionRange(novoInput.value.length, novoInput.value.length); }
+    });
+  }
+
+  const btnImp = $("cd-conf-btn-imprimir");
+  if (btnImp) btnImp.addEventListener("click", () => cdImprimirListaConferencia(itens));
+
+  const fConfEl = $("cd-conf-f-conf");
+  if (fConfEl) fConfEl.addEventListener("change", () => { CD_CONF_F_CONF = fConfEl.value; cdRenderConferencia(); });
+
+  const fTipoEl = $("cd-conf-f-tipo");
+  if (fTipoEl) fTipoEl.addEventListener("change", () => { CD_CONF_F_TIPO = fTipoEl.value; cdRenderConferencia(); });
+
+  const incLivrosEl = $("cd-conf-inc-livros");
+  if (incLivrosEl) incLivrosEl.addEventListener("change", () => { CD_CONF_INC_LIVROS = incLivrosEl.checked; cdRenderConferencia(); });
+
+  const fSitEl = $("cd-conf-f-sit");
+  if (fSitEl) fSitEl.addEventListener("change", () => { CD_CONF_F_SIT = fSitEl.value; cdRenderConferencia(); });
+
+  const fEstEl = $("cd-conf-f-est");
+  if (fEstEl) fEstEl.addEventListener("change", () => { CD_CONF_F_EST = fEstEl.value; cdRenderConferencia(); });
+
+  const fLoteEl = $("cd-conf-f-lote");
+  if (fLoteEl) fLoteEl.addEventListener("change", () => { CD_CONF_F_LOTE = fLoteEl.value; cdRenderConferencia(); });
+
+  const deEl = $("cd-conf-de");
+  if (deEl) deEl.addEventListener("change", () => { CD_CONF_DE = deEl.value; cdRenderConferencia(); });
+
+  const ateEl = $("cd-conf-ate");
+  if (ateEl) ateEl.addEventListener("change", () => { CD_CONF_ATE = ateEl.value; cdRenderConferencia(); });
+
+  const ordemEl = $("cd-conf-ordem");
+  if (ordemEl) ordemEl.addEventListener("change", () => { CD_CONF_ORDEM = ordemEl.value; cdRenderConferencia(); });
+
+  // Selecionar todos visíveis
+  const chkAll = $("cd-conf-sel-todos");
+  if (chkAll){
+    chkAll.addEventListener("change", () => {
+      const marcarTodos = chkAll.checked;
+      todosIdsVisiveis.forEach(id => {
+        if (marcarTodos) CD_CONF_SEL.add(id);
+        else CD_CONF_SEL.delete(id);
+      });
+      cdRenderConferencia();
+    });
+  }
+
+  // Ações em lote
+  const btnBulkMarcar = $("cd-conf-bulk-marcar");
+  if (btnBulkMarcar){
+    btnBulkMarcar.addEventListener("click", async () => {
+      const selecionados = itens.filter(o => CD_CONF_SEL.has(o.produto_id || o.id_lote));
+      btnBulkMarcar.disabled = true;
+      btnBulkMarcar.textContent = "Gravando…";
+      await cdExecutarConferirEmMassa(selecionados, true);
+      CD_CONF_SEL.clear();
+      cdRenderConferencia();
+    });
+  }
+
+  const btnBulkDesmarcar = $("cd-conf-bulk-desmarcar");
+  if (btnBulkDesmarcar){
+    btnBulkDesmarcar.addEventListener("click", async () => {
+      const selecionados = itens.filter(o => CD_CONF_SEL.has(o.produto_id || o.id_lote));
+      btnBulkDesmarcar.disabled = true;
+      btnBulkDesmarcar.textContent = "Gravando…";
+      await cdExecutarConferirEmMassa(selecionados, false);
+      CD_CONF_SEL.clear();
+      cdRenderConferencia();
+    });
+  }
+
+  // Delegação de eventos no corpo da tabela
+  const tbody = $("cd-conf-tbody");
+  if (tbody){
+    tbody.addEventListener("change", async (e) => {
+      const target = e.target;
+      if (!target) return;
+
+      // Checkbox de seleção para ação em lote
+      if (target.classList.contains("cd-conf-chk-sel")){
+        const chave = target.dataset.chave;
+        if (target.checked) CD_CONF_SEL.add(chave);
+        else CD_CONF_SEL.delete(chave);
+        cdRenderConferencia();
+        return;
+      }
+
+      // Checkbox de conferência
+      if (target.classList.contains("cd-conf-toggle-item")){
+        const chave = target.dataset.chave;
+        const item = todos.find(o => (o.produto_id || o.id_lote) === chave);
+        if (!item) return;
+        target.disabled = true;
+        try {
+          await cdExecutarConferirItem(item, target.checked);
+          cdRenderConferencia();
+        } catch(err){
+          target.disabled = false;
+          target.checked = !target.checked;
+          alert("Não consegui gravar a conferência: " + (err && err.message ? err.message : err));
+        }
+      }
+    });
+  }
+}
+
+async function cdExecutarConferirItem(item, marcar){
+  const agora = hojeSP() + " " + (typeof hhmm === "function" ? hhmm() : new Date().toLocaleTimeString("pt-BR", {hour:"2-digit",minute:"2-digit"}));
+  const quem = (window.PM && (window.PM.nome || window.PM.email)) || "Túlio";
+  const cadRows = D.cad || [];
+  if (cadRows.length < 1) throw new Error("Aba cadastro_rascunhos não carregada.");
+
+  const cab = cadRows[0];
+  let iColEm = cab.indexOf("conferido_em");
+  let iColPor = cab.indexOf("conferido_por");
+
+  if (iColEm < 0){
+    await write(`cadastro_rascunhos!${colL(cab.length)}1`, [["conferido_em"]]);
+    iColEm = cab.length;
+    cab.push("conferido_em");
+  }
+  if (iColPor < 0){
+    await write(`cadastro_rascunhos!${colL(cab.length)}1`, [["conferido_por"]]);
+    iColPor = cab.length;
+    cab.push("conferido_por");
+  }
+
+  if (item.rascunho_row){
+    const row = item.rascunho_row;
+    const valEm = marcar ? agora : "";
+    const valPor = marcar ? quem : "";
+
+    await write(`cadastro_rascunhos!${colL(iColEm)}${row}`, [[valEm]]);
+    await write(`cadastro_rascunhos!${colL(iColPor)}${row}`, [[valPor]]);
+
+    item.conferido_em = valEm;
+    item.conferido_por = valPor;
+
+    if (cadRows[row - 1]){
+      while (cadRows[row - 1].length <= Math.max(iColEm, iColPor)) cadRows[row - 1].push("");
+      cadRows[row - 1][iColEm] = valEm;
+      cadRows[row - 1][iColPor] = valPor;
+    }
+  } else {
+    if (!marcar) return;
+
+    const novaLinha = new Array(cab.length).fill("");
+    const setCampo = (campo, v) => {
+      const idx = cab.indexOf(campo);
+      if (idx >= 0) novaLinha[idx] = v;
+    };
+
+    const idLote = "loja-" + item.produto_id;
+    setCampo("id", idLote);
+    setCampo("lote", "loja");
+    setCampo("status", "publicado");
+    setCampo("titulo", item.titulo);
+    setCampo("marca", item.artista);
+    setCampo("categorias", item.categorias);
+    setCampo("preco", String(item.preco || ""));
+    setCampo("produto_id", String(item.produto_id || ""));
+    setCampo("link_loja", item.url ? ("https:[/][/]lojamonstro.com.br/produtos/" + item.url) : "");
+    setCampo("conferido_em", agora);
+    setCampo("conferido_por", quem);
+    setCampo("atualizado_em", agora);
+
+    const rowNum = cadRows.length + 1;
+    await write(`cadastro_rascunhos!A${rowNum}:${colL(cab.length - 1)}${rowNum}`, [novaLinha]);
+
+    cadRows.push(novaLinha);
+    item.rascunho_row = rowNum;
+    item.id_lote = idLote;
+    item.lote = "loja";
+    item.conferido_em = agora;
+    item.conferido_por = quem;
+  }
+}
+
+async function cdExecutarConferirEmMassa(itens, marcar){
+  for (const item of itens){
+    try {
+      await cdExecutarConferirItem(item, marcar);
+    } catch(e){
+      console.error("Falha ao atualizar conferência do item:", item, e);
+    }
+  }
+}
+
+function cdImprimirListaConferencia(itensFiltrados){
+  const html = cdMontarChecklistHtml(itensFiltrados, {
+    modo: CD_CONF_F_CONF,
+    lote: CD_CONF_F_LOTE,
+    dataInicio: CD_CONF_DE,
+    dataFim: CD_CONF_ATE,
+    busca: CD_CONF_BUSCA,
+    ordem: CD_CONF_ORDEM
+  });
+  const printArea = $("cd-print-area");
+  if (printArea){
+    printArea.innerHTML = html;
+    window.print();
+  }
 }
 
 function cdMontarChecklistHtml(itens, opcoes){
@@ -3958,7 +4582,7 @@ function cdIguais(o){
 const cdR = () => { if (D.cad) { try { renderCad(); } catch(e){ setErr("cad", "Não consegui desenhar o cadastro: o formato da aba mudou."); } } };
 
 const adR = () => { if (D.acd) renderAds(); };
-const RENDER = { itNum:renderCom, prodId:renderCom, cprod:renderCom, pman:renderCom, cajust:renderCom, itens:renderCom, prodA:renderCom, g4d:()=>{}, g4l:()=>{}, k7:renderK7, rcamp:()=>rpR(), rjog:()=>rpR(), rev:()=>rpR(), rlem:()=>rpR(), prodUrl:cdR, cad:cdR, cadf:cdR, acd:adR, ahoje:adR, aads:adR, asem:adR, aalert:adR, ares:adR, anotas:adR, adir:adR, atrib:renderAtrib, ped:()=>{renderCom(); renderAtrib();}, pedNum:()=>{renderCom(); renderAtrib();}, cauto:renderCom, comis:renderCom, fila:renderFila, rodada:renderFila, regcfg:renderRegCfg, bplano:renderBrevo, atual:()=>{renderAtual(); if (D.mensal) renderMensal();}, mensal:renderMensal, coortes:renderCoortes, regua:renderRegua, reguaRes:renderReguaRes, car:renderCar, vale:renderVale, ind:()=>{}, res:renderCarRes,
+const RENDER = { itNum:renderCom, prodId:renderCom, cprod:renderCom, pman:renderCom, cajust:renderCom, itens:renderCom, prodA:renderCom, g4d:()=>{}, g4l:()=>{}, k7:renderK7, rcamp:()=>rpR(), rjog:()=>rpR(), rev:()=>rpR(), rlem:()=>rpR(), prodUrl:cdR, prodImg:cdR, cad:cdR, cadf:cdR, acd:adR, ahoje:adR, aads:adR, asem:adR, aalert:adR, ares:adR, anotas:adR, adir:adR, atrib:renderAtrib, ped:()=>{renderCom(); renderAtrib();}, pedNum:()=>{renderCom(); renderAtrib();}, cauto:renderCom, comis:renderCom, fila:renderFila, rodada:renderFila, regcfg:renderRegCfg, bplano:renderBrevo, atual:()=>{renderAtual(); if (D.mensal) renderMensal();}, mensal:renderMensal, coortes:renderCoortes, regua:renderRegua, reguaRes:renderReguaRes, car:renderCar, vale:renderVale, ind:()=>{}, res:renderCarRes,
   cfg:()=>{renderCfg(); renderBrevoPill(); if (D.msgs) renderMsgs(); renderCom(); adR();}, msgs:renderMsgs, custos:()=>{renderCustos(); renderCom();} };
 
 ["g4d","g4l","k7","ped","pedNum","pedMail","itens","prodA","prodM","prodQ","cauto","custos","atrib","acd","cfg","fila","reguaLog","rjog","rcamp"].forEach(k => { const o = RENDER[k]; RENDER[k] = () => { if (o) o(); rsR(); if (VIEW === "k7") renderK7(); }; });
