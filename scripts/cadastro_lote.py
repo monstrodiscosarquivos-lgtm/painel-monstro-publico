@@ -23,6 +23,7 @@ import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from painel_monstro.coletor.discogs import eh_album_homonimo, normalizar
 from painel_monstro.config import Config, RAIZ_PROJETO, carregar
 from painel_monstro.log_publico import ArgumentParserSeguro, comando_seguro, resumo_erro
 from painel_monstro.saidas import cadastro as cad, fotos as mod_fotos
@@ -741,7 +742,7 @@ def _produtos_repetidos(titulo: str, linhas_produtos: list[list[str]]) -> list[d
         if not est or est <= 0:
             continue
         if identidade_titulo(d.get('nome', '')) == alvo:
-            achados.append({'nome': d.get('nome', ''), 'estoque': int(est), 'url': str(d.get('url', '')).strip('/')})
+            achados.append({'nome': d.get('nome', ''), 'estoque': int(est), 'url': str(d.get('url', '')).strip('/'), 'preco': numero(d.get('preco'))})
     return achados
 
 
@@ -761,6 +762,72 @@ def _rascunhos_repetidos(titulo: str, linhas_rasc: list[list[str]]) -> list[dict
         if identidade_titulo(d.get('titulo', '')) == alvo:
             achados.append({'id': d.get('id', ''), 'titulo': d.get('titulo', ''), 'status': d.get('status', '')})
     return achados
+
+
+def verificar_descricao_completa(o: dict[str, Any], formato: str = 'usado') -> list[str]:
+    """Valida o padrão obrigatório da descrição e ficha:
+    - 1 a 3 frases de contexto
+    - Gravadora, catálogo, país e ano da edição
+    - Formato (LP simples/duplo, capa simples/gatefold, encarte, etc.)
+    - Faixas completas por lado (Lado A / Lado B)
+    - Estado de conservação (Capa e Vinil)
+    - Destaques reais confirmados na lista de faixas
+    Retorna lista de motivos faltantes (vazia se completa).
+    """
+    motivos = []
+    desc = str(o.get('descricao') or '').strip()
+    faixas_str = str(o.get('faixas') or '').strip()
+    linhas_desc = [l.strip() for l in desc.splitlines() if l.strip()]
+
+    # 1. Contexto (1 a 3 frases antes dos tópicos)
+    paragrafos = [p.strip() for p in desc.split('\n\n') if p.strip()]
+    contexto = paragrafos[0] if paragrafos else desc
+    if not contexto or len(contexto) < 20:
+        motivos.append('contexto ausente')
+
+    # 2. Dados da edição: Gravadora, catálogo, país e ano
+    if formato == 'usado':
+        if not str(o.get('gravadora') or '').strip():
+            motivos.append('gravadora ausente')
+        if not o.get('ano'):
+            motivos.append('ano ausente')
+        if not str(o.get('pais') or '').strip():
+            motivos.append('país ausente')
+        if not str(o.get('catalogo') or '').strip():
+            motivos.append('catálogo ausente')
+
+    # 3. Faixas completas por lado (Lado A / Lado B)
+    texto_total_faixas = (desc + '\n' + faixas_str).lower()
+    tem_lado_a = bool(re.search(r'\b(lado\s*a|lado\s*1|face\s*a|a1\b)', texto_total_faixas))
+    tem_lado_b = bool(re.search(r'\b(lado\s*b|lado\s*2|face\s*b|b1\b)', texto_total_faixas))
+    if not (tem_lado_a and tem_lado_b):
+        motivos.append('faixas completas por lado ausentes (Lado A / Lado B)')
+
+    # 4. Estado de conservação (Capa e Vinil para usados)
+    if formato == 'usado':
+        tem_capa = any(l.startswith('• Capa') for l in linhas_desc)
+        tem_vinil = any(l.startswith('• Vinil') for l in linhas_desc)
+        if not (tem_capa and tem_vinil):
+            motivos.append('estado de conservação da capa/vinil ausente')
+
+    # 5. Destaques citados nos destaques ou contexto devem existir nas faixas
+    destaques = o.get('destaques')
+    texto_faixas_apenas = faixas_str
+    if not texto_faixas_apenas and (tem_lado_a or tem_lado_b):
+        linhas_f = [l for l in desc.splitlines() if re.search(r'^\s*(\d+|[a-z]\d*|\*|-|•)\s+', l, re.I) or 'lado ' in l.lower()]
+        texto_faixas_apenas = '\n'.join(linhas_f)
+
+    faixas_norm = normalizar(texto_faixas_apenas)
+    if isinstance(destaques, (list, tuple)):
+        for dest in destaques:
+            if dest and normalizar(dest) not in faixas_norm:
+                motivos.append(f"destaque '{dest}' não consta nas faixas")
+    elif isinstance(destaques, str) and destaques.strip():
+        for dest in [d.strip() for d in destaques.split(',') if d.strip()]:
+            if normalizar(dest) not in faixas_norm:
+                motivos.append(f"destaque '{dest}' não consta nas faixas")
+
+    return motivos
 
 
 def derivar_lote(
@@ -804,6 +871,8 @@ def derivar_lote(
         alb = str(o.get('album', '')).strip()
         ano = o.get('ano')
         anos = f' ({ano})' if ano else ''
+        if anos and alb.endswith(anos.strip()):
+            anos = ''
 
         formato = str(o.get('formato') or 'usado').strip().lower()
         if formato not in ('usado', 'lacrado', 'livro'):
@@ -867,6 +936,32 @@ def derivar_lote(
             )
             if msg_rep not in pend:
                 pend.append(msg_rep)
+            if tem_preco and rep.get('preco') and numero(rep.get('preco')) == numero(preco_val):
+                if 'possível disco fotografado duas vezes' not in pend:
+                    pend.append('possível disco fotografado duas vezes')
+
+        eh_hom = eh_album_homonimo(art, alb)
+        tem_catalogo = bool(str(o.get('catalogo') or '').strip())
+        tem_faixas_conf = bool(str(o.get('faixas') or '').strip())
+        tem_matriz = bool(str(o.get('matriz') or '').strip())
+        tem_prova = tem_catalogo or tem_faixas_conf or tem_matriz or bool(o.get('prova_fisica')) or bool(o.get('barcode'))
+
+        if eh_hom and not (tem_catalogo or tem_faixas_conf):
+            if 'edição não confirmada' not in pend:
+                pend.append('edição não confirmada')
+
+        if discogs_url and not tem_prova and formato != 'lacrado':
+            if 'edição não confirmada' not in pend:
+                pend.append('edição não confirmada')
+
+        if formato == 'usado':
+            motivos_desc = verificar_descricao_completa(o, formato=formato)
+            if motivos_desc:
+                if any('não consta nas faixas' in m for m in motivos_desc):
+                    if 'destaque fora das faixas' not in pend:
+                        pend.append('destaque fora das faixas')
+                if 'descrição incompleta' not in pend:
+                    pend.append('descrição incompleta')
 
         if str(o.get('confianca', '')).strip().lower() == 'baixa' and PENDENCIA_INCERTA not in pend:
             pend.append(PENDENCIA_INCERTA)
@@ -1001,6 +1096,10 @@ def derivar_lote(
         ficha = ficha.strip()
 
         desc = str(o.get('descricao', '')).strip()
+        if o.get('ano_original') and o.get('ano') and str(o.get('ano_original')).strip() != str(o.get('ano')).strip():
+            frase_reed = f"Reedição de {o['ano']} do álbum lançado originalmente em {o['ano_original']}."
+            if 'reedição de' not in desc.lower():
+                desc = frase_reed + ('\n\n' + desc if desc else '')
         primeira = re.split(r'(?<=\.)\s', desc.split('\n')[0])[0] if desc else ''
         if formato == 'livro':
             seo_t = titulo[:70]
@@ -1260,6 +1359,12 @@ def validar_lote(
             avisos.append((rotulo_d, f'Palavra de exagero na descrição: {", ".join(exageros)}.'))
         if str(o.get('confianca') or '').strip().lower() == 'baixa':
             avisos.append((rotulo_d, 'Avaliação com confiança baixa: conferir identificação.'))
+        if formato == 'usado':
+            motivos_desc = verificar_descricao_completa(o, formato=formato)
+            if motivos_desc:
+                avisos.append((rotulo_d, f'Descrição incompleta: {"; ".join(motivos_desc)}.'))
+            if eh_album_homonimo(str(o.get('artista') or ''), str(o.get('album') or '')) and not (o.get('catalogo') or o.get('faixas')):
+                avisos.append((rotulo_d, 'Álbum homônimo sem catálogo ou faixas confirmadas: edição não confirmada.'))
 
     derivado = derivar_lote(
         dados if isinstance(dados, dict) else {},

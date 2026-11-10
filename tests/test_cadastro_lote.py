@@ -927,3 +927,140 @@ def test_formato_livro_validacao_e_derivacao(tmp_path):
     # Foto de livro tem recorte inteira sem cantos manuais/automáticos
     f_info = deriv['detalhes_discos'][0]['fotos_site'][0]
     assert f_info['cantos'] is None
+
+# ----------------------------------------------------------------------------
+# Testes das novas regras de homonimos e descricao completa (PARTE A)
+# ----------------------------------------------------------------------------
+def test_homonimo_dois_releases_anos_diferentes_so_aceita_catalogo_que_bate():
+    from painel_monstro.coletor.discogs import Discogs
+
+    class RespMock:
+        def __init__(self, json_data, status_code=200):
+            self._json = json_data
+            self.status_code = status_code
+            self.headers = {}
+
+        def json(self):
+            return self._json
+
+    class SessaoMock:
+        def __init__(self, responses):
+            self.resps = list(responses)
+            self.chamadas = []
+
+        def get(self, url, **kw):
+            self.chamadas.append((url, kw))
+            return self.resps.pop(0)
+
+    # 1. Busca com catálogo correspondente ao release de 1993 (id 200)
+    rs_busca = [
+        {'id': 100, 'catno': '109.0090', 'year': 1990, 'title': 'Leandro & Leonardo - Leandro & Leonardo'},
+        {'id': 200, 'catno': '207405391', 'year': 1993, 'title': 'Leandro & Leonardo - Leandro & Leonardo'},
+    ]
+    release_200 = {
+        'id': 200,
+        'year': 1993,
+        'labels': [{'catno': '207405391', 'name': 'Chantecler'}],
+        'tracklist': [{'position': 'A1', 'title': 'Mexe Mexe', 'duration': '3:15', 'type_': 'track'}],
+        'extraartists': [],
+    }
+    stats = {'lowest_price': {'currency': 'BRL', 'value': 60}, 'num_for_sale': 1}
+    s = SessaoMock([RespMock({'results': rs_busca}), RespMock(release_200), RespMock(stats)])
+    cliente = Discogs('token-ficticio', s, dormir=lambda _: None, relogio=lambda: 0)
+
+    res = cliente.buscar('Leandro & Leonardo', catalogo='207405391', artista='Leandro & Leonardo', album='Leandro & Leonardo')
+    assert res['discogs_confianca'] == 'alta'
+    assert res['discogs_id'] == '200'
+    assert res['discogs_ano'] == '1993'
+
+    # 2. Busca sem catálogo para álbum homônimo -> rejeitada (confiança baixa)
+    s2 = SessaoMock([])
+    cliente2 = Discogs('token-ficticio', s2, dormir=lambda _: None, relogio=lambda: 0)
+    res2 = cliente2.buscar('Leandro & Leonardo', catalogo='', artista='Leandro & Leonardo', album='Leandro & Leonardo')
+    assert res2['discogs_confianca'] == 'baixa'
+
+    # 3. Busca com catálogo diferente dos releases -> rejeitada
+    s3 = SessaoMock([RespMock({'results': rs_busca})])
+    cliente3 = Discogs('token-ficticio', s3, dormir=lambda _: None, relogio=lambda: 0)
+    res3 = cliente3.buscar('Leandro & Leonardo', catalogo='CATALOGO_INEXISTENTE', artista='Leandro & Leonardo', album='Leandro & Leonardo')
+    assert res3['discogs_confianca'] == 'baixa'
+
+
+def test_destaque_que_nao_esta_nas_faixas_gera_alerta():
+    lote_dados = {
+        'lote': '2026-11-10',
+        'discos': [
+            {
+                'disco': 'd01',
+                'acao': 'cadastrar',
+                'formato': 'usado',
+                'artista': 'Leandro & Leonardo',
+                'album': 'Leandro & Leonardo',
+                'ano': 1990,
+                'gravadora': 'Chantecler',
+                'catalogo': '2.07.405.335',
+                'pais': 'Brasil',
+                'capa': 'VG+',
+                'vinil': 'VG+',
+                'preco_etiqueta': 60,
+                'faixas': 'Lado A:\n1. Pense em Mim\n2. Cadê Você\nLado B:\n1. Desculpe Mas Eu Não Vou Chorar',
+                'destaques': ['Mexe Mexe'],  # Não está nas faixas deste disco de 1990
+                'descricao': (
+                    'Álbum clássico de 1990 da dupla goiana.\n\n'
+                    'Destaque para o hit Mexe Mexe.\n\n'
+                    '• Capa VG+\n'
+                    '• Vinil VG+'
+                ),
+                'fotos': [
+                    {'arquivo': 'f1.jpg', 'papel': 'capa'},
+                    {'arquivo': 'f2.jpg', 'papel': 'contracapa'},
+                    {'arquivo': 'f3.jpg', 'papel': 'etiqueta'},
+                ],
+            }
+        ]
+    }
+    planilha = _nova_planilha()
+    deriv = cl.derivar_lote(lote_dados, planilha=planilha, usar_nomes_novos=False)
+    rasc = deriv['rascunhos_dicts'][0]
+    assert 'destaque fora das faixas' in rasc['pendencias']
+    assert 'descrição incompleta' in rasc['pendencias']
+    assert rasc['publicar'] == 'nao'
+
+
+def test_descricao_sem_faixas_gera_alerta():
+    lote_dados = {
+        'lote': '2026-11-10',
+        'discos': [
+            {
+                'disco': 'd01',
+                'acao': 'cadastrar',
+                'formato': 'usado',
+                'artista': 'Sepultura',
+                'album': 'Arise',
+                'ano': 1991,
+                'gravadora': 'Roadrunner',
+                'catalogo': 'RR 9328-1',
+                'pais': 'Brasil',
+                'capa': 'VG+',
+                'vinil': 'VG+',
+                'preco_etiqueta': 180,
+                'faixas': '',  # Sem faixas
+                'descricao': (
+                    'Clássico do thrash metal brasileiro lançado em 1991 pela Roadrunner.\n\n'
+                    '• Capa VG+\n'
+                    '• Vinil VG+'
+                ),
+                'fotos': [
+                    {'arquivo': 'f1.jpg', 'papel': 'capa'},
+                    {'arquivo': 'f2.jpg', 'papel': 'contracapa'},
+                    {'arquivo': 'f3.jpg', 'papel': 'etiqueta'},
+                ],
+            }
+        ]
+    }
+    planilha = _nova_planilha()
+    deriv = cl.derivar_lote(lote_dados, planilha=planilha, usar_nomes_novos=False)
+    rasc = deriv['rascunhos_dicts'][0]
+    assert 'descrição incompleta' in rasc['pendencias']
+    assert rasc['publicar'] == 'nao'
+

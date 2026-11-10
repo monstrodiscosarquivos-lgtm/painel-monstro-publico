@@ -130,8 +130,10 @@ def test_usado_com_cantos_recorta_antes_de_comparar_capa_e_aceita_rotulo(tmp_pat
         lote='2026-11-05',
         discos=[dict(
             acao='cadastrar', formato='usado', artista='Banda', album='Disco',
+            ano=1985, gravadora='Rock Discos', catalogo='RK-001', pais='Brasil',
             capa='VG+', vinil='VG+', preco_etiqueta=130, genero='Classic Rock',
-            descricao='Texto.\n\n• Capa VG+\n• Vinil VG+', tags='Banda, Disco, LP, LP Usado, Vinil Usado',
+            faixas='Lado A:\n1. Faixa 1\nLado B:\n1. Faixa 2',
+            descricao='Texto clássico da banda.\n\n• Capa VG+\n• Vinil VG+', tags='Banda, Disco, LP, LP Usado, Vinil Usado',
             discogs_url='https://www.discogs.com/release/1', discogs_confianca='alta',
             capa_discogs_arquivo='oficial.jpg', rotulo_titulo='Disco',
             fotos=[

@@ -1,3 +1,31 @@
+# Atualização de sessão · Regras anti-homônimos no cadastro, lote 2026-11-10-a e diagnóstico da loja (D-104), 10/11/2026
+
+- **Regras no código para identificação e descrições (Parte A):**
+  - Identificação Discogs com prova física: só aceita correspondência se houver catálogo exato, gravadora + faixas, ou matriz do rótulo nas fotos. Nome de artista e álbum nunca bastam sozinhos.
+  - Trava para homônimos e sem título próprio: artista igual ao álbum, "Volume X" ou coletâneas genéricas exigem catálogo ou faixas comprovadas; caso contrário, gera alerta "edição não confirmada" e bloqueia publicação direta (`publicar = 'nao'`).
+  - Ano da edição: fixado pelo catálogo comprovado; reedições trazem o texto padrão "Reedição de AAAA do álbum lançado originalmente em AAAA", sem duplicar ano no título.
+  - Descrição completa obrigatória: contexto (1 a 3 frases), ficha técnica completa (gravadora, catálogo, país, ano), formato físico (LP simples/duplo, capa, encarte), faixas completas organizadas por Lado A e Lado B, e estado de conservação (Capa e Vinil). Destaques citados no texto DEVEM existir no repertório do disco; se faltar ou houver divergência, gera alerta "descrição incompleta" ou "destaque fora das faixas" e bloqueia publicação.
+  - Testes automatizados implementados e validados em `tests/test_cadastro_lote.py`. Suite completa com 818 testes passando (1 ignorado) e 0 problemas na auditoria.
+
+- **Processamento do novo lote 2026-11-10-a (Parte B):**
+  - 8 itens processados e gravados como rascunho na aba `cadastro_rascunhos` (IDs `2026-11-10-a-01` a `08`), sem criar nada na Nuvemshop.
+  - Fotos renomeadas e organizadas em `entrada/processadas/2026-11-10-a/` no Google Drive.
+  - Casos notáveis identificados visualmente nas fotos:
+    - Item 3 não era 14 Bis, mas sim Rita Lee & Tutti Frutti - Atrás do Porto Tem Uma Cidade (1980/1974), com etiqueta de R$ 300. Capa original Philips de 1974 com disco da prensagem Fontana Fora de Série de 1980.
+    - Dois discos do Belchior: Objeto Direto (1980, R$ 250 na etiqueta) e Alucinação (1976/1980, R$ 500 na etiqueta). Fotos e matrizes distintas, sem duplicidade de registro.
+    - Livro de Pedro de Luna sobre o Mundo Livre S/A (R$ 230, exemplar novo lacrado).
+    - Faith No More - The Real Thing (1990, R$ 180 na etiqueta).
+
+- **Diagnóstico dos discos já cadastrados na loja (Parte C):**
+  - Varredura dos 197 produtos criados pelo cadastro automático:
+    - Leandro & Leonardo R$ 60: produto 378897418 (publicado como Vol. 3 de 1989) é na verdade o Vol. 4 de 1990 e traz dedicatória autografada por Leandro e Leonardo na capa; produto 378897954 (publicado como Vol. 4 de 1990) é o Vol. 7 de 1993.
+    - Elis Regina: produto 379327344 (publicado como Elis 1980 da EMI) teve a descrição e faixas puxadas do disco homônimo de 1977 da Philips (com "Romaria").
+    - Três produtos com ano duplicado no título: Roupa Nova (1982), Roberto Carlos (1993) e Roberta Miranda (1990).
+    - 129 produtos da fase inicial com descrição resumida (sem a separação detalhada de faixas por lado).
+    - Nenhuma alteração foi gravada na loja ou na planilha referente aos produtos antigos (apenas diagnóstico para decisão do Túlio).
+
+Próximo passo: Túlio avaliar os rascunhos do lote 2026-11-10-a no Painel e aprovar as correções dos álbuns homônimos antigos apontados no diagnóstico.
+
 # Atualização de sessão · Disparo reserva da rotina, ajuste de cron e migração para Node 24 (D-103), 08/11/2026
 
 - **Disparo reserva da rotina e estabilização de agendamento:**

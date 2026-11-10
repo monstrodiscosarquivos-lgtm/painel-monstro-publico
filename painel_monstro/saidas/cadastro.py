@@ -228,7 +228,16 @@ def foto_publicavel(f, lacrado=False):
 def publicar_sem_alerta(linha, capa_confere=False, habilitado=True, tem_oficial=True):
     if eh_lacrado(linha) and not tem_oficial:
         return False
-    return bool(habilitado and not str(linha.get('pendencias', '')).strip()
+    pend = str(linha.get('pendencias', '')).strip()
+    travas = (
+        'edição não confirmada',
+        'descrição incompleta',
+        'destaque fora das faixas',
+        'possível disco fotografado duas vezes',
+    )
+    if any(t in pend for t in travas):
+        return False
+    return bool(habilitado and not pend
                 and capa_confere and linha.get('preco_origem') == 'etiqueta'
                 and numero(linha.get('preco')) and texto_normal(linha.get('discogs_confianca')) == 'alta')
 
