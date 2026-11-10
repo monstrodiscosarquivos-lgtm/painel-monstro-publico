@@ -287,3 +287,21 @@ eferencia.
 - Implementação e verificação:
   - Criado script `scripts/trocar_fotos_lacrados_sem_discogs.py` com modo simulação por padrão e flag `--aplicar` para execução real, gerando relatório em `dados/troca_fotos_lacrados_d102.json` (fora do git).
   - Testes unitários adicionados em `tests/test_lacrado_sem_oficial.py` cobrindo `foto_publicavel(lacrado=True)`, derivação e validação de lote sem foto oficial, rotina de rascunho/aprovação sem upload de referência e fluxo completo de simulação/aplicação da D-102.
+
+
+## D-103 · Disparo reserva da rotina no Apps Script, ajuste de cron e migração para Node 24 (08/11/2026)
+
+- Contexto e problema:
+  - O agendamento da Rotina do Painel no GitHub Actions vinha descartando rodadas agendadas por oscilações do agendador do GitHub.
+- Mudanças nos workflows:
+  - O cron da rotina em `rotina.yml` passou do minuto 7 para o minuto 17 (`17 * * * *`).
+  - Adicionado `repository_dispatch: types: [rotina]` ao `rotina.yml` (mantendo `workflow_dispatch`).
+  - Concorrência `rotina-painel` (`cancel-in-progress: false`) confirmada e mantida em `rotina.yml` e `cadastro.yml`.
+  - Workflows atualizados para versões com suporte a Node 24 (`actions/checkout@v6`, `actions/setup-python@v7`, `actions/cache/restore@v5`, `actions/cache/save@v5`).
+- Disparo reserva no Apps Script (`apps-script/fila-por-email.gs`):
+  - Criada função `verificarDisparoReserva()` acionada por gatilho de tempo a cada 30 minutos (e também na checagem horária).
+  - Se a última rodada boa (`rodada!A2`) tiver mais de 75 minutos, verifica se há execução em andamento no GitHub via API; se não houver e o cooldown de 30 minutos tiver passado, dispara a rotina via `repository_dispatch` (com fallback para `workflow_dispatch`).
+  - Todas as tentativas e respostas do GitHub são registradas na nova aba `disparos_reserva` e nas propriedades do script (`ScriptProperties`).
+  - Criada função de teste manual `dispararRotinaReservaAgora()` para teste imediato no editor do Apps Script.
+- Ajuste do alerta por email:
+  - O alerta de rotina parada (> 3 horas) em `verificarRodada_()` agora inclui no corpo do email o status da tentativa do disparo reserva e a resposta exata do GitHub.

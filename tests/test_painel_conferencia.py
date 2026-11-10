@@ -53,7 +53,7 @@ def test_painel_conferencia_playwright():
 
     init_js = f"""
     window._writes = [];
-    window.PM = {{ nivel: 'especial', nome: 'Tulio', email: 'tulio@monstro.com' }};
+    window.PM = {{ nivel: 'especial', nome: 'Tulio', email: 'tulio@exemplo.com' }};
     const mockData = {json.dumps(mock_data)};
 
     window.google = {{

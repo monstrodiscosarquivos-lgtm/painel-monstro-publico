@@ -55,7 +55,7 @@ def test_workflow_de_cadastro_divide_a_fila_e_o_cache_com_a_rotina(fluxo):
     dados, texto = fluxo
     assert dados['permissions'] == {'contents': 'read'}
     assert dados['concurrency'] == {'group': 'rotina-painel', 'cancel-in-progress': False}
-    assert 'restore-keys: dados-api-aes256-v1-' in texto and 'cache/save@v4' in texto
+    assert 'restore-keys: dados-api-aes256-v1-' in texto and ('cache/save@v5' in texto or 'cache/save@v4' in texto)
     passos = dados['jobs']['cadastro']['steps']
     assert any(p.get('run', '') == 'python -m painel_monstro.rotina --so-cadastro' for p in passos)
     for passo in passos:

@@ -23,12 +23,12 @@ jobs:
     timeout-minutes: 40
     steps:
       - name: Baixar o código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Instalar o Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip
@@ -38,7 +38,7 @@ jobs:
 
       - name: Recuperar somente o envelope criptografado
         continue-on-error: true
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: dados/cache-publico/api.aes256
           key: dados-api-aes256-v1-${{ github.run_id }}-${{ github.run_attempt }}
@@ -74,7 +74,7 @@ jobs:
       - name: Guardar somente cache criptografado
         if: ${{ always() && steps.cache_seguro.outputs.pronto == 'sim' }}
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: dados/cache-publico/api.aes256
           key: dados-api-aes256-v1-${{ github.run_id }}-${{ github.run_attempt }}

@@ -12,13 +12,17 @@
  *     se não saiu às 8h, sai na hora seguinte com "(atrasado)".
  *  3. Alerta do Brevo: se a aba `rodada` mostra brevo_status "erro..." (chave inválida ou bloqueio de IP), manda o mesmo
  *     email de alerta, no máximo um por dia para cada tipo de erro.
- *  4. Alerta: se a aba `rodada` mostra que nenhuma rodada do Painel deu certo há mais de 3 horas
+ *  4. Disparo reserva: a cada 30 minutos verifica a última rodada da rotina na aba `rodada`. Se passou
+ *     de 75 minutos, dispara a rotina no GitHub Actions (repository_dispatch / workflow_dispatch) e grava
+ *     na aba `disparos_reserva`. Não repete se houver rodada em andamento ou disparada há menos de 30 minutos.
+ *  5. Alerta de parada: se a aba `rodada` mostra que nenhuma rodada do Painel deu certo há mais de 3 horas
  *     (parâmetro "Horas sem rodada para alertar"), manda um email de alerta para o endereço da linha
- *     "Email de alerta (rotina parada)" da aba Configuração. Um alerta por parada, sem repetir.
+ *     "Email de alerta (rotina parada)" da aba Configuração, informando se o disparo reserva foi tentado e
+ *     a resposta do GitHub. Um alerta por parada, sem repetir.
  *
  * Ao marcar Enviei agora, registra contador, data/hora e status com uma única marcação.
  * Não envia nada ao cliente: o WhatsApp é sempre enviado por uma pessoa.
- * Funções para rodar à mão: instalar, desinstalar, enviarAgora, enviarResumoAgora, testarAlerta.
+ * Funções para rodar à mão: instalar, desinstalar, enviarAgora, enviarResumoAgora, testarAlerta, dispararRotinaReservaAgora.
  */
 
 var HORARIOS = [10, 17];            // padrão; vale a linha "Horários da fila" da aba Configuração (ex.: "10h, 13h e 17h")
@@ -29,6 +33,10 @@ var ABA_RODADA = 'rodada';
 var ABA_SEMANA = 'resumo_semana';
 var ABA_ATUAL = 'atual';
 var ABA_RESUMO = 'resumo_email';
+var ABA_LOG_DISPAROS = 'disparos_reserva';
+var MINUTOS_RODADA_ATRASADA = 75;
+var MINUTOS_COOLDOWN_DISPARO = 30;
+var WORKFLOW_ROTINA_FILE = 'rotina.yml';
 var HORA_DO_RESUMO = 8;   // segunda, 8h (Brasília)
 var AVISO_NAO_MARCADA = 'Estava na fila de ontem';
 
@@ -155,21 +163,22 @@ function registrarEnvio_(e, cab) {
   }
 }
 
-/** Rode UMA vez: cria o agendamento de hora em hora. Rodar de novo não duplica. */
+/** Rode UMA vez: cria o agendamento de hora em hora e o disparo reserva a cada 30 minutos. Rodar de novo não duplica. */
 function instalar() {
   removerAgendamentos_();
   ScriptApp.newTrigger('cadaHora').timeBased().everyHours(1).create();
+  ScriptApp.newTrigger('verificarDisparoReserva').timeBased().everyMinutes(30).create();
   // Não manda como "atrasada" o que já passou do horário antes da instalação.
   var hora = Number(Utilities.formatDate(new Date(), FUSO, 'H'));
   horariosDaFila_(lerConfig_()).forEach(function (h) { if (h <= hora) marcarEnviado_(h); });
-  Logger.log('Pronto: verificação de hora em hora. Fuso do script: ' + Session.getScriptTimeZone() +
-    ' (a fila usa sempre o horário de Brasília).');
+  Logger.log('Pronto: verificação de hora em hora e disparo reserva a cada 30 minutos. Fuso do script: ' +
+    Session.getScriptTimeZone() + ' (a fila usa sempre o horário de Brasília).');
 }
 
-/** Rode para parar tudo. */
+/** Rode para parar tudo (fila, alertas e disparo reserva). */
 function desinstalar() {
   removerAgendamentos_();
-  Logger.log('Agendamento removido.');
+  Logger.log('Agendamentos removidos.');
 }
 
 /** Teste: manda a fila agora, ignorando horário e "já enviado", sem marcar nada como enviado. */
@@ -196,6 +205,7 @@ function testarAlerta() {
 
 /** Chamada de hora em hora pelo agendamento. */
 function cadaHora() {
+  try { verificarDisparoReserva(); } catch (e) { Logger.log('Erro no disparo reserva: ' + e); }
   try { verificarRodada_(); } catch (e) { Logger.log('Erro no alerta: ' + e); }
   try { verificarBrevo_(); } catch (e) { Logger.log('Erro no alerta do Brevo: ' + e); }
   try { enviarResumo_({ forcar: false }); } catch (e) { Logger.log('Não consegui enviar o resumo agora: ' + e); }
@@ -353,6 +363,185 @@ function verificarBrevo_() {
   props.setProperty(chave, '1');
 }
 
+// ---------------------------------------------------------------- disparo reserva da rotina
+
+/**
+ * Disparo reserva: verifica se a rotina no GitHub está atrasada (> 75 minutos) e pede a execução.
+ * Chamado pelo gatilho de tempo a cada 30 minutos (e também na verificação de cadaHora).
+ */
+function verificarDisparoReserva() {
+  var trava = LockService.getScriptLock();
+  if (!trava.tryLock(2000)) return;
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var abaRodada = ss.getSheetByName(ABA_RODADA);
+    if (!abaRodada || abaRodada.getLastRow() < 2) return;
+    var texto = String(abaRodada.getRange(2, 1).getDisplayValue()).trim();
+    if (!texto) return;
+
+    var ultima = Utilities.parseDate(texto, FUSO, 'yyyy-MM-dd HH:mm');
+    if (!ultima) return;
+
+    var agora = new Date();
+    var minutosParado = Math.floor((agora.getTime() - ultima.getTime()) / 60000);
+    if (minutosParado < MINUTOS_RODADA_ATRASADA) return;
+
+    var props = PropertiesService.getScriptProperties();
+    var ultimoDisparoMs = Number(props.getProperty('ROTINA_ULTIMO_DISPARO_MS') || 0);
+    if (agora.getTime() - ultimoDisparoMs < MINUTOS_COOLDOWN_DISPARO * 60 * 1000) {
+      Logger.log('Disparo reserva em cooldown (último disparo há menos de ' + MINUTOS_COOLDOWN_DISPARO + ' min).');
+      return;
+    }
+
+    var config = lerConfig_();
+    var repo = props.getProperty('GITHUB_REPO') || config['Repositório GitHub'] || '';
+    var token = props.getProperty('GITHUB_TOKEN') || '';
+
+    if (repo && token) {
+      var checagem = haRotinaEmAndamento_(repo, token);
+      if (checagem.emAndamento) {
+        Logger.log('Rotina já em andamento ou na fila no GitHub (status: ' + checagem.status + '). Disparo ignorado.');
+        return;
+      }
+    }
+
+    var motivo = 'Rotina sem rodada há ' + minutosParado + ' min (limite: ' + MINUTOS_RODADA_ATRASADA + ' min)';
+    var res = dispararRotinaNoGitHub_(motivo);
+
+    props.setProperty('ROTINA_ULTIMO_DISPARO_MS', String(agora.getTime()));
+    props.setProperty('ROTINA_ULTIMO_DISPARO_QUANDO', Utilities.formatDate(agora, FUSO, 'yyyy-MM-dd HH:mm'));
+    props.setProperty('ROTINA_ULTIMO_DISPARO_SUCESSO', res.sucesso ? 'sim' : 'nao');
+    props.setProperty('ROTINA_ULTIMO_DISPARO_RESPOSTA', res.detalhe);
+    props.setProperty('ROTINA_ULTIMO_DISPARO_MINUTOS', String(minutosParado));
+
+    registrarLogDisparo_(ss, motivo, minutosParado, res.sucesso, res.codigo, res.detalhe);
+  } finally {
+    trava.releaseLock();
+  }
+}
+
+/** Verifica se há alguma rodada da rotina em andamento ou na fila no GitHub Actions. */
+function haRotinaEmAndamento_(repo, token) {
+  try {
+    var resp = UrlFetchApp.fetch('https://api.github.com/repos/' + repo + '/actions/workflows/' + WORKFLOW_ROTINA_FILE + '/runs?per_page=5', {
+      headers: {
+        Authorization: 'Bearer ' + token,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      },
+      muteHttpExceptions: true
+    });
+    if (resp.getResponseCode() === 200) {
+      var dados = JSON.parse(resp.getContentText());
+      var runs = dados.workflow_runs || [];
+      for (var i = 0; i < runs.length; i++) {
+        var st = String(runs[i].status || '').toLowerCase();
+        if (st === 'in_progress' || st === 'queued' || st === 'waiting' || st === 'requested') {
+          return { emAndamento: true, status: st, id: runs[i].id };
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log('Aviso ao consultar execuções da rotina no GitHub: ' + e);
+  }
+  return { emAndamento: false };
+}
+
+/** Pede ao GitHub para rodar a rotina. Tenta repository_dispatch e depois workflow_dispatch. */
+function dispararRotinaNoGitHub_(motivo) {
+  var props = PropertiesService.getScriptProperties();
+  var config = lerConfig_();
+  var repo = props.getProperty('GITHUB_REPO') || config['Repositório GitHub'] || '';
+  var token = props.getProperty('GITHUB_TOKEN') || '';
+
+  if (!repo || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
+    var msgRepo = 'Configure GITHUB_REPO nas propriedades do script (DONO/REPOSITORIO).';
+    Logger.log(msgRepo);
+    return { sucesso: false, codigo: 0, detalhe: msgRepo };
+  }
+  if (!token) {
+    var msgToken = 'Falta a propriedade GITHUB_TOKEN nas propriedades do script.';
+    Logger.log(msgToken);
+    return { sucesso: false, codigo: 0, detalhe: msgToken };
+  }
+
+  // 1. repository_dispatch (o mesmo mecanismo do vigia-cadastro)
+  var codigo = 0;
+  var detalhe = '';
+  try {
+    var resp = UrlFetchApp.fetch('https://api.github.com/repos/' + repo + '/dispatches', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      },
+      payload: JSON.stringify({ event_type: 'rotina' }),
+      muteHttpExceptions: true
+    });
+    codigo = resp.getResponseCode();
+    if (codigo === 204) {
+      return { sucesso: true, codigo: 204, detalhe: 'repository_dispatch aceito (HTTP 204)' };
+    }
+    detalhe = 'repository_dispatch HTTP ' + codigo + ': ' + resp.getContentText().slice(0, 150);
+  } catch (e) {
+    detalhe = 'Erro no repository_dispatch: ' + String(e);
+  }
+
+  // 2. Fallback: workflow_dispatch
+  try {
+    var respWf = UrlFetchApp.fetch('https://api.github.com/repos/' + repo + '/actions/workflows/' + WORKFLOW_ROTINA_FILE + '/dispatches', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      },
+      payload: JSON.stringify({ ref: 'main' }),
+      muteHttpExceptions: true
+    });
+    codigo = respWf.getResponseCode();
+    if (codigo === 204) {
+      return { sucesso: true, codigo: 204, detalhe: 'workflow_dispatch aceito (HTTP 204)' };
+    }
+    detalhe = 'workflow_dispatch HTTP ' + codigo + ': ' + respWf.getContentText().slice(0, 150);
+  } catch (e) {
+    detalhe = 'Erro no workflow_dispatch: ' + String(e);
+  }
+
+  Logger.log('GitHub respondeu ' + detalhe);
+  return { sucesso: false, codigo: codigo, detalhe: detalhe };
+}
+
+/** Grava no histórico da aba disparos_reserva. */
+function registrarLogDisparo_(ss, motivo, minutosParado, sucesso, codigo, detalhe) {
+  try {
+    var aba = ss.getSheetByName(ABA_LOG_DISPAROS);
+    if (!aba) {
+      aba = ss.insertSheet(ABA_LOG_DISPAROS);
+      aba.appendRow(['Data e hora', 'Motivo', 'Minutos sem rodada', 'Disparo aceito?', 'Código HTTP', 'Detalhes da resposta']);
+      if (typeof aba.getRange === 'function') {
+        var r = aba.getRange('A1:F1');
+        if (r && typeof r.setFontWeight === 'function') r.setFontWeight('bold');
+      }
+    }
+    var agoraFormatado = Utilities.formatDate(new Date(), FUSO, 'yyyy-MM-dd HH:mm');
+    aba.appendRow([agoraFormatado, motivo, minutosParado, sucesso ? 'Sim' : 'Não', codigo, detalhe]);
+  } catch (e) {
+    Logger.log('Erro ao registrar log na aba ' + ABA_LOG_DISPAROS + ': ' + e);
+  }
+}
+
+/** Teste manual: dispara a rotina de reserva agora, independente do tempo sem rodada. */
+function dispararRotinaReservaAgora() {
+  var res = dispararRotinaNoGitHub_('Disparo manual via editor do Apps Script');
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  registrarLogDisparo_(ss, 'Disparo manual via editor', 0, res.sucesso, res.codigo, res.detalhe);
+  Logger.log(res.sucesso ? 'Pedido enviado com sucesso ao GitHub (HTTP 204).' : 'Falha no envio: ' + res.detalhe);
+}
+
 function verificarRodada_() {
   var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_RODADA);
   if (!aba || aba.getLastRow() < 2) return;
@@ -366,9 +555,28 @@ function verificarRodada_() {
   var props = PropertiesService.getScriptProperties();
   var chave = 'alerta:' + texto;
   if (props.getProperty(chave) === '1') return;   // já avisei dessa parada
+
+  // Informações do disparo reserva
+  var disparoQuando = props.getProperty('ROTINA_ULTIMO_DISPARO_QUANDO') || '';
+  var disparoSucesso = props.getProperty('ROTINA_ULTIMO_DISPARO_SUCESSO') || '';
+  var disparoResposta = props.getProperty('ROTINA_ULTIMO_DISPARO_RESPOSTA') || '';
+  var temConfig = Boolean((props.getProperty('GITHUB_REPO') || config['Repositório GitHub']) && props.getProperty('GITHUB_TOKEN'));
+
+  var infoDisparoHtml = '';
+  if (!temConfig) {
+    infoDisparoHtml = '<p><b>Disparo reserva:</b> não configurado. Adicione GITHUB_REPO e GITHUB_TOKEN nas propriedades do script para ativar o acionamento automático quando o agendamento do GitHub falhar.</p>';
+  } else if (disparoQuando) {
+    var statusTexto = disparoSucesso === 'sim' ? 'aceito pelo GitHub' : 'recusado pelo GitHub';
+    infoDisparoHtml = '<p><b>Disparo reserva:</b> tentado em <b>' + esc_(disparoQuando) + '</b> (' + statusTexto + ').<br>' +
+      'Resposta do GitHub: <code>' + esc_(disparoResposta) + '</code>.</p>';
+  } else {
+    infoDisparoHtml = '<p><b>Disparo reserva:</b> nenhuma tentativa recente registrada.</p>';
+  }
+
   var html = '<div style="font-family:Arial,sans-serif;font-size:14px">' +
     '<p><b>A rotina do Painel Monstro está parada.</b></p>' +
     '<p>A última rodada que deu certo foi em <b>' + esc_(texto) + '</b> (há cerca de ' + Math.floor(horasParado) + ' horas).</p>' +
+    infoDisparoHtml +
     '<p>O que fazer: abra a aba <b>Actions</b> do repositório no GitHub, clique em <b>Rotina do Painel</b> e veja o erro da última execução. ' +
     'Os dados já baixados não se perdem e a fila continua como estava; ela se atualiza sozinha quando a rotina voltar.</p>' +
     '</div>';
@@ -380,9 +588,10 @@ function verificarRodada_() {
 // ---------------------------------------------------------------- apoio
 
 function removerAgendamentos_() {
-  // Remove só o agendamento desta fila: o vigia do cadastro (vigia-cadastro.gs) tem o seu próprio.
+  // Remove agendamentos deste script: cadaHora e verificarDisparoReserva. O vigia do cadastro tem projeto próprio.
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'cadaHora') ScriptApp.deleteTrigger(t);
+    var f = t.getHandlerFunction();
+    if (f === 'cadaHora' || f === 'verificarDisparoReserva') ScriptApp.deleteTrigger(t);
   });
 }
 

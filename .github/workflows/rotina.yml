@@ -4,7 +4,9 @@ name: Rotina do Painel
 # e gravação na Planilha Google. Também pode ser rodada à mão em Actions > Rotina do Painel > Run workflow.
 on:
   schedule:
-    - cron: '7 * * * *'   # minuto 7 de cada hora (evita o horário de pico, o minuto 0)
+    - cron: '17 * * * *'   # minuto 17 de cada hora (evita o horário de pico, o minuto 0)
+  repository_dispatch:
+    types: [rotina]
   workflow_dispatch:
     inputs:
       completo:
@@ -29,12 +31,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Baixar o código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Instalar o Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip
@@ -45,7 +47,7 @@ jobs:
       # D-079: dados/api nunca é cacheado diretamente; só AES-256-GCM autenticado.
       - name: Recuperar somente o envelope criptografado
         continue-on-error: true
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: dados/cache-publico/api.aes256
           key: dados-api-aes256-v1-${{ github.run_id }}-${{ github.run_attempt }}
@@ -85,7 +87,7 @@ jobs:
       - name: Guardar somente cache criptografado
         if: ${{ always() && steps.cache_seguro.outputs.pronto == 'sim' }}
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: dados/cache-publico/api.aes256
           key: dados-api-aes256-v1-${{ github.run_id }}-${{ github.run_attempt }}

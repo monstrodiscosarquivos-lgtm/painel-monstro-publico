@@ -13,6 +13,7 @@ function criarAmbiente(estado) {
   const enviados = [];
   const props = {};
   const log = [];
+  const chamadasUrl = [];
   const fuso = -3 * 3600 * 1000; // Brasília (sem horário de verão)
   const baseData = Date;
   class Data extends baseData {
@@ -29,13 +30,16 @@ function criarAmbiente(estado) {
       getName: () => nome,
       getDataRange: () => ({ getValues: () => v, getDisplayValues: () => v.map((l) => l.map(String)) }),
       getLastRow: () => v.length,
-      getLastColumn: () => Math.max(...v.map((l) => l.length)),
+      getLastColumn: () => (v.length ? Math.max(...v.map((l) => l.length)) : 0),
+      appendRow: (linha) => { v.push(linha); },
       getRange: (r, c, nl = 1, nc = 1) => ({
-        getDisplayValue: () => String(v[r - 1][c - 1]), getValue: () => v[r - 1][c - 1],
+        getDisplayValue: () => String((v[r - 1] && v[r - 1][c - 1]) !== undefined ? v[r - 1][c - 1] : ''),
+        getValue: () => (v[r - 1] && v[r - 1][c - 1]),
         getValues: () => v.slice(r - 1, r - 1 + nl).map((l) => l.slice(c - 1, c - 1 + nc)),
-        setValue: (valor) => { v[r - 1][c - 1] = valor; },
-        setValues: (valores) => { valores.forEach((l, i) => l.forEach((x, j) => { v[r - 1 + i][c - 1 + j] = x; })); },
+        setValue: (valor) => { if (!v[r - 1]) v[r - 1] = []; v[r - 1][c - 1] = valor; },
+        setValues: (valores) => { valores.forEach((l, i) => l.forEach((x, j) => { if (!v[r - 1 + i]) v[r - 1 + i] = []; v[r - 1 + i][c - 1 + j] = x; })); },
         setNote: () => {},
+        setFontWeight: () => {},
       }),
     };
   };
@@ -44,16 +48,49 @@ function criarAmbiente(estado) {
     estado.abas.rodada[1][0] = `${pad(l.getUTCFullYear(), 4)}-${pad(l.getUTCMonth() + 1)}-${pad(l.getUTCDate())} ${pad(l.getUTCHours())}:${pad(l.getUTCMinutes())}`;
   }
   const contexto = {
-    LockService: { getDocumentLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
+    LockService: {
+      getDocumentLock: () => ({ waitLock: () => {}, releaseLock: () => {} }),
+      getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }),
+    },
     console, Logger: { log: (m) => log.push(String(m)) }, Date: Data,
-    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: aba, getUrl: () => 'https://planilha.exemplo' }) },
+    SpreadsheetApp: {
+      getActiveSpreadsheet: () => ({
+        getSheetByName: aba,
+        getUrl: () => 'https://planilha.exemplo',
+        insertSheet: (nome) => {
+          estado.abas[nome] = [];
+          return aba(nome);
+        },
+      }),
+    },
     Session: { getScriptTimeZone: () => 'America/Sao_Paulo', getEffectiveUser: () => ({ getEmail: () => 'dono@exemplo.com' }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = v; } }) },
     GmailApp: { sendEmail: (para, assunto, corpo, opcoes) => {
       if (estado.falharEnvio) throw new Error('Gmail fora do ar');
       enviados.push({ para, assunto, html: opcoes.htmlBody });
     } },
-    ScriptApp: { newTrigger: () => ({ timeBased: () => ({ everyHours: () => ({ create: () => {} }) }) }), getProjectTriggers: () => [], deleteTrigger: () => {} },
+    UrlFetchApp: {
+      fetch: (url, opcoes = {}) => {
+        chamadasUrl.push({ url, opcoes });
+        if (estado.mockUrlFetch) {
+          return estado.mockUrlFetch(url, opcoes);
+        }
+        return {
+          getResponseCode: () => 204,
+          getContentText: () => '',
+        };
+      },
+    },
+    ScriptApp: {
+      newTrigger: (fn) => ({
+        timeBased: () => ({
+          everyHours: () => ({ create: () => {} }),
+          everyMinutes: () => ({ create: () => {} }),
+        }),
+      }),
+      getProjectTriggers: () => [],
+      deleteTrigger: () => {},
+    },
     Utilities: {
       formatDate: (d, tz, fmt) => {
         const l = local(d);
@@ -66,7 +103,7 @@ function criarAmbiente(estado) {
   };
   vm.createContext(contexto);
   vm.runInContext(codigo, contexto);
-  return { ctx: contexto, enviados, props, log };
+  return { ctx: contexto, enviados, props, log, chamadasUrl };
 }
 
 function config(extra = {}) {
@@ -223,6 +260,113 @@ teste('alerta: com rodada recente não manda nada', () => {
   const a = criarAmbiente({ agora: utc('2026-10-20T10:00:00'), abas });
   a.ctx.cadaHora();
   assert.strictEqual(a.enviados.filter((x) => x.assunto.startsWith('ALERTA')).length, 0);
+});
+
+teste('disparo reserva: com rodada recente (< 75 min) não dispara nada', () => {
+  const abas = abasBase();
+  abas['rodada'][1][0] = '2026-10-20 09:30';
+  const a = criarAmbiente({ agora: utc('2026-10-20T10:00:00'), abas, manterRodada: true });
+  a.props.GITHUB_REPO = 'monstro/painel';
+  a.props.GITHUB_TOKEN = 'token-fake';
+  a.ctx.verificarDisparoReserva();
+  assert.strictEqual(a.chamadasUrl.length, 0);
+  assert.strictEqual(a.props.ROTINA_ULTIMO_DISPARO_QUANDO, undefined);
+  assert.strictEqual(abas['disparos_reserva'], undefined);
+});
+
+teste('disparo reserva: com rodada atrasada (> 75 min) dispara rotina e grava log', () => {
+  const abas = abasBase();
+  abas['rodada'][1][0] = '2026-10-20 08:30'; // 90 min atrasada em relação a 10:00
+  const a = criarAmbiente({ agora: utc('2026-10-20T10:00:00'), abas, manterRodada: true });
+  a.props.GITHUB_REPO = 'monstro/painel';
+  a.props.GITHUB_TOKEN = 'token-fake';
+  a.ctx.verificarDisparoReserva();
+  assert.ok(a.chamadasUrl.length >= 2);
+  const disparo = a.chamadasUrl.find((c) => c.url.includes('/dispatches'));
+  assert.ok(disparo);
+  assert.strictEqual(JSON.parse(disparo.opcoes.payload).event_type, 'rotina');
+  assert.strictEqual(a.props.ROTINA_ULTIMO_DISPARO_SUCESSO, 'sim');
+  assert.ok(abas['disparos_reserva']);
+  assert.strictEqual(abas['disparos_reserva'].length, 2); // cabeçalho + 1 linha
+  assert.strictEqual(abas['disparos_reserva'][1][3], 'Sim');
+});
+
+teste('disparo reserva: cooldown de 30 minutos impede disparos repetidos', () => {
+  const abas = abasBase();
+  abas['rodada'][1][0] = '2026-10-20 08:30';
+  const e = { agora: utc('2026-10-20T10:00:00'), abas, manterRodada: true };
+  const a = criarAmbiente(e);
+  a.props.GITHUB_REPO = 'monstro/painel';
+  a.props.GITHUB_TOKEN = 'token-fake';
+  a.ctx.verificarDisparoReserva();
+  const totalChamadas = a.chamadasUrl.length;
+  // Segunda chamada 15 minutos depois (ainda no cooldown de 30 min)
+  e.agora = utc('2026-10-20T10:15:00');
+  a.ctx.verificarDisparoReserva();
+  assert.strictEqual(a.chamadasUrl.length, totalChamadas);
+  assert.strictEqual(abas['disparos_reserva'].length, 2);
+});
+
+teste('disparo reserva: se já houver rodada em andamento no GitHub, não dispara', () => {
+  const abas = abasBase();
+  abas['rodada'][1][0] = '2026-10-20 08:30';
+  const e = {
+    agora: utc('2026-10-20T10:00:00'), abas, manterRodada: true,
+    mockUrlFetch: (url) => {
+      if (url.includes('/actions/workflows/rotina.yml/runs')) {
+        return {
+          getResponseCode: () => 200,
+          getContentText: () => JSON.stringify({ workflow_runs: [{ id: 123, status: 'in_progress' }] }),
+        };
+      }
+      return { getResponseCode: () => 204, getContentText: () => '' };
+    },
+  };
+  const a = criarAmbiente(e);
+  a.props.GITHUB_REPO = 'monstro/painel';
+  a.props.GITHUB_TOKEN = 'token-fake';
+  a.ctx.verificarDisparoReserva();
+  const disparos = a.chamadasUrl.filter((c) => c.url.includes('/dispatches'));
+  assert.strictEqual(disparos.length, 0);
+});
+
+teste('disparo reserva: fallback para workflow_dispatch se repository_dispatch retornar erro', () => {
+  const abas = abasBase();
+  abas['rodada'][1][0] = '2026-10-20 08:30';
+  const e = {
+    agora: utc('2026-10-20T10:00:00'), abas, manterRodada: true,
+    mockUrlFetch: (url) => {
+      if (url.endsWith('/dispatches') && !url.includes('/workflows/')) {
+        return { getResponseCode: () => 404, getContentText: () => 'Not Found' };
+      }
+      return { getResponseCode: () => 204, getContentText: () => '' };
+    },
+  };
+  const a = criarAmbiente(e);
+  a.props.GITHUB_REPO = 'monstro/painel';
+  a.props.GITHUB_TOKEN = 'token-fake';
+  a.ctx.verificarDisparoReserva();
+  const wfDisparo = a.chamadasUrl.find((c) => c.url.includes('/actions/workflows/rotina.yml/dispatches'));
+  assert.ok(wfDisparo);
+  assert.strictEqual(a.props.ROTINA_ULTIMO_DISPARO_SUCESSO, 'sim');
+});
+
+teste('alerta: parada > 3h inclui informação do disparo reserva no email', () => {
+  const abas = abasBase();
+  abas['rodada'][1][0] = '2026-10-20 06:00'; // 4h parado
+  const e = { agora: utc('2026-10-20T10:00:00'), abas, manterRodada: true };
+  const a = criarAmbiente(e);
+  a.props.GITHUB_REPO = 'monstro/painel';
+  a.props.GITHUB_TOKEN = 'token-fake';
+  a.props.ROTINA_ULTIMO_DISPARO_QUANDO = '2026-10-20 07:30';
+  a.props.ROTINA_ULTIMO_DISPARO_SUCESSO = 'sim';
+  a.props.ROTINA_ULTIMO_DISPARO_RESPOSTA = 'repository_dispatch aceito (HTTP 204)';
+  a.ctx.verificarRodada_();
+  const alertas = a.enviados.filter((x) => x.assunto.startsWith('ALERTA'));
+  assert.strictEqual(alertas.length, 1);
+  assert.ok(alertas[0].html.includes('Disparo reserva:'));
+  assert.ok(alertas[0].html.includes('2026-10-20 07:30'));
+  assert.ok(alertas[0].html.includes('aceito pelo GitHub'));
 });
 
 teste('dias da fila: leitura de "seg a sáb", lista e "todos"', () => {

@@ -1,3 +1,30 @@
+# Atualização de sessão · Disparo reserva da rotina, ajuste de cron e migração para Node 24 (D-103), 08/11/2026
+
+- **Disparo reserva da rotina e estabilização de agendamento:**
+  - Diagnóstico do cron no GitHub Actions: a rotina rodava no minuto 7 (`7 * * * *`). O cron foi alterado para o minuto 17 (`17 * * * *`), fugindo de congestionamentos de horário redondo.
+  - Concorrência validada: `concurrency: group: rotina-painel, cancel-in-progress: false` confirmada no `rotina.yml` e compartilhada com o `cadastro.yml`.
+  - Habilitado `repository_dispatch: types: [rotina]` sob `on:` no `rotina.yml`, permitindo acionamento pelo Apps Script via token GitHub.
+  - Criado o mecanismo de disparo reserva no Apps Script (`apps-script/fila-por-email.gs`):
+    - Função `verificarDisparoReserva()`: verifica se a última rodada boa (`rodada!A2`) ocorreu há mais de 75 minutos.
+    - Proteções anti-duplicata: trava de execução (`LockService.getScriptLock`), cooldown de 30 minutos entre disparos (`ROTINA_ULTIMO_DISPARO_MS`) e consulta prévia à API do GitHub (`/actions/workflows/rotina.yml/runs?per_page=5`) para checar se há rodadas em `in_progress` ou `queued`.
+    - Execução do disparo: envia `repository_dispatch` (evento `rotina`) com fallback automático para `workflow_dispatch`.
+    - Registro de logs: grava cada tentativa na aba `disparos_reserva` (data/hora, motivo, minutos sem rodada, sucesso, HTTP status e detalhes) e nas propriedades do script.
+    - Função `dispararRotinaReservaAgora()` para teste manual direto pelo editor do Apps Script.
+  - Ajuste no alerta por email (`verificarRodada_()`):
+    - O email de alerta de rotina parada (> 3 horas) agora informa o estado do disparo reserva (se foi tentado, quando ocorreu e qual foi o código/resposta do GitHub).
+  - Atualização dos workflows para Node 24:
+    - Atualizadas as actions em `.github/workflows/rotina.yml` e `.github/workflows/cadastro.yml`:
+      - `actions/checkout@v6`
+      - `actions/setup-python@v7`
+      - `actions/cache/restore@v5`
+      - `actions/cache/save@v5`
+  - Testes e auditoria:
+    - 62 testes locais do Apps Script passaram (`node apps-script/teste_local.js`), cobrindo checagem < 75 min, disparo > 75 min, cooldown de 30 min, detecção de rodada em andamento, fallback para workflow_dispatch e conteúdo do email de alerta.
+    - Suite de 815 testes Python passou (1 ignorado).
+    - Auditoria de publicação (`scripts/auditar_publicacao.py`) confirmou 144 arquivos versionados e 0 problemas.
+
+Próximo passo: Túlio atualizar o script `fila-por-email.gs` no Apps Script da Planilha Google, adicionar as propriedades `GITHUB_REPO` e `GITHUB_TOKEN` e executar a função `instalar`.
+
 # Atualização de sessão · Tela de Conferência física de estoque no Painel Web, 07/11/2026
 
 - **Tela de Conferência na aba Cadastro do Painel Web:**
