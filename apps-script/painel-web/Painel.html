@@ -4076,7 +4076,7 @@ function cdRenderConferencia(){
         <td style="text-align:center">
           <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin:0">
             <input type="checkbox" class="cd-conf-toggle-item" data-chave="${esc(chaveItem)}" ${conf ? "checked" : ""} style="cursor:pointer;width:17px;height:17px;margin:0">
-            <span style="font-weight:700;font-size:12px;color:${conf ? "var(--good)" : "var(--muted)"}">${conf ? "Conferido" : "Pendente"}</span>
+            <span style="font-weight:700;font-size:12px;color:${conf ? "var(--good)" : "var(--muted)"}">${conf ? "Conferido ✓" : "Marcar conferido"}</span>
           </label>
           ${conf ? `<div class="s" style="font-size:11px;color:var(--muted);margin-top:2px">${esc(o.conferido_em)}${o.conferido_por ? " · " + esc(o.conferido_por) : ""}</div>` : ""}
         </td>
