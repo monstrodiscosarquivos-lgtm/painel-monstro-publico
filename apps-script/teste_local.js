@@ -1436,26 +1436,31 @@ teste('Checklist em PDF: extracao de artista, filtros (lote, periodo, pendentes)
 
 teste('Tela de Conferência: consolidação de produtos e rascunhos, filtros, busca e contadores', () => {
   const p = extrairFuncoesPainel();
-  p.D.prodId = [['id'], ['101'], ['102'], ['103'], ['104']];
-  p.D.prodUrl = [['url'], ['disco-a'], ['disco-b'], ['disco-c'], ['livro-d']];
+  p.D.prodId = [['id'], ['101'], ['102'], ['103'], ['104'], ['105']];
+  p.D.prodUrl = [['url'], ['disco-a'], ['disco-b'], ['disco-c'], ['livro-d'], ['acervo-e']];
   p.D.prodA = [
     ['nome', 'categorias', 'preco', 'custo', 'estoque', 'tags', 'exibir'],
     ['LP Secos & Molhados - Secos & Molhados', 'LP, Usado', '150,00', '', '1', '', 'true'],
     ['LP Belchior - Alucinacao (Novo/Lacrado)', 'LP, Novos e Lacrados', '220,00', '', '2', '', 'true'],
     ['LP Elis Regina - Elis', 'LP, Usado', '90,00', '', '0', '', 'false'],
-    ['Livro Rock Gaucho', 'Livros', '80,00', '', '5', '', 'true']
+    ['Livro Rock Gaucho', 'Livros', '80,00', '', '5', '', 'true'],
+    ['LP Acervo Antigo - Sem Cadastro', 'LP, Usado', '70,00', '', '1', '', 'false']
   ];
-  p.D.prodM = [['criado_em'], ['2026-11-01 10:00:00'], ['2026-11-02 12:00:00'], ['2026-10-15 09:00:00'], ['2026-11-03 14:00:00']];
-  p.D.prodImg = [['imagem'], ['https://img.nuvemshop.com/101.jpg'], ['https://img.nuvemshop.com/102.jpg'], [''], ['']];
+  p.D.prodM = [['criado_em'], ['2026-11-01 10:00:00'], ['2026-11-02 12:00:00'], ['2026-10-15 09:00:00'], ['2026-11-03 14:00:00'], ['2025-01-10 10:00:00']];
+  p.D.prodImg = [['imagem'], ['https://img.nuvemshop.com/101.jpg'], ['https://img.nuvemshop.com/102.jpg'], [''], [''], ['']];
 
   p.D.cad = [
     ['id', 'titulo', 'preco', 'status', 'produto_id', 'conferido_em', 'conferido_por'],
     ['2026-11-01-01', 'LP Secos & Molhados - Secos & Molhados', '150', 'publicado', '101', '2026-11-05 18:30', 'tulio'],
-    ['2026-11-02-01', 'LP Belchior - Alucinacao (Novo/Lacrado)', '220', 'publicado', '102', '', '']
+    ['2026-11-02-01', 'LP Belchior - Alucinacao (Novo/Lacrado)', '220', 'publicado', '102', '', ''],
+    ['2026-10-15-01', 'LP Elis Regina - Elis', '90', 'criado', '103', '', ''],
+    ['2026-11-03-01', 'Livro Rock Gaucho', '80', 'publicado', '104', '', ''],
+    ['loja-105', 'LP Acervo Antigo - Sem Cadastro', '70', 'publicado', '105', '', '']
   ];
 
   const itens = p.cdDiscosConferencia();
-  assert.strictEqual(itens.length, 4, '4 produtos da loja');
+  assert.strictEqual(itens.length, 4, '4 discos do cadastro; acervo antigo (105, linha loja-) fica de fora');
+  assert.ok(!itens.some(x => x.produto_id === '105'));
 
   const item101 = itens.find(x => x.produto_id === '101');
   assert.ok(item101);
@@ -1471,7 +1476,7 @@ teste('Tela de Conferência: consolidação de produtos e rascunhos, filtros, bu
   assert.strictEqual(p.cdNovo(item102), true);
 
   const item103 = itens.find(x => x.produto_id === '103');
-  assert.strictEqual(item103.id_lote, '');
+  assert.strictEqual(item103.id_lote, '2026-10-15-01');
   assert.strictEqual(item103.estoque, 0);
   assert.strictEqual(item103.visivel, false);
 
@@ -1524,7 +1529,7 @@ teste('Tela de Conferência: consolidação de produtos e rascunhos, filtros, bu
   assert.strictEqual(porLote.length, 1);
   assert.strictEqual(porLote[0].produto_id, '101');
 
-  // Sem lote
+  // Sem lote: a opção saiu da tela, porque o acervo antigo não entra mais
   const semLote = p.cdFiltrarConferencia(itens, {
     fConf: 'todos',
     fTipo: 'todos',
@@ -1537,7 +1542,7 @@ teste('Tela de Conferência: consolidação de produtos e rascunhos, filtros, bu
     busca: '',
     ordem: 'artista'
   });
-  assert.strictEqual(semLote.length, 2); // 103 e 104
+  assert.strictEqual(semLote.length, 0); // só entram discos do cadastro, todos com lote
 });
 
 (async () => {

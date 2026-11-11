@@ -129,7 +129,7 @@ def test_painel_black_mobile_playwright():
         "black_resumo!A1:C50": mock_black_resumo,
         "black_dia!A1:O30": mock_black_dia,
         "margem_premissas!A1:F60": mock_margem,
-        "cadastro_rascunhos!A1:AR500": mock_cad,
+        "cadastro_rascunhos!A1:AZ3000": mock_cad,
         "cadastro_fotos!A1:F3000": [["id_foto", "ordem", "papel", "arquivo_drive_id"]],
         "Configuração!A1:C80": [["Parâmetro", "Valor", "Descrição"]]
     }

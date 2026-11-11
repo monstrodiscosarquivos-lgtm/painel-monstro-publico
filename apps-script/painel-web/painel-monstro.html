@@ -816,7 +816,7 @@ const RANGES = {
   acd: "anuncios_campanha_dia!A1:T3000", ahoje: "anuncios_hoje!A1:K400", aads: "anuncios_anuncios!A1:S300", asem: "anuncios_semana!A1:U600",
   aalert: "anuncios_alertas!A1:F100", ares: "anuncios_resumo!A1:B20", anotas: "anuncios_notas!A1:E400", adir: "anuncios_direcao!A1:C400",
   pedMail: "pedidos!B1:B8000", itens: "itens!C1:I9000", prodA: "produtos!B1:H7000", prodM: "produtos!M1:M7000", prodQ: "produtos!Q1:Q7000",
-  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodImg: "produtos!O1:O7000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AZ500", cadf: "cadastro_fotos!A1:F3000",
+  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodImg: "produtos!O1:O7000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AZ3000", cadf: "cadastro_fotos!A1:F3000",
   blackDia: "black_dia!A1:O30", blackRes: "black_resumo!A1:C50", margem: "margem_premissas!A1:F60",
   g4d: "ga4_diario!A1:I15000", g4l: "ga4_links!A1:I400", k7: "k7_resumo!A1:F500",
   itNum: "itens!A1:A9000", prodId: "produtos!L1:L7000", cprod: "comissao_produtos!A1:D300", pman: "pedidos_manuais!A1:N500", cajust: "comissao_ajustes!A1:D200"
@@ -3563,6 +3563,8 @@ function cdDiscosConferencia(){
     const imgUrl = String((imgs[i] && imgs[i][0]) || "").trim();
 
     const rasc = cadPorPid.get(pid);
+    // Só discos que passaram pelo cadastro do Painel; o acervo antigo da loja fica de fora.
+    if (!rasc || /^loja-/.test(String(rasc.id || ""))) continue;
 
     lista.push({
       origem: "produtos",
@@ -3824,7 +3826,6 @@ function cdRenderConferencia(){
         <select id="cd-conf-f-lote">
           <option value="" ${CD_CONF_F_LOTE === "" ? "selected" : ""}>Todos os lotes</option>
           ${lotesExistentes.map(l => `<option value="${esc(l)}" ${CD_CONF_F_LOTE === l ? "selected" : ""}>${esc(l)}</option>`).join("")}
-          <option value="__sem_lote__" ${CD_CONF_F_LOTE === "__sem_lote__" ? "selected" : ""}>Sem lote (produtos da loja)</option>
         </select>
       </label>
       <label class="s" style="display:inline-flex;align-items:center;gap:4px">

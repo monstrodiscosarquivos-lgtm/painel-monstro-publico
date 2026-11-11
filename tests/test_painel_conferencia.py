@@ -32,21 +32,23 @@ def test_painel_conferencia_playwright():
     file_url = f"file:///{html_file}"
 
     mock_data = {
-        "produtos!L1:L7000": [["id"], ["101"], ["102"], ["103"], ["104"]],
-        "produtos!A1:A7000": [["url"], ["secos-molhados"], ["belchior-alucinacao"], ["elis-regina"], ["livro-rock"]],
+        "produtos!L1:L7000": [["id"], ["101"], ["102"], ["103"], ["104"], ["105"]],
+        "produtos!A1:A7000": [["url"], ["secos-molhados"], ["belchior-alucinacao"], ["elis-regina"], ["livro-rock"], ["acervo-antigo"]],
         "produtos!B1:H7000": [
             ["nome", "categorias", "preco", "custo", "estoque", "tags", "exibir"],
             ["LP Secos & Molhados - Secos & Molhados", "LP, Usado", "150,00", "", "1", "", "true"],
             ["LP Belchior - Alucinacao (Novo/Lacrado)", "LP, Novos e Lacrados", "220,00", "", "2", "", "true"],
             ["LP Elis Regina - Elis", "LP, Usado", "90,00", "", "1", "", "true"],
             ["Livro Rock Gaucho", "Livros", "80,00", "", "3", "", "true"],
+            ["LP Acervo Antigo - Disco Anterior ao Cadastro", "LP, Usado", "70,00", "", "1", "", "false"],
         ],
-        "produtos!M1:M7000": [["criado_em"], ["2026-11-01 10:00:00"], ["2026-11-02 12:00:00"], ["2026-10-15 09:00:00"], ["2026-11-03 14:00:00"]],
-        "produtos!O1:O7000": [["imagem"], ["https://img.nuvemshop.com/101.jpg"], ["https://img.nuvemshop.com/102.jpg"], [""], [""]],
-        "cadastro_rascunhos!A1:AZ500": [
+        "produtos!M1:M7000": [["criado_em"], ["2026-11-01 10:00:00"], ["2026-11-02 12:00:00"], ["2026-10-15 09:00:00"], ["2026-11-03 14:00:00"], ["2025-01-10 10:00:00"]],
+        "produtos!O1:O7000": [["imagem"], ["https://img.nuvemshop.com/101.jpg"], ["https://img.nuvemshop.com/102.jpg"], [""], [""], [""]],
+        "cadastro_rascunhos!A1:AZ3000": [
             ["id", "titulo", "preco", "status", "produto_id", "conferido_em", "conferido_por", "marcado_vinil", "atualizado_em"],
             ["2026-11-01-01", "LP Secos & Molhados - Secos & Molhados", "150", "publicado", "101", "2026-11-05 18:30", "tulio", "", "2026-11-05 18:30"],
             ["2026-11-02-01", "LP Belchior - Alucinacao (Novo/Lacrado)", "220", "publicado", "102", "", "", "", "2026-11-02 12:00"],
+            ["2026-10-15-01", "LP Elis Regina - Elis", "90", "criado", "103", "", "", "", "2026-10-15 09:00"],
         ],
         "cadastro_fotos!A1:F3000": [["id_foto", "ordem", "papel", "arquivo_drive_id", "tamanho_bytes", "hash"]],
     }
@@ -114,7 +116,7 @@ def test_painel_conferencia_playwright():
         assert table_conf.is_visible()
 
         # 4. Verificar itens exibidos no filtro padrao (pendentes, sem livros, com estoque)
-        # 101 ja conferido; 102 pendente; 103 pendente sem rascunho; 104 livro (excluido) -> total 2
+        # 101 ja conferido; 102 e 103 pendentes; 104 livro (excluido); 105 acervo antigo sem cadastro (excluido) -> total 2
         rows = page.locator("#cd-conf-tbody tr")
         page.wait_for_timeout(300)
         assert rows.count() == 2
@@ -176,7 +178,9 @@ def test_painel_conferencia_playwright():
 
         # Confirmar que tanto o item com rascunho (102) quanto o item da loja (103) foram gravados
         writes_bulk = page.evaluate("window._writes")
-        assert any("loja-103" in str(w["values"]) for w in writes_bulk)
+        assert any(w["range"].startswith("cadastro_rascunhos!") and w["range"].endswith("4") for w in writes_bulk)
+        assert not any("loja-" in str(w["values"]) for w in writes_bulk)
+        assert "Acervo Antigo" not in page.locator("#cd-conf-tbody").inner_text()
         assert any("feito" in str(w["values"]) for w in writes_bulk)
 
         # Confirmar que pill 'Na loja ✓' aparece para itens confirmados
@@ -229,9 +233,9 @@ def test_impressao_2000_discos_pdf():
         "produtos!B1:H7000": prod_b,
         "produtos!M1:M7000": prod_m,
         "produtos!O1:O7000": prod_o,
-        "cadastro_rascunhos!A1:AZ500": [
+        "cadastro_rascunhos!A1:AZ3000": [
             ["id", "titulo", "preco", "status", "produto_id", "conferido_em", "conferido_por", "marcado_vinil", "atualizado_em"],
-        ],
+        ] + [[f"2026-11-01-{n:04d}", b[0], "120", "criado", pid[0], "", "", "", "2026-11-01 10:00"] for n, (pid, b) in enumerate(zip(prod_ids[1:], prod_b[1:]), 1)],
         "cadastro_fotos!A1:F3000": [["id_foto", "ordem", "papel", "arquivo_drive_id", "tamanho_bytes", "hash"]],
     }
 
