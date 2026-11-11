@@ -4459,6 +4459,18 @@ function cdDispararGeracaoChecklist(){
   window.print();
 }
 if (typeof window !== "undefined") Object.assign(window, { cdAbrirModalChecklist, cdFecharModalChecklist, cdDispararGeracaoChecklist });
+function cdLigarBotoesChecklist(){
+  if (typeof document === "undefined") return;
+  const liga = (id, fn) => { const el = document.getElementById(id); if (el && !el.dataset.ligado){ el.dataset.ligado = "1"; el.addEventListener("click", fn); } };
+  liga("cd-btn-abrir-checklist", cdAbrirModalChecklist);
+  liga("cd-modal-chk-gerar", cdDispararGeracaoChecklist);
+  liga("cd-modal-chk-cancelar", cdFecharModalChecklist);
+  liga("cd-modal-chk-fechar-x", cdFecharModalChecklist);
+}
+if (typeof document !== "undefined"){
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", cdLigarBotoesChecklist);
+  else cdLigarBotoesChecklist();
+}
 
 function cdSugestoesCategorias(o, iq){
   const lista = (iq || cdIguais(o)).map(x => x.categorias).filter(Boolean);
