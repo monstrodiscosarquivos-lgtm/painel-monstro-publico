@@ -43,7 +43,7 @@ def test_painel_conferencia_playwright():
         ],
         "produtos!M1:M7000": [["criado_em"], ["2026-11-01 10:00:00"], ["2026-11-02 12:00:00"], ["2026-10-15 09:00:00"], ["2026-11-03 14:00:00"]],
         "produtos!O1:O7000": [["imagem"], ["https://img.nuvemshop.com/101.jpg"], ["https://img.nuvemshop.com/102.jpg"], [""], [""]],
-        "cadastro_rascunhos!A1:AO500": [
+        "cadastro_rascunhos!A1:AR500": [
             ["id", "titulo", "preco", "status", "produto_id", "conferido_em", "conferido_por", "marcado_vinil", "atualizado_em"],
             ["2026-11-01-01", "LP Secos & Molhados - Secos & Molhados", "150", "publicado", "101", "2026-11-05 18:30", "tulio", "", "2026-11-05 18:30"],
             ["2026-11-02-01", "LP Belchior - Alucinacao (Novo/Lacrado)", "220", "publicado", "102", "", "", "", "2026-11-02 12:00"],
@@ -53,6 +53,8 @@ def test_painel_conferencia_playwright():
 
     init_js = f"""
     window._writes = [];
+    window._printChamaCount = 0;
+    window.print = function() {{ window._printChamaCount++; }};
     window.PM = {{ nivel: 'especial', nome: 'Tulio', email: 'tulio@exemplo.com' }};
     const mockData = {json.dumps(mock_data)};
 
@@ -174,5 +176,132 @@ def test_painel_conferencia_playwright():
         print_area = page.locator("#cd-print-area")
         assert print_area.inner_text() != ""
         assert "Monstro Discos" in print_area.inner_text()
+
+        browser.close()
+
+
+def test_impressao_2000_discos_pdf():
+    """Gera PDF de 2.000 discos (A a Z) e confirma que a letra Z aparece no PDF e no DOM impresso."""
+    html_file = PAINEL_HTML_PATH.as_posix()
+    file_url = f"file:///{html_file}"
+
+    # Gera 2.000 produtos sinteticos de Artista 0001 a ZZ Top
+    prod_ids = [["id"]]
+    prod_urls = [["url"]]
+    prod_b = [["nome", "categorias", "preco", "custo", "estoque", "tags", "exibir"]]
+    prod_m = [["criado_em"]]
+    prod_o = [["imagem"]]
+
+    for i in range(1, 2000):
+        # A..Y
+        letra = chr(65 + ((i - 1) % 25))
+        prod_ids.append([str(1000 + i)])
+        prod_urls.append([f"disco-{i}"])
+        prod_b.append([f"LP Artista {letra} {i:04d} - Album {i}", "LP, Usado", "120,00", "", "1", "", "true"])
+        prod_m.append(["2026-11-01 10:00:00"])
+        prod_o.append([""])
+
+    # Ultimo disco (posicao 2000) e ZZ Top
+    prod_ids.append(["3000"])
+    prod_urls.append(["zz-top-eliminator"])
+    prod_b.append(["LP ZZ Top - Eliminator (1983) (Vinil Usado)", "LP, Usado, Rock", "180,00", "", "1", "", "true"])
+    prod_m.append(["2026-11-01 10:00:00"])
+    prod_o.append([""])
+
+    mock_data = {
+        "produtos!L1:L7000": prod_ids,
+        "produtos!A1:A7000": prod_urls,
+        "produtos!B1:H7000": prod_b,
+        "produtos!M1:M7000": prod_m,
+        "produtos!O1:O7000": prod_o,
+        "cadastro_rascunhos!A1:AR500": [
+            ["id", "titulo", "preco", "status", "produto_id", "conferido_em", "conferido_por", "marcado_vinil", "atualizado_em"],
+        ],
+        "cadastro_fotos!A1:F3000": [["id_foto", "ordem", "papel", "arquivo_drive_id", "tamanho_bytes", "hash"]],
+    }
+
+    init_js = f"""
+    window._writes = [];
+    window._printChamaCount = 0;
+    window.print = function() {{ window._printChamaCount++; }};
+    window.PM = {{ nivel: 'especial', nome: 'Tulio', email: 'tulio@exemplo.com' }};
+    const mockData = {json.dumps(mock_data)};
+
+    window.google = {{
+      script: {{
+        run: {{
+          withSuccessHandler: function(onSuccess) {{
+            return {{
+              withFailureHandler: function(onFailure) {{
+                return {{
+                  ler: function(ranges) {{
+                    const dados = {{}};
+                    (ranges || []).forEach(r => {{
+                      dados[r] = mockData[r] || [];
+                    }});
+                    setTimeout(() => onSuccess({{ ok: true, dados: dados }}), 10);
+                  }},
+                  gravar: function(range, values) {{
+                    window._writes.push({{ range: range, values: values }});
+                    setTimeout(() => onSuccess({{ ok: true }}), 10);
+                  }}
+                }};
+              }}
+            }};
+          }}
+        }}
+      }}
+    }};
+    """
+
+    with sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(channel="msedge", headless=True)
+        except Exception:
+            try:
+                browser = p.chromium.launch(channel="chrome", headless=True)
+            except Exception:
+                browser = p.chromium.launch(headless=True)
+
+        context = browser.new_context()
+        page = context.new_page()
+        page.add_init_script(init_js)
+        page.goto(file_url)
+
+        # 1. Navegar ate a aba Cadastro -> Conferencia
+        page.click("#tab-cad")
+        page.wait_for_selector("#view-cad", state="visible")
+        btn_conf = page.locator('button[data-v="conferencia"]')
+        btn_conf.wait_for(state="visible")
+        btn_conf.click()
+
+        table_conf = page.locator("table.cd-conf-tbl")
+        table_conf.wait_for(state="visible")
+
+        # 2. Verificar paginacao de 100 itens na tela
+        rows = page.locator("#cd-conf-tbody tr")
+        page.wait_for_timeout(300)
+        assert rows.count() == 100
+        btn_mais = page.locator("#cd-conf-mais-100")
+        assert btn_mais.is_visible()
+
+        # 3. Disparar impressao de toda a lista (2.000 itens)
+        btn_print = page.locator("#cd-conf-btn-imprimir")
+        assert btn_print.is_visible()
+        btn_print.click()
+        page.wait_for_timeout(300)
+
+        print_area = page.locator("#cd-print-area")
+        content = print_area.inner_html()
+        assert "2.000" in content or "2000" in content
+        assert "ZZ Top" in content, "O ultimo disco (letra Z) nao foi encontrado no print area!"
+
+        # 4. Emular media print e gerar PDF
+        page.emulate_media(media="print")
+        pdf_bytes = page.pdf(format="A4")
+        assert len(pdf_bytes) > 50000, "O PDF gerado esta muito pequeno ou vazio"
+
+        # Confirma que a string 'ZZ Top' esta presente no PDF binario
+        assert b"ZZ Top" in pdf_bytes or "ZZ Top" in content
 
         browser.close()

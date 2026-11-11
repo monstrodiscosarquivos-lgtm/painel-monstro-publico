@@ -23,8 +23,8 @@ import pandas as pd
 from painel_monstro.log_publico import comando_seguro, ArgumentParserSeguro, resumo_erro
 from painel_monstro.config import Config, carregar
 from painel_monstro.coletor import nuvemshop_api
-from painel_monstro.motor import indicadores, regua
-from painel_monstro.saidas import anuncios, brevo, cadastro, ga4, carrinhos_planilha, custos_automaticos, k7, meta, newsletter, planilha_google, raspadinha, raspadinha_lembrete, regua_planilha, resumos_painel
+from painel_monstro.motor import black as motor_black, indicadores, regua
+from painel_monstro.saidas import anuncios, black as saida_black, brevo, cadastro, ga4, carrinhos_planilha, custos_automaticos, k7, meta, newsletter, planilha_google, raspadinha, raspadinha_lembrete, regua_planilha, resumos_painel
 
 SEGREDOS_OBRIGATORIOS = {
     'NUVEMSHOP_STORE_ID': 'nuvemshop_store_id',
@@ -193,6 +193,38 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
         print('      Raspadinha: lembrete processado; conferir resultado na planilha.')
     except Exception as erro:  # noqa: BLE001 - nunca derruba a rotina
         print(f'      Raspadinha · lembrete no Brevo: indisponível ({_resumo_do_erro(erro)}); a próxima rodada tenta de novo.')
+
+    # Black Monstro 2026: cálculo das abas black_dia e black_resumo
+    try:
+        raw_m = _ler_aba(planilha, 'margem_premissas')
+        premissas_black = motor_black.carregar_premissas_margem(raw_m)
+        raw_cfg = _ler_aba(planilha, 'Configuração')
+        cfg_black = {r[0].strip(): r[1].strip() for r in raw_cfg if len(r) >= 2 and r[0].strip()} if raw_cfg else {}
+
+        raw_ads = _ler_aba(planilha, 'anuncios_campanha_dia')
+        df_ads_black = pd.DataFrame(raw_ads[1:], columns=raw_ads[0]) if raw_ads and len(raw_ads) > 1 else None
+
+        raw_rasc = _ler_aba(planilha, 'cadastro_rascunhos')
+        df_rasc_black = pd.DataFrame(raw_rasc[1:], columns=raw_rasc[0]) if raw_rasc and len(raw_rasc) > 1 else None
+
+        df_dia_bk, resumo_bk = motor_black.calcular_black(
+            pedidos_df=tabelas.pedidos,
+            itens_df=tabelas.itens,
+            produtos_df=tabelas.produtos,
+            anuncios_campanha_dia_df=df_ads_black,
+            cadastro_rascunhos_df=df_rasc_black,
+            config_params=cfg_black,
+            premissas=premissas_black,
+            hoje_str=hoje_brt.strftime('%Y-%m-%d'),
+        )
+        mat_res_bk = saida_black.preparar_black_resumo(resumo_bk)
+        df_res_bk = pd.DataFrame(mat_res_bk[1:], columns=mat_res_bk[0])
+
+        planilha.substituir('black_dia', df_dia_bk)
+        planilha.substituir('black_resumo', df_res_bk)
+        print('      Black: abas black_dia e black_resumo atualizadas.')
+    except Exception as erro_bk:  # noqa: BLE001
+        print(f'      Black: indisponível ({_resumo_do_erro(erro_bk)}); mantidas abas anteriores.')
     print('[5/5] Resumos para o painel e para o email de segunda')
     print('      Brevo: etapa processada; conferir resultado na planilha.')
     for g in gravacoes[antes:]:

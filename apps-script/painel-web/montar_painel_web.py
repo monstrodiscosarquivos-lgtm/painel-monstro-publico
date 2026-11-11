@@ -108,7 +108,7 @@ def montar(origem, destino):
     corpo = proteger_barras(corpo)
     html = ('<!doctype html>\n<html lang="pt-BR"><head><meta charset="utf-8">\n'
             + ADAPTADOR + '\n</head><body>\n' + corpo + '\n</body></html>\n')
-    open(destino, 'w', encoding='utf-8').write(html)
+    open(destino, 'w', encoding='utf-8', newline='\n').write(html)
 
 if __name__ == '__main__':
     montar(sys.argv[1], sys.argv[2])

@@ -203,18 +203,40 @@ tr.fora td:first-child{text-decoration:none}
 .chart .fl-top .seg{margin:0}
 footer{margin-top:28px;font-size:13px;color:var(--muted)}
 footer a{color:var(--muted)}
-@media print{
-  body{background:#fff!important;color:#000!important;padding:0!important}
-  header,.tabs,nav,#banner,#cd-filtro,#cd-lote,.savebar,.no-print,footer,#cd-nota{display:none!important}
-  #view-cad{display:block!important}
-  .cd-marcar-card{border:0!important;border-bottom:1px solid #ccc!important;border-radius:0!important;padding:10px 0!important;background:transparent!important;page-break-inside:avoid}
-}
   @media screen {
     #cd-print-area { display: none !important; }
   }
   @media print {
+    @page {
+      size: A4 portrait;
+      margin: 10mm 8mm 12mm 8mm;
+    }
+    body { background: #fff !important; color: #111 !important; padding: 0 !important; }
     body > *:not(#cd-print-area) { display: none !important; }
-    #cd-print-area { display: block !important; margin: 0; padding: 0; background: #fff; color: #111; }
+    #cd-print-area {
+      display: block !important;
+      margin: 0;
+      padding: 0;
+      background: #fff !important;
+      color: #111 !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 8pt;
+      line-height: 1.25;
+    }
+    #cd-print-area * { box-sizing: border-box; }
+    #cd-print-area table { width: 100% !important; border-collapse: collapse !important; }
+    #cd-print-area thead { display: table-header-group !important; }
+    #cd-print-area tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+    #cd-print-area th { border-bottom: 1.5px solid #111 !important; text-align: left !important; padding: 4px 3px !important; font-size: 7.5pt !important; text-transform: uppercase !important; font-weight: 700 !important; letter-spacing: 0.5px !important; color: #222 !important; }
+    #cd-print-area td { border-bottom: 1px solid #e5e7eb !important; padding: 4px 3px !important; vertical-align: middle !important; font-size: 8pt !important; }
+    #cd-print-area tr:nth-child(even) td { background-color: #fafafa !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    #cd-print-area .chk-box { display: inline-block !important; width: 13px !important; height: 13px !important; border: 1.5px solid #222 !important; border-radius: 2px !important; vertical-align: middle !important; }
+    #cd-print-area .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important; font-size: 7.5pt !important; }
+    #cd-print-area .pill { display: inline-block !important; padding: 1px 5px !important; border-radius: 4px !important; font-size: 7pt !important; font-weight: 600 !important; text-transform: uppercase !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    #cd-print-area .pill-vis { background: #e0f2fe !important; color: #0369a1 !important; }
+    #cd-print-area .pill-ocu { background: #f3f4f6 !important; color: #4b5563 !important; }
+    #cd-print-area .pill-novo { background: #dcfce7 !important; color: #15803d !important; }
+    #cd-print-area .pill-usado { background: #fef3c7 !important; color: #b45309 !important; }
   }
   .cd-conf-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   .cd-conf-tbl th { background: var(--surface); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 8px; border-bottom: 2px solid var(--line); font-weight: 700; }
@@ -244,6 +266,7 @@ footer a{color:var(--muted)}
   <button type="button" role="tab" id="tab-fila" aria-selected="false">Fila</button>
   <button type="button" role="tab" id="tab-ads" aria-selected="false">Anúncios</button>
   <button type="button" role="tab" id="tab-cad" aria-selected="false">Cadastro</button>
+  <button type="button" role="tab" id="tab-black" aria-selected="false">Black</button>
   <button type="button" role="tab" id="tab-rasp" aria-selected="false">Raspadinha</button>
   <button type="button" role="tab" id="tab-k7" aria-selected="false">K7</button>
   <button type="button" role="tab" id="tab-com" aria-selected="false">Comissão</button>
@@ -381,6 +404,59 @@ footer a{color:var(--muted)}
     <div class="fl-list" id="fl-list"><div class="empty skel">Carregando…</div></div>
     <div class="secerr" id="e-fila" hidden></div>
   </section>
+</div>
+
+<div id="view-black" hidden>
+  <section>
+    <h2>Black Monstro 2026</h2>
+    <p class="sub">Acompanhamento da campanha (10 a 30 de novembro de 2026). Atualizado a cada rodada da rotina.</p>
+    <div id="black-alertas"></div>
+    <div class="grid" id="black-placar" style="margin-top:12px"><div class="card skel">Carregando…</div></div>
+    <div class="chart" style="margin-top:16px">
+      <h3>Faturamento por dia (10 a 30/11)</h3>
+      <div class="legend"><span><i class="sw" style="background:var(--s1)"></i>faturamento</span><span><i class="ln" style="border-color:var(--s2)"></i>meta do dia</span></div>
+      <div class="plot" id="black-chart"></div>
+    </div>
+  </section>
+  <section>
+    <h2>Lucro estimado e sobra</h2>
+    <p class="sub">Sobra diária e acumulada antes dos custos fixos, calculada com as premissas de margem (usados vs lacrados, custos sobre venda, fretes e taxas).</p>
+    <div class="tbl" id="black-sobra"><div class="empty skel">Carregando…</div></div>
+  </section>
+  <section>
+    <h2>Por cupom</h2>
+    <p class="sub">Desempenho dos cupons usados durante a Black Monstro. Faixas do Lado A e da Black (só discos usados): 15% acima de R$ 200, 20% acima de R$ 400, 30% acima de R$ 700.</p>
+    <div class="tbl" id="black-cupons"><div class="empty skel">Carregando…</div></div>
+  </section>
+  <section>
+    <h2>Lista Lado A e Anúncios</h2>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
+      <div>
+        <h3>Lista Lado A (Brevo)</h3>
+        <p class="sub" style="margin:0 0 8px">Inscritos para acesso antecipado no dia 26/11.</p>
+        <div id="black-vip"><div class="empty skel">Carregando…</div></div>
+      </div>
+      <div>
+        <h3>Anúncios no Meta</h3>
+        <p class="sub" style="margin:0 0 8px">Campanhas com prefixo black26_ e prosp_vendas_recorrente.</p>
+        <div id="black-ads"><div class="empty skel">Carregando…</div></div>
+      </div>
+    </div>
+  </section>
+  <section>
+    <h2>Comparação com a Black Friday 2025</h2>
+    <p class="sub">Referência de 2025: 28 a 30/11/2025 (64 pedidos válidos, R$ 19.711,48, ticket médio R$ 307,99) contra os dias equivalentes de 2026 (27 a 30/11/2026).</p>
+    <div class="tbl" id="black-comp25"><div class="empty skel">Carregando…</div></div>
+  </section>
+  <section>
+    <h2>Discos e Lotes Black</h2>
+    <p class="sub">Situação dos lotes preparados para a Black e discos mais vendidos na campanha.</p>
+    <h3 style="margin-top:12px">Lotes Black</h3>
+    <div class="tbl" id="black-lotes"><div class="empty skel">Carregando…</div></div>
+    <h3 style="margin-top:18px">Mais vendidos na Black</h3>
+    <div class="tbl" id="black-top"><div class="empty skel">Carregando…</div></div>
+  </section>
+  <div class="secerr" id="e-black" hidden></div>
 </div>
 
 <div id="view-rasp" hidden>
@@ -707,13 +783,22 @@ footer a{color:var(--muted)}
     </div>
     <div class="tbl" id="cost-table"><div class="empty skel">Carregando…</div></div>
   </section>
+  <section id="sec-margem">
+    <h2>Custos e margens</h2>
+    <p class="sub">Premissas de custos, impostos e margens da loja. Preencha a sua estimativa (coluna C); se deixar em branco, o sistema usa a sugestão inicial. As alterações gravam direto na aba margem_premissas.</p>
+    <div id="cfg-margem"><div class="cfg-group"><div class="empty skel">Carregando premissas de margem…</div></div></div>
+    <h3 style="margin-top:22px">Resultados calculados</h3>
+    <p class="sub" style="margin:0 0 10px">Valores calculados automaticamente pela aba margem_premissas (só leitura).</p>
+    <div id="cfg-margem-res"></div>
+  </section>
 </div>
 
-<div id="cd-print-area" class="cd-print-only"></div>
 <footer>
   Os números vêm da planilha <a data-pm-planilha href="#" target="_blank" rel="noopener">Painel Monstro · dados</a>, que a rotina atualiza de hora em hora. Esta página relê a planilha a cada 10 minutos enquanto está aberta.
 </footer>
 </div>
+
+<div id="cd-print-area" class="cd-print-only"></div>
 
 <script>
 (function(){
@@ -731,7 +816,8 @@ const RANGES = {
   acd: "anuncios_campanha_dia!A1:T3000", ahoje: "anuncios_hoje!A1:K400", aads: "anuncios_anuncios!A1:S300", asem: "anuncios_semana!A1:U600",
   aalert: "anuncios_alertas!A1:F100", ares: "anuncios_resumo!A1:B20", anotas: "anuncios_notas!A1:E400", adir: "anuncios_direcao!A1:C400",
   pedMail: "pedidos!B1:B8000", itens: "itens!C1:I9000", prodA: "produtos!B1:H7000", prodM: "produtos!M1:M7000", prodQ: "produtos!Q1:Q7000",
-  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodImg: "produtos!O1:O7000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AO500", cadf: "cadastro_fotos!A1:F3000",
+  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodImg: "produtos!O1:O7000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AR500", cadf: "cadastro_fotos!A1:F3000",
+  blackDia: "black_dia!A1:O30", blackRes: "black_resumo!A1:C50", margem: "margem_premissas!A1:F60",
   g4d: "ga4_diario!A1:I15000", g4l: "ga4_links!A1:I400", k7: "k7_resumo!A1:F500",
   itNum: "itens!A1:A9000", prodId: "produtos!L1:L7000", cprod: "comissao_produtos!A1:D300", pman: "pedidos_manuais!A1:N500", cajust: "comissao_ajustes!A1:D200"
 };
@@ -804,7 +890,7 @@ function barChart(host, o){
 /* ---------- estado ---------- */
 const D = {};
 function setErr(sec, msg){ const el = $("e-"+sec); if (!el) return; el.hidden = !msg; el.textContent = msg || ""; }
-const SEC_OF = { itNum:["com"], prodId:["com","cad"], prodImg:["cad","res"], cprod:["com"], pman:["com"], cajust:["com"], g4d:["res"], g4l:["res"], rcamp:["rasp","res"], rjog:["rasp","res"], rev:["rasp"], rlem:["rasp"], reguaLog:["res"], cad:["cad"], cadf:["cad"], pedMail:["res"], itens:["res"], prodA:["res"], prodM:["res"], prodQ:["res"], acd:["ads"], ahoje:["ads"], aads:["ads"], asem:["ads"], aalert:["ads"], ares:["ads"], anotas:["ads"], adir:["ads"], atrib:["valeapena"], ped:["com"], pedNum:["com"], comis:["com"], fila:["fila"], rodada:["fila"], atual:["objetivo","novos","custos"], mensal:["objetivo"], coortes:["novos"], regua:["regua"], reguaRes:["regua"], car:["carrinhos"], vale:["valeapena"], ind:["custos"], res:["carrinhos"], k7:["k7"] };
+const SEC_OF = { itNum:["com"], prodId:["com","cad"], prodImg:["cad","res"], cprod:["com"], pman:["com"], cajust:["com"], g4d:["res"], g4l:["res"], rcamp:["rasp","res"], rjog:["rasp","res"], rev:["rasp"], rlem:["rasp"], reguaLog:["res"], cad:["cad"], cadf:["cad"], pedMail:["res"], itens:["res"], prodA:["res"], prodM:["res"], prodQ:["res"], acd:["ads"], ahoje:["ads"], aads:["ads"], asem:["ads"], aalert:["ads"], ares:["ads"], anotas:["ads"], adir:["ads"], atrib:["valeapena"], ped:["com"], pedNum:["com"], comis:["com"], fila:["fila"], rodada:["fila"], atual:["objetivo","novos","custos"], mensal:["objetivo"], coortes:["novos"], regua:["regua"], reguaRes:["regua"], car:["carrinhos"], vale:["valeapena"], ind:["custos"], res:["carrinhos"], k7:["k7"], blackDia:["black"], blackRes:["black"], margem:["config"] };
 
 function renderAtual(){
   const a = rows(D.atual)[0]; if (!a) return;
@@ -3094,14 +3180,19 @@ function cdLote(){
 const CD_GRADES = ["M","NM","VG+","VG","G+","G","P"];
 const CD_CAPA_GRADES = ["M","NM","VG+","VG","G+","G","F"];
 const CD_PAPEIS = ["capa", "contracapa", "encarte frente", "encarte verso", "encarte aberto", "capa interna", "disco", "rótulo", "etiqueta", "referencia", "codigo_barras", "oficial"];
-const CD_FILTROS = [["rascunho","Para revisar"],["aprovado","Aprovados"],["criado","Criados (ocultos)"],["erro","Com erro"],["publicado","Publicados"],["marcar_vinil","Etiqueta verde"],["conferencia","Conferência"],["somar_estoque","Soma confirmada"],["estoque_somado","Estoque somado"],["descartado","Descartados"],["todos","Todos"]];
+const CD_FILTROS = [["rascunho","Para revisar"],["aprovado","Aprovados"],["criado","Criados (ocultos)"],["erro","Com erro"],["publicado","Publicados"],["marcar_vinil","Etiqueta verde"],["conferencia","Conferência"],["black_26","Black 26/11 (Lado A)"],["black_27","Black 27/11"],["black_28","Black 28/11"],["black_29","Black 29/11"],["somar_estoque","Soma confirmada"],["estoque_somado","Estoque somado"],["descartado","Descartados"],["todos","Todos"]];
 const cdGrupo = s => { s = String(s || "").trim().toLowerCase(); if (s.startsWith("erro")) return "erro"; if (s.startsWith("descartado")) return "descartado"; return ["rascunho","aprovado","criado","publicado","somar_estoque","estoque_somado"].includes(s) ? s : "rascunho"; };
 const CD_PILL = {somar_estoque:["p-wait","soma aguardando a rotina"], estoque_somado:["p-ok","estoque somado"], rascunho:["p-wait","para revisar"], aprovado:["p-info","aprovado, aguardando a rotina"], criado:["p-ok","criado oculto na loja"], erro:["p-bad","erro"], publicado:["p-ok","publicado"], descartado:["p-info","descartado"]};
 const colL = n => { let s = ""; n++; while (n > 0){ const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
 function cdLinhas(){
   const v = D.cad || []; if (v.length < 2) return [];
   const h = v[0];
-  return v.slice(1).map((r,i) => { const o = {_row: i + 2, _h: h}; h.forEach((k,j) => o[k] = r && r[j] != null ? String(r[j]) : ""); return o; }).filter(o => o.id);
+  return v.slice(1).map((r,i) => {
+    const o = {_row: i + 2, _h: h};
+    h.forEach((k,j) => o[k] = r && r[j] != null ? String(r[j]) : "");
+    o._carregado_completo = Boolean(o.descricao || o.faixas || o.creditos);
+    return o;
+  }).filter(o => o.id);
 }
 function cdFotos(o){
   let aj = []; try { aj = JSON.parse(o.fotos_ajustadas || "[]"); } catch(e){}
@@ -3158,6 +3249,61 @@ function cdFotosEditor(o, edit){
     <div class="s" style="margin-top:4px">Use as setas para mudar a ordem das fotos no site. A primeira vira a capa. Fotos marcadas como "não usar" (etiqueta) nunca vão para a loja.</div>
   </div>`;
 }
+
+function cdFormDetalhes(o, edit){
+  const dis = edit ? "" : " disabled";
+  const sugCat = cdSugestoesCategorias(o);
+  return `<div class="cost-form" style="grid-template-columns:1fr">
+    <label>Título<input data-f="titulo" value="${esc(o.titulo)}" data-orig="${esc(o.titulo)}"${dis}></label>
+    <label>Categorias<input data-f="categorias" value="${esc(o.categorias)}" data-orig="${esc(o.categorias)}"${dis}>
+      <span class="s" style="font-weight:400;display:block;margin-top:2px">${sugCat ? "Categorias em produtos parecidos da loja: <b>" + esc(sugCat) + "</b>" : "Separadas por vírgula (ex.: LP, Novo/Lacrado, Rock)"}</span>
+    </label>
+    <label>Descrição<textarea data-f="descricao" data-orig="${esc(o.descricao)}" style="min-height:220px"${dis}>${esc(o.descricao)}</textarea></label>
+    ${o.faixas ? `<label class="s" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="faixas" style="width:auto"${/^sim$/i.test(o.faixas_na_descricao) ? " checked" : ""}${dis}> Incluir a lista de faixas do Discogs no fim da descrição</label>` : ""}
+    <label>Tags<input data-f="tags" value="${esc(o.tags)}" data-orig="${esc(o.tags)}"${dis}></label>
+    <label>Peso (kg)<input data-f="peso_kg" inputmode="decimal" value="${esc(o.peso_kg)}" data-orig="${esc(o.peso_kg)}"${dis}><span class="s" style="font-weight:400;display:block;margin-top:2px">Padrão: LP simples 0,50 kg · capa dupla/encarte 0,55 kg · duplo 0,80 kg · compacto/CD 0,20 kg · K7 0,17 kg</span></label>
+    <label>Link do Discogs<input data-f="discogs_url" type="url" value="${esc(o.discogs_url)}" data-orig="${esc(o.discogs_url)}"${dis}></label>
+    <label>Observação para o Claude<input data-f="obs" value="${esc(o.observacao_tulio)}" data-orig="${esc(o.observacao_tulio)}"></label>
+  </div>
+  ${cdFotosEditor(o, edit)}
+  <div class="s" style="margin-top:6px">${esc(o.altura_cm)} × ${esc(o.largura_cm)} × ${esc(o.comprimento_cm)} cm${o.discogs_confianca ? ` · confiança Discogs ${esc(o.discogs_confianca)}` : ""}</div>`;
+}
+
+async function cdCarregarDiscoDetalhes(o, box){
+  if (o._carregado_completo) return;
+  const detCorpo = box ? box.querySelector("#cd-det-" + CSS.escape(o.id)) : $("cd-det-" + o.id);
+  if (detCorpo) detCorpo.innerHTML = '<div class="empty skel" style="padding:16px">Carregando descrição, faixas e fotos do disco...</div>';
+  try {
+    const range = `cadastro_rascunhos!A${o._row}:AR${o._row}`;
+    const r = await MCP.callTool(SERVER, TOOL, {spreadsheetId: SHEET, range});
+    const p = r && r.payload;
+    const vals = (p && p.values ? p.values : (Array.isArray(p) ? p : []))[0] || [];
+    if (vals.length && o._h){
+      o._h.forEach((k, j) => {
+        if (vals[j] !== undefined) o[k] = String(vals[j] ?? "");
+      });
+      if (D.cad && D.cad[o._row - 1]){
+        D.cad[o._row - 1] = vals;
+      }
+    }
+    if (!D.cadf){
+      try {
+        const rf = await MCP.callTool(SERVER, TOOL, {spreadsheetId: SHEET, range: "cadastro_fotos!A1:F3000"});
+        const pf = rf && rf.payload;
+        D.cadf = pf && pf.values ? pf.values : (Array.isArray(pf) ? pf : []);
+      } catch(e){}
+    }
+  } catch(e){
+    /* segue com dados disponíveis */
+  }
+  o._carregado_completo = true;
+  if (detCorpo){
+    const g = cdGrupo(o.status), edit = g === "rascunho";
+    detCorpo.innerHTML = cdFormDetalhes(o, edit);
+    if (box) cdLigar(box, o);
+  }
+}
+
 function cdProdutoAtual(o){
   const ids = D.prodId || [], produtos = D.prodA || [];
   const i = ids.findIndex((r,n) => n>0 && String(r[0]) === String(o.produto_id));
@@ -3240,21 +3386,33 @@ async function cdExecutarMarcarVinil(o, cardEl){
     alert("Erro ao marcar no vinil: " + (e && e.message ? e.message : e));
   }
 }
+let CD_LISTA_LIMITE = 100;
 function renderCad(){
   if (!D.cad) return;
   const L = cdLinhas(), cont = {};
   L.forEach(o => { const g = cdGrupo(o.status); cont[g] = (cont[g] || 0) + 1; });
   cont.todos = L.length;
-  cont.conferencia = cdDiscosConferencia().filter(o => !cdEhLivro(o) && (o.estoque_ilimitado || (num(o.estoque) > 0))).length;
+  cont.conferencia = (window._produtosCache || (D.prodId && D.prodId.length > 1))
+    ? cdDiscosConferencia().filter(o => !cdEhLivro(o) && (o.estoque_ilimitado || (num(o.estoque) > 0))).length
+    : "ver";
   cont.marcar_vinil = L.filter(o => cdFisicoAtivo(o) && !String(o.marcado_vinil || "").trim()).length;
-  $("cd-filtro").innerHTML = CD_FILTROS.map(([v,l]) => `<button type="button" data-v="${v}" aria-pressed="${v === CD_FILTRO}">${l} (${cont[v] || 0})</button>`).join("");
-  $("cd-filtro").querySelectorAll("button").forEach(b => b.onclick = () => { CD_FILTRO = b.dataset.v; renderCad(); });
+  cont.black_26 = L.filter(o => o.lote_black === "26/11").length;
+  cont.black_27 = L.filter(o => o.lote_black === "27/11").length;
+  cont.black_28 = L.filter(o => o.lote_black === "28/11").length;
+  cont.black_29 = L.filter(o => o.lote_black === "29/11").length;
+  $("cd-filtro").innerHTML = CD_FILTROS.map(([v,l]) => `<button type="button" data-v="${v}" aria-pressed="${v === CD_FILTRO}">${l} (${cont[v] != null ? cont[v] : 0})</button>`).join("");
+  $("cd-filtro").querySelectorAll("button").forEach(b => b.onclick = () => { CD_FILTRO = b.dataset.v; CD_CONF_LIMITE = 100; CD_LISTA_LIMITE = 100; renderCad(); });
   $("cd-nota").textContent = CD_FILTRO === "rascunho" ? "Disco usado é sempre exemplar único: cada rascunho vira um produto novo com estoque 1." :
     CD_FILTRO === "criado" ? "Produto oculto pode não abrir pelo link público. Confira no administrador da Nuvemshop, em Produtos, e publique por lá." :
     CD_FILTRO === "conferencia" ? "Conferência direta dos discos físicos com a Nuvemshop e planilha." :
-    CD_FILTRO === "marcar_vinil" ? "Discos visíveis no site, com estoque, para passar o marcador verde na loja física." : "";
+    CD_FILTRO === "marcar_vinil" ? "Discos visíveis no site, com estoque, para passar o marcador verde na loja física." : /^black_\d\d$/.test(CD_FILTRO) ? "Rascunhos atribuídos ao lote Black " + CD_FILTRO.replace("black_","") + "/11." : "";
 
-    if (CD_FILTRO === "conferencia"){
+  if (CD_FILTRO === "conferencia"){
+    if (!window._produtosCache && (!D.prodId || D.prodId.length < 2)){
+      cdCarregarProdutosConferencia();
+      cdLote();
+      return;
+    }
     cdRenderConferencia();
     cdLote();
     return;
@@ -3270,11 +3428,15 @@ function renderCad(){
     const topoHtml = `<div class="cd-marcar-topo no-print" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:12px">
       <div><b>${pendentesVinil.length} ${pendentesVinil.length === 1 ? "disco pendente" : "discos pendentes"}</b> para marcar no vinil físico</div>
       <div style="display:flex;gap:8px">
-        <button type="button" class="btn" onclick="window.print()">Imprimir lista</button>
-        <button type="button" class="btn primary" onclick="cdAbrirModalChecklist()">Checklist em PDF</button>
+        <button type="button" class="btn" id="cd-btn-marcar-imprimir">Imprimir lista</button>
+        <button type="button" class="btn primary" id="cd-btn-marcar-checklist">Checklist em PDF</button>
       </div>
     </div><div id="cd-desfazer-box"></div>`;
     $("cd-lista").innerHTML = topoHtml + pendentesVinil.map(cdCardMarcarVinil).join("");
+    const btnImpMarcar = $("cd-btn-marcar-imprimir");
+    if (btnImpMarcar) btnImpMarcar.addEventListener("click", () => window.print());
+    const btnChkMarcar = $("cd-btn-marcar-checklist");
+    if (btnChkMarcar) btnChkMarcar.addEventListener("click", cdAbrirModalChecklist);
     $("cd-lista").querySelectorAll("[data-marcar-vinil]").forEach(chk => {
       chk.onchange = async () => {
         const id = chk.dataset.marcarVinil;
@@ -3287,10 +3449,25 @@ function renderCad(){
     return;
   }
 
-  const lista = L.filter(o => CD_FILTRO === "todos" || cdGrupo(o.status) === CD_FILTRO);
-  if (document.querySelector("#cd-lista .changed")) { cdLote(); return; } // não apagar edição em andamento
-  $("cd-lista").innerHTML = lista.length ? lista.map(cdCard).join("") : '<div class="empty">Nada nesta situação.</div>';
+  const lista = L.filter(o => CD_FILTRO === "todos" || (/^black_(\d\d)$/.test(CD_FILTRO) ? o.lote_black === CD_FILTRO.replace("black_","") + "/11" : cdGrupo(o.status) === CD_FILTRO));
+  if (document.querySelector("#cd-lista .changed")) { cdLote(); return; } /* não apagar edição em andamento */
+  const listaVisivel = lista.slice(0, CD_LISTA_LIMITE);
+  let pagHtml = "";
+  if (lista.length > CD_LISTA_LIMITE){
+    pagHtml = `<div class="no-print cd-paginacao" style="display:flex;justify-content:center;gap:12px;align-items:center;flex-wrap:wrap;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-top:12px">
+      <span class="s" style="font-size:13px">Mostrando <b>${listaVisivel.length}</b> de <b>${lista.length}</b> discos</span>
+      <button type="button" class="btn primary" id="cd-cad-mais-100" style="font-size:13px;padding:6px 14px;font-weight:700">Carregar mais 100 discos</button>
+    </div>`;
+  }
+  $("cd-lista").innerHTML = lista.length ? (listaVisivel.map(cdCard).join("") + pagHtml) : '<div class="empty">Nada nesta situação.</div>';
   $("cd-lista").querySelectorAll("[data-cd]").forEach(box => cdLigar(box, L.find(o => o.id === box.dataset.cd)));
+  const btnMaisCad = $("cd-cad-mais-100");
+  if (btnMaisCad){
+    btnMaisCad.addEventListener("click", () => {
+      CD_LISTA_LIMITE += 100;
+      renderCad();
+    });
+  }
   cdLote();
 }
 // Livros e novo/lacrado (D-073, D-095, D-097)
@@ -3531,6 +3708,51 @@ function cdFiltrarConferencia(lista, opts){
   return filtrados;
 }
 
+let _produtosCarregando = false;
+async function cdCarregarProdutosConferencia(){
+  if (window._produtosCache || _produtosCarregando) return;
+  _produtosCarregando = true;
+  const container = $("cd-lista");
+  if (container){
+    container.innerHTML = `<div class="empty skel" style="padding:48px 20px;text-align:center">
+      <div style="font-size:16px;font-weight:700;margin-bottom:6px">Carregando produtos da loja...</div>
+      <div class="s">Lendo produtos da Nuvemshop para a conferência (uma vez só por sessão).</div>
+    </div>`;
+  }
+  try {
+    const ranges = [
+      "produtos!L1:L7000",
+      "produtos!A1:A7000",
+      "produtos!B1:H7000",
+      "produtos!M1:M7000",
+      "produtos!O1:O7000"
+    ];
+    const promessas = ranges.map(async r => {
+      try {
+        const res = await MCP.callTool(SERVER, TOOL, {spreadsheetId: SHEET, range: r});
+        const p = res && res.payload;
+        return (p && p.values) ? p.values : (Array.isArray(p) ? p : []);
+      } catch(e){
+        return [];
+      }
+    });
+    const [ids, urls, a, m, imgs] = await Promise.all(promessas);
+    D.prodId = ids;
+    D.prodUrl = urls;
+    D.prodA = a;
+    D.prodM = m;
+    D.prodImg = imgs;
+    window._produtosCache = true;
+  } catch(e){
+    if (container) container.innerHTML = `<div class="empty">Não consegui carregar os produtos da loja: ${esc(e.message || e)}</div>`;
+  } finally {
+    _produtosCarregando = false;
+    cdRenderConferencia();
+    cdLote();
+  }
+}
+
+let CD_CONF_LIMITE = 100;
 function cdRenderConferencia(){
   const container = $("cd-lista");
   if (!container) return;
@@ -3544,7 +3766,8 @@ function cdRenderConferencia(){
   const nFaltam = nTotal - nConferidos;
   const pct = nTotal > 0 ? Math.round((nConferidos / nTotal) * 100) : 0;
 
-  const todosIdsVisiveis = itens.map(o => o.produto_id || o.id_lote).filter(Boolean);
+  const itensVisiveis = itens.slice(0, CD_CONF_LIMITE);
+  const todosIdsVisiveis = itensVisiveis.map(o => o.produto_id || o.id_lote).filter(Boolean);
   const todosMarcadosNaSelecao = todosIdsVisiveis.length > 0 && todosIdsVisiveis.every(id => CD_CONF_SEL.has(id));
 
   let html = "";
@@ -3665,7 +3888,7 @@ function cdRenderConferencia(){
         </thead>
         <tbody id="cd-conf-tbody">`;
 
-    itens.forEach(o => {
+    itensVisiveis.forEach(o => {
       const art = cdExtrairArtista(o);
       const chaveItem = o.produto_id || o.id_lote;
       const selecionado = CD_CONF_SEL.has(chaveItem);
@@ -3729,14 +3952,39 @@ function cdRenderConferencia(){
     });
 
     html += `</tbody></table></div>`;
+
+    if (itens.length > CD_CONF_LIMITE){
+      html += `<div class="no-print cd-paginacao" style="display:flex;justify-content:center;gap:12px;align-items:center;flex-wrap:wrap;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-top:12px">
+        <span class="s" style="font-size:13px">Mostrando <b>${itensVisiveis.length}</b> de <b>${itens.length}</b> discos</span>
+        <button type="button" class="btn primary" id="cd-conf-mais-100" style="font-size:13px;padding:6px 14px;font-weight:700">Carregar mais 100 discos</button>
+        <button type="button" class="btn" id="cd-conf-mostrar-todos" style="font-size:13px;padding:6px 14px">Mostrar todos (${itens.length})</button>
+      </div>`;
+    }
   }
 
   container.innerHTML = html;
+
+  // Botões de paginação da conferência
+  const btnMais100 = $("cd-conf-mais-100");
+  if (btnMais100){
+    btnMais100.addEventListener("click", () => {
+      CD_CONF_LIMITE += 100;
+      cdRenderConferencia();
+    });
+  }
+  const btnMostrarTodos = $("cd-conf-mostrar-todos");
+  if (btnMostrarTodos){
+    btnMostrarTodos.addEventListener("click", () => {
+      CD_CONF_LIMITE = itens.length;
+      cdRenderConferencia();
+    });
+  }
 
   // Ligar eventos com addEventListener (SEM onclick no HTML)
   const inputBusca = $("cd-conf-busca");
   if (inputBusca){
     inputBusca.addEventListener("input", () => {
+      CD_CONF_LIMITE = 100;
       CD_CONF_BUSCA = inputBusca.value;
       cdRenderConferencia();
       // manter foco no campo de busca
@@ -3749,31 +3997,31 @@ function cdRenderConferencia(){
   if (btnImp) btnImp.addEventListener("click", () => cdImprimirListaConferencia(itens));
 
   const fConfEl = $("cd-conf-f-conf");
-  if (fConfEl) fConfEl.addEventListener("change", () => { CD_CONF_F_CONF = fConfEl.value; cdRenderConferencia(); });
+  if (fConfEl) fConfEl.addEventListener("change", () => { CD_CONF_LIMITE = 100; CD_CONF_F_CONF = fConfEl.value; cdRenderConferencia(); });
 
   const fTipoEl = $("cd-conf-f-tipo");
-  if (fTipoEl) fTipoEl.addEventListener("change", () => { CD_CONF_F_TIPO = fTipoEl.value; cdRenderConferencia(); });
+  if (fTipoEl) fTipoEl.addEventListener("change", () => { CD_CONF_LIMITE = 100; CD_CONF_F_TIPO = fTipoEl.value; cdRenderConferencia(); });
 
   const incLivrosEl = $("cd-conf-inc-livros");
-  if (incLivrosEl) incLivrosEl.addEventListener("change", () => { CD_CONF_INC_LIVROS = incLivrosEl.checked; cdRenderConferencia(); });
+  if (incLivrosEl) incLivrosEl.addEventListener("change", () => { CD_CONF_LIMITE = 100; CD_CONF_INC_LIVROS = incLivrosEl.checked; cdRenderConferencia(); });
 
   const fSitEl = $("cd-conf-f-sit");
-  if (fSitEl) fSitEl.addEventListener("change", () => { CD_CONF_F_SIT = fSitEl.value; cdRenderConferencia(); });
+  if (fSitEl) fSitEl.addEventListener("change", () => { CD_CONF_LIMITE = 100; CD_CONF_F_SIT = fSitEl.value; cdRenderConferencia(); });
 
   const fEstEl = $("cd-conf-f-est");
-  if (fEstEl) fEstEl.addEventListener("change", () => { CD_CONF_F_EST = fEstEl.value; cdRenderConferencia(); });
+  if (fEstEl) fEstEl.addEventListener("change", () => { CD_CONF_LIMITE = 100; CD_CONF_F_EST = fEstEl.value; cdRenderConferencia(); });
 
   const fLoteEl = $("cd-conf-f-lote");
-  if (fLoteEl) fLoteEl.addEventListener("change", () => { CD_CONF_F_LOTE = fLoteEl.value; cdRenderConferencia(); });
+  if (fLoteEl) fLoteEl.addEventListener("change", () => { CD_CONF_LIMITE = 100; CD_CONF_F_LOTE = fLoteEl.value; cdRenderConferencia(); });
 
   const deEl = $("cd-conf-de");
-  if (deEl) deEl.addEventListener("change", () => { CD_CONF_DE = deEl.value; cdRenderConferencia(); });
+  if (deEl) deEl.addEventListener("change", () => { CD_CONF_LIMITE = 100; CD_CONF_DE = deEl.value; cdRenderConferencia(); });
 
   const ateEl = $("cd-conf-ate");
-  if (ateEl) ateEl.addEventListener("change", () => { CD_CONF_ATE = ateEl.value; cdRenderConferencia(); });
+  if (ateEl) ateEl.addEventListener("change", () => { CD_CONF_LIMITE = 100; CD_CONF_ATE = ateEl.value; cdRenderConferencia(); });
 
   const ordemEl = $("cd-conf-ordem");
-  if (ordemEl) ordemEl.addEventListener("change", () => { CD_CONF_ORDEM = ordemEl.value; cdRenderConferencia(); });
+  if (ordemEl) ordemEl.addEventListener("change", () => { CD_CONF_LIMITE = 100; CD_CONF_ORDEM = ordemEl.value; cdRenderConferencia(); });
 
   // Selecionar todos visíveis
   const chkAll = $("cd-conf-sel-todos");
@@ -3942,6 +4190,7 @@ function cdImprimirListaConferencia(itensFiltrados){
   const printArea = $("cd-print-area");
   if (printArea){
     printArea.innerHTML = html;
+    cdMostrarAvisoChecklistPronto(itensFiltrados.length);
     window.print();
   }
 }
@@ -3977,7 +4226,7 @@ function cdMontarChecklistHtml(itens, opcoes){
     let sitCls = "pill-ocu";
     if (o.produto_id && pAtual) {
       if (/^true$/i.test(pAtual[6])) { sitTxt = "Visível"; sitCls = "pill-vis"; }
-    } else if (o.status === "publicado") {
+    } else if (o.status === "publicado" || o.visivel) {
       sitTxt = "Visível"; sitCls = "pill-vis";
     }
     return `<tr>
@@ -3988,191 +4237,67 @@ function cdMontarChecklistHtml(itens, opcoes){
       </td>
       <td style="text-align:right;font-weight:700;font-size:8.5pt">${esc(prTxt)}</td>
       <td style="text-align:center"><span class="pill ${estCls}">${esc(estTxt)}</span></td>
-      <td style="text-align:center" class="mono">${esc(o.id)}</td>
+      <td style="text-align:center" class="mono">${esc(o.id || o.id_lote || "-")}</td>
       <td style="text-align:center" class="mono">${esc(o.produto_id || "-")}</td>
       <td style="text-align:center"><span class="pill ${sitCls}">${esc(sitTxt)}</span></td>
     </tr>`;
   }).join("\n");
 
-  return `<\!doctype html>
-<\html lang="pt-BR">
-<\head>
-  <meta charset="utf-8">
-  <title>Checklist de Discos · Monstro Discos<\/title>
-  <style>
-    @page {
-      size: A4 portrait;
-      margin: 10mm 8mm 12mm 8mm;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #111;
-      background: #fff;
-      font-size: 8.5pt;
-      line-height: 1.25;
-    }
-    .no-print {
-      position: sticky;
-      top: 0;
-      z-index: 999;
-      background: #24292e;
-      color: #fff;
-      padding: 10px 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 2px solid #2563eb;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    .no-print button {
-      background: #2563eb;
-      color: #fff;
-      border: none;
-      font-size: 13px;
-      font-weight: 700;
-      padding: 7px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    .no-print button:hover { background: #1d4ed8; }
-    @media print {
-      .no-print { display: none !important; }
-      body { font-size: 8pt; }
-      thead { display: table-header-group; }
-      tr { page-break-inside: avoid; }
-    }
-    .header {
-      margin-bottom: 10px;
-      padding-bottom: 6px;
-      border-bottom: 2px solid #111;
-    }
-    .header h1 {
-      font-size: 13pt;
-      margin: 0 0 4px 0;
-      font-weight: 800;
-      letter-spacing: -0.3px;
-    }
-    .header .meta {
-      font-size: 8pt;
-      color: #444;
-      display: flex;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    th {
-      border-bottom: 1.5px solid #111;
-      text-align: left;
-      padding: 4px 3px;
-      font-size: 7.5pt;
-      text-transform: uppercase;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      color: #222;
-    }
-    td {
-      border-bottom: 1px solid #e5e7eb;
-      padding: 4px 3px;
-      vertical-align: middle;
-    }
-    tr:nth-child(even) td {
-      background-color: #fafafa;
-    }
-    .chk-box {
-      display: inline-block;
-      width: 13px;
-      height: 13px;
-      border: 1.5px solid #222;
-      border-radius: 2px;
-      vertical-align: middle;
-    }
-    .mono {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 7.5pt;
-    }
-    .pill {
-      display: inline-block;
-      padding: 1px 5px;
-      border-radius: 4px;
-      font-size: 7pt;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-    .pill-vis { background: #e0f2fe; color: #0369a1; }
-    .pill-ocu { background: #f3f4f6; color: #4b5563; }
-    .pill-novo { background: #dcfce7; color: #15803d; }
-    .pill-usado { background: #fef3c7; color: #b45309; }
-  <\/style>
-<\/head>
-<\body>
-  <div class="no-print">
-    <div><b>Checklist gerado com sucesso.</b> Escolha sua impressora física ou a opção <b>Salvar como PDF</b>.</div>
-    <button type="button" onclick="window.print()">Imprimir / Salvar como PDF</button>
-  </div>
-  <div class="header">
-    <h1>Monstro Discos · Checklist de Conferência de Discos Físicos</h1>
-    <div class="meta">
-      <div><b>Total:</b> ${total} discos (${nNovos} novos/lacrados, ${nUsados} usados) · <b>Filtros:</b> ${esc(descFiltro)}</div>
-      <div><b>Gerado em:</b> ${esc(agora)} · <b>Ordem:</b> Artista (A-Z)</div>
-    </div>
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:28px;text-align:center">✓</th>
-        <th>Artista / Álbum (Título)</th>
-        <th style="width:72px;text-align:right">Preço</th>
-        <th style="width:62px;text-align:center">Estado</th>
-        <th style="width:115px;text-align:center">ID Lote</th>
-        <th style="width:85px;text-align:center">ID Loja</th>
-        <th style="width:65px;text-align:center">No Site</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${linhas}
-    </tbody>
-  </table>
-  <div style="margin-top:12px;padding-top:6px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:7.5pt;color:#666">
-    <span>Monstro Discos · lojamonstro.com.br</span>
-    <span>Checklist de conferência física de estoque</span>
-  </div>
-  <\script>
-    window.PM_AUTO_PRINT && setTimeout(function(){ window.print(); }, 350);
-  <\/script>
-<\/body>
-<\/html>`;
-}
-
-function cdAbrirJanelaChecklist(html, total){
-  // Mostra o checklist dentro do próprio Painel, no topo da aba Cadastro.
-  let box = $("cd-checklist-view");
-  if (!box) {
-    box = document.createElement("div");
-    box.id = "cd-checklist-view";
-    box.className = "no-print";
-    box.style.cssText = "margin:12px 0 18px;border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:12px";
-    const alvo = $("cd-filtro");
-    alvo.parentNode.insertBefore(box, alvo);
-  }
-  box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
-      <b style="font-size:15px">Checklist gerado: ${total} discos</b>
-      <div style="display:flex;gap:8px">
-        <button type="button" class="btn primary" id="cd-ck-imprimir">Imprimir / Salvar como PDF</button>
-        <button type="button" class="btn" id="cd-ck-fechar">Fechar</button>
+  return `<style>
+    @page { size: A4 portrait; margin: 10mm 8mm 12mm 8mm; }
+    thead { display: table-header-group !important; }
+    tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+  </style>
+  <div class="cd-print-checklist">
+    <div class="header" style="margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #111">
+      <h1 style="font-size:13pt;margin:0 0 4px 0;font-weight:800;letter-spacing:-0.3px">Monstro Discos · Checklist de Conferência de Discos Físicos</h1>
+      <div class="meta" style="font-size:8pt;color:#444;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
+        <div><b>Total:</b> ${total} discos (${nNovos} novos/lacrados, ${nUsados} usados) · <b>Filtros:</b> ${esc(descFiltro)}</div>
+        <div><b>Gerado em:</b> ${esc(agora)} · <b>Ordem:</b> Artista (A-Z)</div>
       </div>
     </div>
-    <iframe id="cd-ck-frame" title="Checklist" style="width:100%;height:75vh;border:1px solid var(--line);border-radius:8px;background:#fff"></iframe>`;
-  const fr = $("cd-ck-frame");
-  fr.srcdoc = html;
-  $("cd-ck-imprimir").addEventListener("click", () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ alert("Não consegui abrir a impressão: " + e.message); } });
-  $("cd-ck-fechar").addEventListener("click", () => box.remove());
+    <table>
+      <thead>
+        <tr>
+          <th style="width:28px;text-align:center">✓</th>
+          <th>Artista / Álbum (Título)</th>
+          <th style="width:75px;text-align:right">Preço</th>
+          <th style="width:65px;text-align:center">Estado</th>
+          <th style="width:115px;text-align:center">ID Lote</th>
+          <th style="width:85px;text-align:center">ID Loja</th>
+          <th style="width:65px;text-align:center">No Site</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${linhas}
+      </tbody>
+    </table>
+    <div style="margin-top:12px;padding-top:6px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:7.5pt;color:#666">
+      <span>Monstro Discos · lojamonstro.com.br</span>
+      <span>Checklist de conferência física de estoque</span>
+    </div>
+  </div>`;
+}
+
+function cdMostrarAvisoChecklistPronto(total){
+  let box = $("cd-checklist-banner");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "cd-checklist-banner";
+    box.className = "no-print";
+    box.style.cssText = "margin:12px 0 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px";
+    const alvo = $("cd-filtro") || $("banner");
+    if (alvo) alvo.parentNode.insertBefore(box, alvo);
+  }
+  box.innerHTML = `<div><b style="font-size:15px">Checklist pronto: ${total} discos</b><div class="s" style="margin-top:2px">A janela de impressão foi acionada. Se precisar abrir novamente, clique em Imprimir abaixo.</div></div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="btn primary" id="cd-ck-reimprimir" style="font-weight:700">Imprimir / Salvar como PDF</button>
+      <button type="button" class="btn" id="cd-ck-fechar-aviso">Fechar</button>
+    </div>`;
+  const btnReimp = $("cd-ck-reimprimir");
+  if (btnReimp) btnReimp.addEventListener("click", () => window.print());
+  const btnFechar = $("cd-ck-fechar-aviso");
+  if (btnFechar) btnFechar.addEventListener("click", () => box.remove());
   box.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -4212,7 +4337,12 @@ function cdDispararGeracaoChecklist(){
   }
   cdFecharModalChecklist();
   const html = cdMontarChecklistHtml(filtrados, { modo, lote, dataInicio, dataFim });
-  cdAbrirJanelaChecklist(html, filtrados.length);
+  const printArea = $("cd-print-area");
+  if (printArea) {
+    printArea.innerHTML = html;
+  }
+  cdMostrarAvisoChecklistPronto(filtrados.length);
+  window.print();
 }
 if (typeof window !== "undefined") Object.assign(window, { cdAbrirModalChecklist, cdFecharModalChecklist, cdDispararGeracaoChecklist });
 
@@ -4244,7 +4374,7 @@ function cdCard(o){
   return `<div class="fcard" data-cd="${esc(o.id)}">
     ${novo && !cdEhLivro(o) && edit ? iq.filter(x => x.produto_id).map(x => `<div class="banner">Já existe: ${esc(x.nome)}. É a mesma edição?<button type="button" data-somar="${esc(x.produto_id)}">Sim, somar ${esc(o.estoque || "1")} ao estoque deste produto</button></div>`).join("") : ""}
     ${cdCompararCapas(o)}
-    <div class="fcard-h"><b style="overflow-wrap:anywhere">${esc(o.titulo)}</b><span class="pill ${pill[0]}">${esc(g === "erro" || g === "descartado" ? o.status : pill[1])}</span>${g === "aprovado" || g === "criado" ? `<span class="pill ${cdVaiPublicar(o) ? "p-ok" : "p-wait"}">${cdVaiPublicar(o) ? "vai aparecer" : "fica oculto"}</span>` : ""}</div>
+    <div class="fcard-h"><b style="overflow-wrap:anywhere">${esc(o.titulo)}</b>${o.lote_black ? `<span class="pill p-info">Lote Black: ${esc(o.lote_black)}</span>` : ""}<span class="pill ${pill[0]}">${esc(g === "erro" || g === "descartado" ? o.status : pill[1])}</span>${g === "aprovado" || g === "criado" ? `<span class="pill ${cdVaiPublicar(o) ? "p-ok" : "p-wait"}">${cdVaiPublicar(o) ? "vai aparecer" : "fica oculto"}</span>` : ""}</div>
     <div class="s">${esc(o.ficha)}</div>
     <div class="cost-form" style="margin-top:10px">
       <label>Preço (R$)<input data-f="preco" inputmode="decimal" value="${esc(o.preco)}" data-orig="${esc(o.preco)}"${dis}>
@@ -4274,26 +4404,28 @@ function cdCard(o){
       : `<label>Vinil (na mão)<select data-f="vinil" data-orig="${esc(vin)}"${dis}><option value="">conferir…</option>${CD_GRADES.map(x => `<option${x === vin ? " selected" : ""}>${x}</option>`).join("")}</select></label>
       <label>Capa (foto)<select data-f="capa" data-orig="${esc(cap)}"${dis}><option value="">conferir…</option>${CD_CAPA_GRADES.map(x => `<option${x === cap ? " selected" : ""}>${x}</option>`).join("")}</select></label>`)}
       <div><div class="k">Referência</div><span class="s">${esc(dref || "sem histórico")}</span></div>
+      <label>Lote Black
+        <select data-f="lote_black" data-orig="${esc(o.lote_black || "")}"${dis}>
+          <option value=""${!o.lote_black ? " selected" : ""}>Nenhum</option>
+          <option value="26/11"${o.lote_black === "26/11" ? " selected" : ""}>26/11 (Lado A)</option>
+          <option value="27/11"${o.lote_black === "27/11" ? " selected" : ""}>27/11 (Sexta)</option>
+          <option value="28/11"${o.lote_black === "28/11" ? " selected" : ""}>28/11 (Sábado)</option>
+          <option value="29/11"${o.lote_black === "29/11" ? " selected" : ""}>29/11 (Domingo)</option>
+        </select>
+      </label>
     </div>
     ${iq.length ? `<div class="fobs" style="margin-top:10px"><b>Já existe na loja:</b> ${iq.map(x => `<a href="https://lojamonstro.com.br/produtos/${esc(x.url)}/" target="_blank" rel="noopener">${esc(x.nome)}</a> (R$ ${esc(x.preco)}, ${x.estoque > 0 ? (x.exibir ? "à venda" : "em estoque, oculto") : "esgotado"})`).join("<br>")}. Confira se não é o mesmo exemplar antes de aprovar.</div>` : ""}
     ${pend.length ? `<div class="banner" style="margin:10px 0 0"><b>Pendências</b>${pend.map(p => "• " + esc(p)).join("<br>")}${edit ? '<label class="s" style="display:flex;gap:6px;margin-top:6px;align-items:center"><input type="checkbox" data-f="pendok" style="width:auto"${CD_PEND.has(o.id) ? " checked" : ""}> Conferi as pendências</label>' : ""}</div>` : ""}
     <div class="chips" style="margin-top:10px">${fotos.map(f => f.id ? `<a class="btn" style="font:500 12px var(--mono);padding:3px 8px" target="_blank" rel="noopener" href="https://drive.google.com/file/d/${esc(f.id)}/view">${String(f.ordem).padStart(2,"0")} ${esc(f.papel)}${f.ajustada ? " ✓" : ""}</a>` : `<span class="pill p-info">${String(f.ordem).padStart(2,"0")} ${esc(f.papel)}</span>`).join("")}</div>
     <div class="s">${fotos.some(f => f.ajustada) ? "✓ = foto já ajustada pela rotina. " : ""}As fotos abrem no Drive da conta da Monstro. A etiqueta de preço nunca vai para o site.</div>
     <details class="fmsg"${edit ? " open" : ""}><summary>Editar cadastro</summary>
-      <div class="cost-form" style="grid-template-columns:1fr">
-        <label>Título<input data-f="titulo" value="${esc(o.titulo)}" data-orig="${esc(o.titulo)}"${dis}></label>
-        <label>Categorias<input data-f="categorias" value="${esc(o.categorias)}" data-orig="${esc(o.categorias)}"${dis}>
-          <span class="s" style="font-weight:400;display:block;margin-top:2px">${sugCat ? "Categorias em produtos parecidos da loja: <b>" + esc(sugCat) + "</b>" : "Separadas por vírgula (ex.: LP, Novo/Lacrado, Rock)"}</span>
-        </label>
-        <label>Descrição<textarea data-f="descricao" data-orig="${esc(o.descricao)}" style="min-height:220px"${dis}>${esc(o.descricao)}</textarea></label>
-        ${o.faixas ? `<label class="s" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="faixas" style="width:auto"${/^sim$/i.test(o.faixas_na_descricao) ? " checked" : ""}${dis}> Incluir a lista de faixas do Discogs no fim da descrição</label>` : ""}
-        <label>Tags<input data-f="tags" value="${esc(o.tags)}" data-orig="${esc(o.tags)}"${dis}></label>
-        <label>Peso (kg)<input data-f="peso_kg" inputmode="decimal" value="${esc(o.peso_kg)}" data-orig="${esc(o.peso_kg)}"${dis}><span class="s" style="font-weight:400;display:block;margin-top:2px">Padrão: LP simples 0,50 kg · capa dupla/encarte 0,55 kg · duplo 0,80 kg · compacto/CD 0,20 kg · K7 0,17 kg</span></label>
-        <label>Link do Discogs<input data-f="discogs_url" type="url" value="${esc(o.discogs_url)}" data-orig="${esc(o.discogs_url)}"${dis}></label>
-        <label>Observação para o Claude<input data-f="obs" value="${esc(o.observacao_tulio)}" data-orig="${esc(o.observacao_tulio)}"></label>
+      <div id="cd-det-${esc(o.id)}" class="cd-det-conteudo" data-det-id="${esc(o.id)}" data-row="${o._row}">
+        ${(o._carregado_completo || o.descricao) ? cdFormDetalhes(o, edit) : `
+          <div style="padding:14px;text-align:center">
+            <button type="button" class="btn primary cd-btn-carregar-det" data-carregar-det="${esc(o.id)}" style="font-weight:700">Carregar descrição, faixas e fotos</button>
+          </div>
+        `}
       </div>
-      ${cdFotosEditor(o, edit)}
-      <div class="s" style="margin-top:6px">${esc(o.altura_cm)} × ${esc(o.largura_cm)} × ${esc(o.comprimento_cm)} cm${o.discogs_confianca ? ` · confiança Discogs ${esc(o.discogs_confianca)}` : ""}</div>
     </details>
     ${(g === "criado" || g === "publicado" || o.produto_id) ? `<div class="fobs" style="margin-top:10px">Já está na loja: corrija pelo <a href="https://monstrodiscos.lojavirtualnuvem.com.br/admin/products/${esc(o.produto_id)}" target="_blank" rel="noopener">administrador da Nuvemshop</a> (produto ${esc(o.produto_id)})${o.link_loja ? ` · <a href="${esc(o.link_loja)}" target="_blank" rel="noopener">ver na loja</a>` : ""}</div>` : ""}
     ${g === "erro" ? `<div class="fobs" style="color:var(--accent)">A rotina não conseguiu criar. Não aprove de novo antes de conferir: peça ao Claude ou ao Codex para olhar o diário desta linha e a loja.</div>` : ""}
@@ -4319,6 +4451,24 @@ function cdCard(o){
 }
 function cdLigar(box, o){
   if (!o) return;
+  const detConteudo = box.querySelector(".cd-det-conteudo[data-det-id]");
+  const detEl = detConteudo ? detConteudo.closest("details") : box.querySelector("details.fmsg");
+  if (detEl && !o._carregado_completo){
+    const acionar = async () => {
+      if (o._carregado_completo) return;
+      await cdCarregarDiscoDetalhes(o, box);
+    };
+    detEl.addEventListener("toggle", () => {
+      if (detEl.open) acionar();
+    });
+    box.querySelectorAll(".cd-btn-carregar-det").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        detEl.open = true;
+        acionar();
+      });
+    });
+  }
   box.querySelectorAll("input,select,textarea").forEach(el => el.addEventListener("input", () => { if (el.dataset.orig !== undefined){ const v = el.type === "checkbox" ? (el.checked ? "sim" : "nao") : el.value; el.classList.toggle("changed", v !== el.dataset.orig); } }));
   box.querySelectorAll("[data-somar]").forEach(b => b.onclick = async () => {
     const qtd = Number(box.querySelector('[data-f="estoque"]')?.value || o.estoque);
@@ -4485,6 +4635,16 @@ function cdLigar(box, o){
         const du = q("discogs_url").value.trim();
         if (du !== (o.discogs_url || "")) set("discogs_url", du);
       }
+      if (q("lote_black")){
+        const lb = q("lote_black").value.trim();
+        if (lb !== (o.lote_black || "")){
+          if (idx("lote_black") < 0){
+            await write(`cadastro_rascunhos!${colL(o._h.length)}1`, [["lote_black"]]);
+            o._h.push("lote_black");
+          }
+          set("lote_black", lb);
+        }
+      }
       if (q("faixas")) { const fv = q("faixas").checked ? "sim" : "não"; if (fv !== (o.faixas_na_descricao || "não")) set("faixas_na_descricao", fv); }
       if (q("publicar")) { const pv = q("publicar").checked ? "sim" : "nao"; if (pv !== (o.publicar || "") && (aoAprovar || pv !== q("publicar").dataset.orig)) { if (idx("publicar") < 0) { await write(`cadastro_rascunhos!${colL(o._h.length)}1`, [["publicar"]]); o._h.push("publicar"); } set("publicar", pv); } }
 
@@ -4582,16 +4742,370 @@ function cdIguais(o){
 const cdR = () => { if (D.cad) { try { renderCad(); } catch(e){ setErr("cad", "Não consegui desenhar o cadastro: o formato da aba mudou."); } } };
 
 const adR = () => { if (D.acd) renderAds(); };
-const RENDER = { itNum:renderCom, prodId:renderCom, cprod:renderCom, pman:renderCom, cajust:renderCom, itens:renderCom, prodA:renderCom, g4d:()=>{}, g4l:()=>{}, k7:renderK7, rcamp:()=>rpR(), rjog:()=>rpR(), rev:()=>rpR(), rlem:()=>rpR(), prodUrl:cdR, prodImg:cdR, cad:cdR, cadf:cdR, acd:adR, ahoje:adR, aads:adR, asem:adR, aalert:adR, ares:adR, anotas:adR, adir:adR, atrib:renderAtrib, ped:()=>{renderCom(); renderAtrib();}, pedNum:()=>{renderCom(); renderAtrib();}, cauto:renderCom, comis:renderCom, fila:renderFila, rodada:renderFila, regcfg:renderRegCfg, bplano:renderBrevo, atual:()=>{renderAtual(); if (D.mensal) renderMensal();}, mensal:renderMensal, coortes:renderCoortes, regua:renderRegua, reguaRes:renderReguaRes, car:renderCar, vale:renderVale, ind:()=>{}, res:renderCarRes,
+
+/* ---------- Black Monstro 2026 ---------- */
+function renderBlack(){
+  if (!D.blackRes || !D.blackDia) return;
+  const kv = {};
+  (D.blackRes || []).forEach(r => { if (r && r[0]) kv[String(r[0]).trim()] = r[1] ?? ""; });
+  let cupons = [], vip = {}, comp25 = {}, topDiscos = [], lotesBlack = [], alertas = [];
+  try { cupons = JSON.parse(kv.cupons_json || "[]"); } catch(e){}
+  try { vip = JSON.parse(kv.vip_json || "{}"); } catch(e){}
+  try { comp25 = JSON.parse(kv.comparacao_2025_json || "{}"); } catch(e){}
+  try { topDiscos = JSON.parse(kv.top_discos_json || "[]"); } catch(e){}
+  try { lotesBlack = JSON.parse(kv.lotes_black_json || "[]"); } catch(e){}
+  try { alertas = JSON.parse(kv.alertas_json || "[]"); } catch(e){}
+
+  /* Alertas */
+  const alEl = $("black-alertas");
+  if (alEl){
+    alEl.innerHTML = alertas.length ? alertas.map(a => `<div class="banner" style="background:var(--warn-soft);border-color:var(--warn);margin:12px 0"><b>Atenção na Black</b>${esc(a)}</div>`).join("") : "";
+  }
+
+  /* Placar */
+  const hFat = num(kv.hoje_faturamento) || 0, hPed = num(kv.hoje_pedidos) || 0, hTick = num(kv.hoje_ticket_medio) || 0;
+  const hMeta = num(kv.hoje_meta) || 870, hPct = num(kv.hoje_atingimento_pct) || 0;
+  const pFat = num(kv.periodo_faturamento) || 0, pPed = num(kv.periodo_pedidos) || 0, pTick = num(kv.periodo_ticket_medio) || 0;
+  const mMes = num(kv.meta_mes) || 50000, mPct = num(kv.atingimento_mes_pct) || 0, sTot = num(kv.sobra_total) || 0;
+  const mEsticada = num(kv.meta_esticada) || 60000, mEstPct = mEsticada > 0 ? (pFat / mEsticada * 100) : 0;
+  const pisoBlack = num(kv.piso_black) || 24000;
+  const acimaPiso = pFat >= pisoBlack;
+
+  $("black-placar").innerHTML = `
+    <div class="card">
+      <div class="k">Hoje (${esc(kv.hoje_data || "–")})</div>
+      <div class="v">${brl(hFat)}</div>
+      <div class="s">${int(hPed)} pedido${hPed === 1 ? "" : "s"} · ticket médio ${brl(hTick)}</div>
+      <div class="goal" style="margin-top:10px">
+        <div class="bar"><i style="width:${Math.min(100, Math.max(0, hPct))}%"></i></div>
+        <div class="row"><span>${pct(hPct)} da meta</span><span>meta do dia: ${brl(hMeta)}</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="k">Acumulado Black (10 a 30/11)</div>
+      <div class="v">${brl(pFat)}</div>
+      <div class="s">${int(pPed)} pedido${pPed === 1 ? "" : "s"} · ticket médio ${brl(pTick)}</div>
+      <div class="goal" style="margin-top:10px">
+        <div class="bar"><i style="width:${Math.min(100, Math.max(0, mPct))}%"></i></div>
+        <div class="row"><span>${pct(mPct)} da meta base (${brl(mMes)})</span><span>esticada: ${pct(mEstPct)} de ${brl(mEsticada)}</span></div>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+        <span class="pill ${acimaPiso ? 'p-ok' : 'p-bad'}">${acimaPiso ? 'Acima do piso' : 'Abaixo do piso'}</span>
+        <span class="s" style="font-size:12px">Piso da Black: <b>${brl(pisoBlack)}</b> (${acimaPiso ? '+' + brl(pFat - pisoBlack) : brl(pFat - pisoBlack)})</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="k">Sobra estimada no período</div>
+      <div class="v" style="color:var(--good)">${brl(sTot)}</div>
+      <div class="s">${pFat ? pct(sTot / pFat * 100) : "0%"} do faturamento acumulado</div>
+      <div class="s" style="margin-top:6px;font-size:12px">Calculada pelas premissas da aba margem_premissas.</div>
+    </div>`;
+
+  /* Gráfico Diário */
+  const diasRows = rows(D.blackDia || []);
+  if (diasRows.length && $("black-chart")){
+    barChart($("black-chart"), {
+      labels: diasRows.map(r => diaLabel(r.data)),
+      bars: [{values: diasRows.map(r => num(r.faturamento) || 0), color: "var(--s1)"}],
+      line: {values: diasRows.map(r => num(r.meta_dia) || 0), color: "var(--s2)"},
+      axis: v => "R$" + nf0.format(v),
+      aria: "Faturamento diário e meta da Black Monstro",
+      tip: i => {
+        const r = diasRows[i];
+        return `<b>${esc(brDiaC(r.data))} · Fase: ${esc(r.fase)}</b><br>Faturamento: ${brl(num(r.faturamento))}<br>Meta do dia: ${brl(num(r.meta_dia))}<br>Pedidos: ${int(num(r.pedidos))}<br>Ticket médio: ${brl(num(r.ticket_medio))}<br>Sobra do dia: ${brl(num(r.sobra_dia))}`;
+      }
+    });
+  }
+
+  /* Tabela de Sobra */
+  const sbEl = $("black-sobra");
+  if (sbEl){
+    sbEl.innerHTML = diasRows.length ? `<table>
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Fase</th>
+          <th class="n">Faturamento</th>
+          <th class="n">Pedidos</th>
+          <th class="n">Custo discos</th>
+          <th class="n">Custos venda</th>
+          <th class="n">Anúncios</th>
+          <th class="n">Sobra do dia</th>
+          <th class="n">Sobra acumulada</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${diasRows.map(r => `<tr>
+          <td>${esc(brDiaC(r.data))}</td>
+          <td><span class="pill ${r.fase === 'Black' ? 'p-bad' : r.fase === 'Lado A' ? 'p-info' : 'p-wait'}">${esc(r.fase)}</span></td>
+          <td class="n"><b>${brl(num(r.faturamento))}</b></td>
+          <td class="n">${int(num(r.pedidos))}</td>
+          <td class="n">${brl(num(r.custo_disco))}</td>
+          <td class="n">${brl(num(r.custos_venda))}</td>
+          <td class="n">${brl(num(r.gasto_anuncio))}</td>
+          <td class="n" style="color:${(num(r.sobra_dia) || 0) < 0 ? 'var(--accent)' : 'var(--good)'}"><b>${brl(num(r.sobra_dia))}</b></td>
+          <td class="n"><b>${brl(num(r.sobra_acum))}</b></td>
+        </tr>`).join("")}
+      </tbody>
+    </table>` : '<div class="empty">Sem dados de sobra calculados ainda.</div>';
+  }
+
+  /* Tabela Por Cupom */
+  const cupEl = $("black-cupons");
+  if (cupEl){
+    cupEl.innerHTML = cupons.length ? `<table>
+      <thead>
+        <tr>
+          <th>Cupom</th>
+          <th class="n">Pedidos</th>
+          <th class="n">Faturamento</th>
+          <th class="n">Desconto</th>
+          <th class="n">Ticket médio</th>
+          <th>Tipo</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${cupons.map(c => `<tr>
+          <td><b>${esc(c.cupom === "SEM_CUPOM" ? "Sem cupom" : c.cupom)}</b></td>
+          <td class="n">${int(c.pedidos)}</td>
+          <td class="n">${brl(c.faturamento)}</td>
+          <td class="n">${brl(c.desconto)}</td>
+          <td class="n">${brl(c.ticket_medio)}</td>
+          <td>${c.oficial ? '<span class="pill p-ok">Oficial Black</span>' : '<span class="pill p-info">Outro</span>'}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>` : '<div class="empty">Nenhum cupom usado no período.</div>';
+  }
+
+  /* Lista Lado A */
+  const vipEl = $("black-vip");
+  if (vipEl){
+    const ladoA = vip;
+    vipEl.innerHTML = `<div class="card" style="margin-top:4px">
+      <div class="k">Inscritos na Lista Lado A</div>
+      <div class="v">${int(ladoA.total_inscritos || 0)}</div>
+      <div class="s">inscritos no Brevo para o dia 26/11 (Lado A)</div>
+      <div style="margin-top:12px;font-size:14px">
+        Compradores no dia Lado A (26/11): <b>${int(ladoA.compraram_dia_26 || 0)}</b>
+      </div>
+    </div>`;
+  }
+
+  /* Anúncios */
+  const adsEl = $("black-ads");
+  if (adsEl){
+    const adGastoTot = diasRows.reduce((s, r) => s + (num(r.gasto_anuncio) || 0), 0);
+    const adFatTot = diasRows.reduce((s, r) => s + (num(r.faturamento) || 0), 0);
+    const adRoas = adGastoTot > 0 ? (adFatTot / adGastoTot) : 0;
+    adsEl.innerHTML = `<div class="card" style="margin-top:4px">
+      <div class="k">Investimento no Meta</div>
+      <div class="v">${brl(adGastoTot)}</div>
+      <div class="s">campanhas black26_ e prosp_vendas_recorrente</div>
+      <div style="margin-top:12px;font-size:14px">
+        ROAS geral sobre a loja no período: <b>${xx(adRoas)}</b>
+      </div>
+    </div>`;
+  }
+
+  /* Comparação 2025 */
+  const c25El = $("black-comp25");
+  if (c25El){
+    c25El.innerHTML = `<table>
+      <thead>
+        <tr>
+          <th>Período</th>
+          <th class="n">Pedidos</th>
+          <th class="n">Faturamento</th>
+          <th class="n">Ticket médio</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>Black Friday 2025</b> (28 a 30/11/2025)</td>
+          <td class="n">${int(comp25.bf25_pedidos || 64)}</td>
+          <td class="n"><b>${brl(comp25.bf25_faturamento || 19711.48)}</b></td>
+          <td class="n">${brl(comp25.bf25_ticket || 307.99)}</td>
+        </tr>
+        <tr>
+          <td><b>Black Friday 2026</b> (27 a 30/11/2026)</td>
+          <td class="n">${int(comp25.bf26_pedidos || 0)}</td>
+          <td class="n"><b>${brl(comp25.bf26_faturamento || 0)}</b></td>
+          <td class="n">${brl(comp25.bf26_ticket || 0)}</td>
+        </tr>
+      </tbody>
+    </table>`;
+  }
+
+  /* Lotes Black */
+  const lotEl = $("black-lotes");
+  if (lotEl){
+    lotEl.innerHTML = lotesBlack.length ? `<table>
+      <thead>
+        <tr>
+          <th>Lote</th>
+          <th class="n">Cadastrados</th>
+          <th class="n">Vendidos</th>
+          <th class="n">Faturamento</th>
+          <th class="n">Restantes</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${lotesBlack.map(l => `<tr>
+          <td><b>${esc(l.lote)}</b></td>
+          <td class="n">${int(l.cadastrados)}</td>
+          <td class="n">${int(l.vendidos)}</td>
+          <td class="n">${brl(l.faturamento)}</td>
+          <td class="n">${int(l.restantes)}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>` : '<div class="empty">Sem discos cadastrados nos lotes Black ainda.</div>';
+  }
+
+  /* Mais vendidos */
+  const topEl = $("black-top");
+  if (topEl){
+    topEl.innerHTML = topDiscos.length ? `<table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Disco</th>
+          <th class="n">Quantidade</th>
+          <th class="n">Faturamento</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${topDiscos.map((d, i) => `<tr>
+          <td>${i + 1}</td>
+          <td><b>${esc(d.produto)}</b></td>
+          <td class="n">${int(d.quantidade)}</td>
+          <td class="n">${brl(d.faturamento)}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>` : '<div class="empty">Nenhum disco vendido no período da Black ainda.</div>';
+  }
+}
+
+/* ---------- Premissas de Margem e Custos (aba margem_premissas) ---------- */
+function renderMargemPremissas(){
+  const raw = D.margem || [];
+  if (!raw.length || !$("cfg-margem")) return;
+  if (document.querySelector("#cfg-margem .changed")) return;
+
+  /* Perguntas (linhas 5 a 30, indices 4 a 29) */
+  const perguntas = [];
+  raw.forEach((r, idx) => {
+    const numQ = String(r[0] || "").trim();
+    if (/^\d+$/.test(numQ)){
+      perguntas.push({
+        row: idx + 1,
+        num: numQ,
+        pergunta: String(r[1] || "").trim(),
+        estimativa: String(r[2] || "").trim(),
+        sugestao: String(r[3] || "").trim(),
+        ajuda: String(r[4] || "").trim(),
+        usado: String(r[5] || "").trim()
+      });
+    }
+  });
+
+  $("cfg-margem").innerHTML = `<div class="cfg-group">
+    <h3>Perguntas e estimativas</h3>
+    <p class="sub" style="margin:0 0 6px">Digite sua estimativa no campo. Se deixar vazio, a conta usa a sugestão inicial.</p>
+    ${perguntas.map(p => {
+      const id = "mp-r" + p.row;
+      return `<div class="cfg-row" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)">
+        <label for="${id}">
+          <b>${esc(p.num)}. ${esc(p.pergunta)}</b>
+          <div class="help">${esc(p.ajuda)}</div>
+          <div class="s" style="margin-top:4px">Sugestão: <b>${esc(p.sugestao)}</b> · Em uso: <b>${esc(p.usado)}</b></div>
+        </label>
+        <div>
+          <input id="${id}" data-row="${p.row}" data-orig="${esc(p.estimativa)}" value="${esc(p.estimativa)}" placeholder="${esc(p.sugestao)}">
+        </div>
+      </div>`;
+    }).join("")}
+    <div class="savebar">
+      <button class="primary" type="button" id="mp-save">Salvar estimativas de margem</button>
+      <span class="status" id="mp-status"></span>
+    </div>
+  </div>`;
+
+  $("cfg-margem").querySelectorAll("input").forEach(el => {
+    el.addEventListener("input", () => el.classList.toggle("changed", el.value !== el.dataset.orig));
+  });
+
+  const btnSave = $("mp-save");
+  if (btnSave){
+    btnSave.onclick = async () => {
+      const st = $("mp-status"), changed = [...$("cfg-margem").querySelectorAll(".changed")];
+      if (!changed.length){ st.className = "status"; st.textContent = "Nada mudou."; return; }
+      btnSave.disabled = true; st.className = "status"; st.textContent = "Salvando…";
+      try {
+        for (const el of changed){
+          await write(`margem_premissas!C${el.dataset.row}`, [[toCell(el.value)]]);
+          el.dataset.orig = el.value;
+          el.classList.remove("changed");
+        }
+        st.className = "status ok"; st.textContent = "Salvo às " + hhmm() + ". A rotina usa os novos valores a partir da próxima rodada.";
+        await afterSave();
+      } catch(e){
+        st.className = "status err"; st.textContent = writeErr(e);
+      }
+      btnSave.disabled = false;
+    };
+  }
+
+  /* Resultados calculados */
+  const resEl = $("cfg-margem-res");
+  if (resEl){
+    const rAliq = raw[32] ? raw[32][5] : "";
+    const rCustos = raw[33] ? raw[33][5] : "";
+    const rPed = raw[34] ? raw[34][5] : "";
+
+    /* Tabela de Sobra por desconto (linhas 37 a 42, indices 36 a 41) */
+    const sobraRows = raw.slice(37, 42);
+    const cabSobra = raw[36] || [];
+
+    /* Custos fixos (linhas 47 a 52, indices 46 a 51) */
+    const fixosRows = raw.slice(46, 52);
+
+    resEl.innerHTML = `
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:14px">
+        <div class="card"><div class="k">Alíquota efetiva usada</div><div class="v">${esc(rAliq || "–")}</div></div>
+        <div class="card"><div class="k">Custos sobre a venda</div><div class="v">${esc(rCustos || "–")}</div><div class="s">taxa + remuneração + imposto</div></div>
+        <div class="card"><div class="k">Custo por pedido</div><div class="v">${rPed ? "R$ " + esc(rPed) : "–"}</div><div class="s">embalagem + frete loja</div></div>
+      </div>
+      ${sobraRows.length ? `<div class="tbl" style="margin-bottom:14px">
+        <table>
+          <thead>
+            <tr>${cabSobra.map(c => `<th>${esc(c)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${sobraRows.map(r => `<tr>${r.map(c => `<td class="n">${esc(c)}</td>`).join("")}</tr>`).join("")}
+          </tbody>
+        </table>
+      </div>` : ""}
+      ${fixosRows.length ? `<div class="tbl">
+        <table>
+          <thead><tr><th colspan="2">Custos fixos e ponto de equilíbrio</th></tr></thead>
+          <tbody>
+            ${fixosRows.map(r => `<tr><td>${esc(r[1])}</td><td class="n"><b>${esc(r[5])}</b></td></tr>`).join("")}
+          </tbody>
+        </table>
+      </div>` : ""}`;
+  }
+}
+
+const RENDER = { itNum:renderCom, prodId:renderCom, cprod:renderCom, pman:renderCom, cajust:renderCom, itens:renderCom, prodA:renderCom, g4d:()=>{}, g4l:()=>{}, k7:renderK7, rcamp:()=>rpR(), rjog:()=>rpR(), rev:()=>rpR(), rlem:()=>rpR(), prodUrl:cdR, prodImg:cdR, cad:cdR, cadf:cdR, acd:adR, ahoje:adR, aads:adR, asem:adR, aalert:adR, ares:adR, anotas:adR, adir:adR, atrib:renderAtrib, ped:()=>{renderCom(); renderAtrib();}, pedNum:()=>{renderCom(); renderAtrib();}, cauto:renderCom, comis:renderCom, fila:renderFila, rodada:renderFila, regcfg:renderRegCfg, bplano:renderBrevo, blackDia:renderBlack, blackRes:renderBlack, margem:renderMargemPremissas, atual:()=>{renderAtual(); if (D.mensal) renderMensal();}, mensal:renderMensal, coortes:renderCoortes, regua:renderRegua, reguaRes:renderReguaRes, car:renderCar, vale:renderVale, ind:()=>{}, res:renderCarRes,
   cfg:()=>{renderCfg(); renderBrevoPill(); if (D.msgs) renderMsgs(); renderCom(); adR();}, msgs:renderMsgs, custos:()=>{renderCustos(); renderCom();} };
 
 ["g4d","g4l","k7","ped","pedNum","pedMail","itens","prodA","prodM","prodQ","cauto","custos","atrib","acd","cfg","fila","reguaLog","rjog","rcamp"].forEach(k => { const o = RENDER[k]; RENDER[k] = () => { if (o) o(); rsR(); if (VIEW === "k7") renderK7(); }; });
 let VIEW = (window.PM?.nivel === "k7") ? "k7" : "painel";
 function showView(v){
   if (window.PM?.nivel === "k7") v = "k7";
-  else if (!["painel","res","fila","ads","cad","rasp","k7","com","config"].includes(v)) v = "painel";
+  else if (!["painel","res","fila","ads","cad","black","rasp","k7","com","config"].includes(v)) v = "painel";
   VIEW = v;
-  ["painel","res","fila","ads","cad","rasp","k7","com","config"].forEach(k => { const el = $("view-"+k); if (el) el.hidden = v !== k; const tab = $("tab-"+k); if (tab) tab.setAttribute("aria-selected", String(v === k)); });
+  ["painel","res","fila","ads","cad","black","rasp","k7","com","config"].forEach(k => { const el = $("view-"+k); if (el) el.hidden = v !== k; const tab = $("tab-"+k); if (tab) tab.setAttribute("aria-selected", String(v === k)); });
   try { localStorage.setItem("pm-view", v); } catch(e){}
   if (v === "painel"){ if (D.mensal) renderMensal(); if (D.coortes) renderCoortes(); if (D.car) renderCar(); }
   if (v === "fila") renderFila();
@@ -4599,6 +5113,7 @@ function showView(v){
   if (v === "ads") adR();
   if (v === "res") rsR();
   if (v === "cad") cdR();
+  if (v === "black") renderBlack();
   if (v === "rasp") rpR();
   if (v === "k7") renderK7();
 }
@@ -4608,6 +5123,7 @@ $("tab-fila").onclick = () => showView("fila");
 $("tab-ads").onclick = () => showView("ads");
 $("tab-res").onclick = () => showView("res");
 $("tab-cad").onclick = () => showView("cad");
+$("tab-black").onclick = () => showView("black");
 $("tab-rasp").onclick = () => showView("rasp");
 if ($("tab-k7")) $("tab-k7").onclick = () => showView("k7");
 $("tab-config").onclick = () => showView("config");
@@ -4617,7 +5133,7 @@ $("tab-config").onclick = () => showView("config");
     showView("k7");
     return;
   }
-  let v = location.hash === "#k7" ? "k7" : (location.hash === "#configuracoes" ? "config" : (location.hash === "#fila" ? "fila" : (location.hash === "#comissao" ? "com" : (location.hash === "#anuncios" ? "ads" : (location.hash === "#resultados" ? "res" : (location.hash === "#cadastro" ? "cad" : (location.hash === "#raspadinha" ? "rasp" : null)))))));
+  let v = location.hash === "#k7" ? "k7" : (location.hash === "#configuracoes" ? "config" : (location.hash === "#fila" ? "fila" : (location.hash === "#comissao" ? "com" : (location.hash === "#anuncios" ? "ads" : (location.hash === "#resultados" ? "res" : (location.hash === "#black" ? "black" : (location.hash === "#cadastro" ? "cad" : (location.hash === "#raspadinha" ? "rasp" : null))))))));
   if (!v){ try { v = localStorage.getItem("pm-view"); } catch(e){} }
   if (v) showView(v);
 })();
