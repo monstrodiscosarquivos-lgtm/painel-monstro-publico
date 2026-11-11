@@ -29,7 +29,7 @@ def test_carregar_premissas_margem():
 def test_comparacao_2025_conferencia_real():
     """Valida a regra de negócio da Black 2025: 28 a 30/11/2025 = 64 pedidos e R$ ~19,7 mil."""
     pedidos = [
-        {"numero": str(100 + i), "email": f"u{i}@test.com", "data": "2025-11-28 10:00:00", "valido": "TRUE", "total": "307,99", "subtotal": "350,00", "desconto": "42,01", "cupom": "BLACKMONSTRO"}
+        {"numero": str(100 + i), "email": f"u{i}@exemplo.com", "data": "2025-11-28 10:00:00", "valido": "TRUE", "total": "307,99", "subtotal": "350,00", "desconto": "42,01", "cupom": "BLACKMONSTRO"}
         for i in range(64)
     ]
     df_p = pd.DataFrame(pedidos)
@@ -50,8 +50,8 @@ def test_comparacao_2025_conferencia_real():
 
 def test_calculo_black_dias_e_metas():
     pedidos = [
-        {"numero": "1", "email": "a@test.com", "data": "2026-11-10 14:00:00", "valido": "TRUE", "total": "1000,00", "subtotal": "1000,00", "desconto": "0", "cupom": "ANTECIPA10"},
-        {"numero": "2", "email": "b@test.com", "data": "2026-11-26 15:00:00", "valido": "TRUE", "total": "5000,00", "subtotal": "5000,00", "desconto": "0", "cupom": "LADOA20"},
+        {"numero": "1", "email": "a@exemplo.com", "data": "2026-11-10 14:00:00", "valido": "TRUE", "total": "1000,00", "subtotal": "1000,00", "desconto": "0", "cupom": "ANTECIPA10"},
+        {"numero": "2", "email": "b@exemplo.com", "data": "2026-11-26 15:00:00", "valido": "TRUE", "total": "5000,00", "subtotal": "5000,00", "desconto": "0", "cupom": "LADOA20"},
     ]
     itens = [
         {"numero": "1", "data": "2026-11-10", "valido": "TRUE", "produto": "LP Teste 1", "valor": "500,00", "quantidade": "2", "produto_id": "10"},
@@ -80,7 +80,7 @@ def test_calculo_black_dias_e_metas():
         produtos_df=pd.DataFrame(produtos),
         cadastro_rascunhos_df=pd.DataFrame(rascunhos),
         config_params=config_params,
-        emails_vip={"b@test.com"},
+        emails_vip={"b@exemplo.com"},
         hoje_str="2026-11-26"
     )
 

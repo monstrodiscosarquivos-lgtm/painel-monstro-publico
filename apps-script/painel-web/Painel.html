@@ -904,7 +904,7 @@ const RANGES = {
   acd: "anuncios_campanha_dia!A1:T3000", ahoje: "anuncios_hoje!A1:K400", aads: "anuncios_anuncios!A1:S300", asem: "anuncios_semana!A1:U600",
   aalert: "anuncios_alertas!A1:F100", ares: "anuncios_resumo!A1:B20", anotas: "anuncios_notas!A1:E400", adir: "anuncios_direcao!A1:C400",
   pedMail: "pedidos!B1:B8000", itens: "itens!C1:I9000", prodA: "produtos!B1:H7000", prodM: "produtos!M1:M7000", prodQ: "produtos!Q1:Q7000",
-  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodImg: "produtos!O1:O7000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AR500", cadf: "cadastro_fotos!A1:F3000",
+  reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodImg: "produtos!O1:O7000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AZ500", cadf: "cadastro_fotos!A1:F3000",
   blackDia: "black_dia!A1:O30", blackRes: "black_resumo!A1:C50", margem: "margem_premissas!A1:F60",
   g4d: "ga4_diario!A1:I15000", g4l: "ga4_links!A1:I400", k7: "k7_resumo!A1:F500",
   itNum: "itens!A1:A9000", prodId: "produtos!L1:L7000", cprod: "comissao_produtos!A1:D300", pman: "pedidos_manuais!A1:N500", cajust: "comissao_ajustes!A1:D200"
@@ -3362,7 +3362,7 @@ async function cdCarregarDiscoDetalhes(o, box){
   const detCorpo = box ? box.querySelector("#cd-det-" + CSS.escape(o.id)) : $("cd-det-" + o.id);
   if (detCorpo) detCorpo.innerHTML = '<div class="empty skel" style="padding:16px">Carregando descrição, faixas e fotos do disco...</div>';
   try {
-    const range = `cadastro_rascunhos!A${o._row}:AR${o._row}`;
+    const range = `cadastro_rascunhos!A${o._row}:AZ${o._row}`;
     const r = await MCP.callTool(SERVER, TOOL, {spreadsheetId: SHEET, range});
     const p = r && r.payload;
     const vals = (p && p.values ? p.values : (Array.isArray(p) ? p : []))[0] || [];
@@ -3620,6 +3620,7 @@ let CD_CONF_DE = "";
 let CD_CONF_ATE = "";
 let CD_CONF_ORDEM = "artista";
 const CD_CONF_SEL = new Set();
+let CD_CONF_AVISO_LOTE = null;
 
 function cdDiscosConferencia(){
   const ids = D.prodId || [], a = D.prodA || [], u = D.prodUrl || [], m = D.prodM || [], imgs = D.prodImg || [];
@@ -3670,6 +3671,7 @@ function cdDiscosConferencia(){
       lote: (rasc && (rasc.lote || String(rasc.id || "").replace(/-\d+$/, ""))) || "",
       conferido_em: (rasc && rasc.conferido_em) || "",
       conferido_por: (rasc && rasc.conferido_por) || "",
+      subir_loja: (rasc && rasc.subir_loja) || "",
       marcado_vinil: (rasc && rasc.marcado_vinil) || "",
       rascunho_row: rasc ? rasc._row : null,
       rascunho_obj: rasc || null
@@ -3700,6 +3702,7 @@ function cdDiscosConferencia(){
       lote: String(r.lote || String(r.id || "").replace(/-\d+$/, "")).trim(),
       conferido_em: String(r.conferido_em || "").trim(),
       conferido_por: String(r.conferido_por || "").trim(),
+      subir_loja: String(r.subir_loja || "").trim(),
       marcado_vinil: String(r.marcado_vinil || "").trim(),
       rascunho_row: r._row || null,
       rascunho_obj: r
@@ -3932,6 +3935,32 @@ function cdRenderConferencia(){
     </div>
   </div>`;
 
+  /* Banner de feedback do lote */
+  if (CD_CONF_AVISO_LOTE){
+    const al = CD_CONF_AVISO_LOTE;
+    const acaoTxt = al.marcar ? "conferência marcada" : "conferência desmarcada";
+    if (!al.falhas || al.falhas.length === 0){
+      html += `<div class="banner no-print" style="margin-bottom:12px;background:var(--surface);border:1px solid var(--good);border-left:4px solid var(--good);padding:10px 14px;border-radius:8px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <b>Lote gravado com sucesso:</b> ${al.gravados} disco(s) com ${acaoTxt}.
+        </div>
+        <button type="button" class="btn" id="cd-conf-aviso-fechar" style="padding:2px 8px;font-size:12px">✕ Fechar</button>
+      </div>`;
+    } else {
+      html += `<div class="banner no-print" style="margin-bottom:12px;background:var(--surface);border:1px solid var(--bad);border-left:4px solid var(--bad);padding:10px 14px;border-radius:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <b>Atenção no lote:</b> ${al.gravados} gravados com sucesso, <b>${al.falhas.length} falharam</b> (de ${al.total} selecionados).
+          </div>
+          <button type="button" class="btn" id="cd-conf-aviso-fechar" style="padding:2px 8px;font-size:12px">✕ Fechar</button>
+        </div>
+        <ul style="margin:8px 0 0 16px;padding:0;font-size:12px;color:var(--bad)">
+          ${al.falhas.map(f => `<li><b>${esc(f.item)}:</b> ${esc(f.erro)}</li>`).join("")}
+        </ul>
+      </div>`;
+    }
+  }
+
   // Barra de contagem e ações em massa
   html += `<div class="no-print" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--line);border-radius:12px;margin-bottom:12px">
     <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px">
@@ -3978,19 +4007,33 @@ function cdRenderConferencia(){
 
     itensVisiveis.forEach(o => {
       const art = cdExtrairArtista(o);
-      const chaveItem = o.produto_id || o.id_lote;
-      const selecionado = CD_CONF_SEL.has(chaveItem);
+      const chaveItem = String(o.produto_id || o.id_lote || "").trim();
+      const selecionado = Boolean(chaveItem && CD_CONF_SEL.has(chaveItem));
       const conf = Boolean(String(o.conferido_em || "").trim());
       const novo = cdNovo(o);
       const estTxt = novo ? "Novo" : "Usado";
       const estPill = novo ? "p-ok" : "p-wait";
-      const sitTxt = o.visivel ? "Visível" : "Oculto";
-      const sitPill = o.visivel ? "p-info" : "p-muted";
+
+      let sitTxt = o.visivel ? "Visível" : "Oculto";
+      let sitPill = o.visivel ? "p-info" : "p-muted";
+      const sl = String(o.subir_loja || "").trim();
+      if (sl === "pedido"){
+        sitTxt = "Subindo…";
+        sitPill = "p-wait";
+      } else if (sl === "feito"){
+        sitTxt = "Na loja ✓";
+        sitPill = "p-ok";
+      } else if (sl.toLowerCase().startsWith("erro")){
+        sitTxt = sl.length > 25 ? sl.slice(0, 22) + "…" : sl;
+        sitPill = "p-bad";
+      }
+
       const prTxt = o.preco ? brl2(o.preco) : (o.preco_promocional ? brl2(o.preco_promocional) : "sem preço");
       const estqTxt = o.estoque_ilimitado ? "Infinito" : (o.estoque != null ? o.estoque : "-");
 
-      const linkAdmin = o.produto_id ? `https:[/][/]monstrodiscos.lojavirtualnuvem.com.br/admin/products/${esc(o.produto_id)}` : "";
-      const linkLoja = o.url ? `https:[/][/]lojamonstro.com.br/produtos/${esc(o.url)}` : "";
+      const BARRAS = "/" + "/";
+      const linkAdmin = o.produto_id ? ("https:" + BARRAS + "monstrodiscos.lojavirtualnuvem.com.br/admin/products/" + esc(o.produto_id)) : "";
+      const linkLoja = o.url ? ("https:" + BARRAS + "lojamonstro.com.br/produtos/" + esc(o.url)) : "";
 
       html += `<tr data-conf-item="${esc(chaveItem)}" style="${conf ? "opacity:0.85;" : ""}">
         <td style="text-align:center">
@@ -4015,7 +4058,7 @@ function cdRenderConferencia(){
           <b style="${num(o.estoque) <= 0 && !o.estoque_ilimitado ? "color:var(--bad)" : ""}">${esc(estqTxt)}</b>
         </td>
         <td style="text-align:center">
-          <span class="pill ${sitPill}">${esc(sitTxt)}</span>
+          <span class="pill ${sitPill}" title="${esc(sl || sitTxt)}">${esc(sitTxt)}</span>
         </td>
         <td style="text-align:center" class="mono" style="font-size:12px">
           ${esc(o.id_lote || "-")}
@@ -4124,14 +4167,22 @@ function cdRenderConferencia(){
     });
   }
 
-  // Ações em lote
+  /* Ações em lote */
   const btnBulkMarcar = $("cd-conf-bulk-marcar");
   if (btnBulkMarcar){
     btnBulkMarcar.addEventListener("click", async () => {
-      const selecionados = itens.filter(o => CD_CONF_SEL.has(o.produto_id || o.id_lote));
+      const selecionados = todos.filter(o => {
+        const ch = String(o.produto_id || o.id_lote || "").trim();
+        return ch && CD_CONF_SEL.has(ch);
+      });
+      if (!selecionados.length){
+        alert("Nenhum disco selecionado.");
+        return;
+      }
       btnBulkMarcar.disabled = true;
       btnBulkMarcar.textContent = "Gravando…";
-      await cdExecutarConferirEmMassa(selecionados, true);
+      const res = await cdExecutarConferirEmMassa(selecionados, true);
+      CD_CONF_AVISO_LOTE = res;
       CD_CONF_SEL.clear();
       cdRenderConferencia();
     });
@@ -4140,39 +4191,56 @@ function cdRenderConferencia(){
   const btnBulkDesmarcar = $("cd-conf-bulk-desmarcar");
   if (btnBulkDesmarcar){
     btnBulkDesmarcar.addEventListener("click", async () => {
-      const selecionados = itens.filter(o => CD_CONF_SEL.has(o.produto_id || o.id_lote));
+      const selecionados = todos.filter(o => {
+        const ch = String(o.produto_id || o.id_lote || "").trim();
+        return ch && CD_CONF_SEL.has(ch);
+      });
+      if (!selecionados.length){
+        alert("Nenhum disco selecionado.");
+        return;
+      }
       btnBulkDesmarcar.disabled = true;
       btnBulkDesmarcar.textContent = "Gravando…";
-      await cdExecutarConferirEmMassa(selecionados, false);
+      const res = await cdExecutarConferirEmMassa(selecionados, false);
+      CD_CONF_AVISO_LOTE = res;
       CD_CONF_SEL.clear();
       cdRenderConferencia();
     });
   }
 
-  // Delegação de eventos no corpo da tabela
+  const btnAvisoFechar = $("cd-conf-aviso-fechar");
+  if (btnAvisoFechar){
+    btnAvisoFechar.addEventListener("click", () => {
+      CD_CONF_AVISO_LOTE = null;
+      cdRenderConferencia();
+    });
+  }
+
+  /* Delegação de eventos no corpo da tabela */
   const tbody = $("cd-conf-tbody");
   if (tbody){
     tbody.addEventListener("change", async (e) => {
       const target = e.target;
       if (!target) return;
 
-      // Checkbox de seleção para ação em lote
+      /* Checkbox de seleção para ação em lote */
       if (target.classList.contains("cd-conf-chk-sel")){
-        const chave = target.dataset.chave;
+        const chave = String(target.dataset.chave || "").trim();
         if (target.checked) CD_CONF_SEL.add(chave);
         else CD_CONF_SEL.delete(chave);
         cdRenderConferencia();
         return;
       }
 
-      // Checkbox de conferência
+      /* Checkbox de conferência */
       if (target.classList.contains("cd-conf-toggle-item")){
-        const chave = target.dataset.chave;
-        const item = todos.find(o => (o.produto_id || o.id_lote) === chave);
+        const chave = String(target.dataset.chave || "").trim();
+        const item = todos.find(o => String(o.produto_id || o.id_lote || "").trim() === chave);
         if (!item) return;
         target.disabled = true;
         try {
           await cdExecutarConferirItem(item, target.checked);
+          try { await afterSave(); } catch(e){}
           cdRenderConferencia();
         } catch(err){
           target.disabled = false;
@@ -4193,6 +4261,7 @@ async function cdExecutarConferirItem(item, marcar){
   const cab = cadRows[0];
   let iColEm = cab.indexOf("conferido_em");
   let iColPor = cab.indexOf("conferido_por");
+  let iColSubir = cab.indexOf("subir_loja");
 
   if (iColEm < 0){
     await write(`cadastro_rascunhos!${colL(cab.length)}1`, [["conferido_em"]]);
@@ -4204,22 +4273,51 @@ async function cdExecutarConferirItem(item, marcar){
     iColPor = cab.length;
     cab.push("conferido_por");
   }
+  if (iColSubir < 0){
+    await write(`cadastro_rascunhos!${colL(cab.length)}1`, [["subir_loja"]]);
+    iColSubir = cab.length;
+    cab.push("subir_loja");
+  }
 
   if (item.rascunho_row){
     const row = item.rascunho_row;
-    const valEm = marcar ? agora : "";
-    const valPor = marcar ? quem : "";
+    let valEm = "";
+    let valPor = "";
+    let valSubir = item.subir_loja || "";
 
-    await write(`cadastro_rascunhos!${colL(iColEm)}${row}`, [[valEm]]);
-    await write(`cadastro_rascunhos!${colL(iColPor)}${row}`, [[valPor]]);
+    if (marcar){
+      valEm = agora;
+      valPor = quem;
+      valSubir = item.visivel ? "feito" : "pedido";
+    } else {
+      valEm = "";
+      valPor = "";
+      if (valSubir === "pedido") valSubir = "";
+    }
+
+    if (iColPor === iColEm + 1 && iColSubir === iColEm + 2){
+      await write(`cadastro_rascunhos!${colL(iColEm)}${row}:${colL(iColSubir)}${row}`, [[valEm, valPor, valSubir]]);
+    } else {
+      await write(`cadastro_rascunhos!${colL(iColEm)}${row}`, [[valEm]]);
+      await write(`cadastro_rascunhos!${colL(iColPor)}${row}`, [[valPor]]);
+      await write(`cadastro_rascunhos!${colL(iColSubir)}${row}`, [[valSubir]]);
+    }
 
     item.conferido_em = valEm;
     item.conferido_por = valPor;
+    item.subir_loja = valSubir;
 
     if (cadRows[row - 1]){
-      while (cadRows[row - 1].length <= Math.max(iColEm, iColPor)) cadRows[row - 1].push("");
+      const maxCol = Math.max(iColEm, iColPor, iColSubir);
+      while (cadRows[row - 1].length <= maxCol) cadRows[row - 1].push("");
       cadRows[row - 1][iColEm] = valEm;
       cadRows[row - 1][iColPor] = valPor;
+      cadRows[row - 1][iColSubir] = valSubir;
+    }
+    if (item.rascunho_obj){
+      item.rascunho_obj.conferido_em = valEm;
+      item.rascunho_obj.conferido_por = valPor;
+      item.rascunho_obj.subir_loja = valSubir;
     }
   } else {
     if (!marcar) return;
@@ -4231,6 +4329,10 @@ async function cdExecutarConferirItem(item, marcar){
     };
 
     const idLote = "loja-" + item.produto_id;
+    const valSubir = item.visivel ? "feito" : "pedido";
+    const BARRAS = "/" + "/";
+    const linkLojaStr = item.url ? ("https:" + BARRAS + "lojamonstro.com.br/produtos/" + item.url) : "";
+
     setCampo("id", idLote);
     setCampo("lote", "loja");
     setCampo("status", "publicado");
@@ -4239,9 +4341,10 @@ async function cdExecutarConferirItem(item, marcar){
     setCampo("categorias", item.categorias);
     setCampo("preco", String(item.preco || ""));
     setCampo("produto_id", String(item.produto_id || ""));
-    setCampo("link_loja", item.url ? ("https:[/][/]lojamonstro.com.br/produtos/" + item.url) : "");
+    setCampo("link_loja", linkLojaStr);
     setCampo("conferido_em", agora);
     setCampo("conferido_por", quem);
+    setCampo("subir_loja", valSubir);
     setCampo("atualizado_em", agora);
 
     const rowNum = cadRows.length + 1;
@@ -4253,17 +4356,27 @@ async function cdExecutarConferirItem(item, marcar){
     item.lote = "loja";
     item.conferido_em = agora;
     item.conferido_por = quem;
+    item.subir_loja = valSubir;
   }
 }
 
 async function cdExecutarConferirEmMassa(itens, marcar){
+  let gravados = 0;
+  const falhas = [];
+
   for (const item of itens){
     try {
       await cdExecutarConferirItem(item, marcar);
+      gravados++;
     } catch(e){
-      console.error("Falha ao atualizar conferência do item:", item, e);
+      const desc = item.titulo || item.produto_id || item.id_lote || "item";
+      const motivo = (e && e.message) ? e.message : String(e);
+      falhas.push({ item: desc, erro: motivo });
     }
   }
+
+  try { await afterSave(); } catch(e){}
+  return { gravados, falhas, total: itens.length, marcar };
 }
 
 function cdImprimirListaConferencia(itensFiltrados){

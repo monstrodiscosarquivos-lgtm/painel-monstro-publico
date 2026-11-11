@@ -29,7 +29,7 @@ from painel_monstro.saidas.planilha_google import _letra
 
 ABA='cadastro_rascunhos'
 BASE='id lote pasta status titulo marca categorias ficha descricao capa vinil preco preco_referencia peso_kg altura_cm largura_cm comprimento_cm discogs_url discogs_confianca pendencias fotos seo_titulo seo_descricao tags produto_id link_loja observacao_tulio atualizado_em'.split()
-EXTRAS='discogs_id faixas creditos discogs_menor_preco discogs_a_venda faixas_na_descricao preco_origem cadastro_execucao fotos_ajustadas estoque publicar marcado_vinil capa_discogs_url conferido_em conferido_por'.split()
+EXTRAS='discogs_id faixas creditos discogs_menor_preco discogs_a_venda faixas_na_descricao preco_origem cadastro_execucao fotos_ajustadas estoque publicar marcado_vinil capa_discogs_url conferido_em conferido_por subir_loja'.split()
 COLUNAS=BASE+EXTRAS
 FOTOS='id_disco ordem papel arquivo_drive_id cantos observacao'.split()
 
@@ -628,7 +628,7 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
             atuais=ler(planilha,ABA); matches=[i for i,r in enumerate(atuais[1:],2) if r and r[0]==did]
             if len(matches)!=1: raise ErroCadastro('id duplicado ou removido na planilha')
             n=matches[0]; row=dict(zip(atuais[0],atuais[n-1]))
-            if 'status' in mudancas and row.get('status') not in ('aprovado','criado','somar_estoque'):
+            if 'status' in mudancas and row.get('status') not in ('aprovado','criado','publicado','somar_estoque'):
                 raise ErroCadastro('status alterado pelo operador; preservado')
             if 'produto_id' in mudancas and row.get('produto_id') and str(row['produto_id'])!=str(mudancas['produto_id']):
                 raise ErroCadastro('produto_id alterado; interrompido')
@@ -640,7 +640,8 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
     previas_feitas=0  # D-090: prévias (baixar e ajustar fotos) por rodada têm limite
     for r in v[1:]:
         l=dict(zip(cab,r)); did=str(l.get('id',''))
-        if not did or l.get('status') not in ('rascunho','aprovado','criado','somar_estoque'): continue
+        if not did: continue
+        if l.get('status') not in ('rascunho','aprovado','criado','publicado','somar_estoque') and l.get('subir_loja') != 'pedido': continue
         gravar=gravador(did)
         try:
             if repetidos.count(did)!=1: raise ErroCadastro('id duplicado na planilha')
@@ -655,7 +656,30 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
             if l['status']=='criado' and l.get('produto_id'):
                 loja=LojaCadastro(api or NuvemshopAPI(config))
                 if loja.produto(l['produto_id']).get('published') is True: gravar({'status':'publicado'})
-                continue
+                if l.get('subir_loja') != 'pedido':
+                    continue
+
+            # D-103: Processamento de subir_loja = "pedido"
+            if l.get('subir_loja') == 'pedido':
+                pid_str = str(l.get('produto_id') or '').strip()
+                if pid_str:
+                    loja = LojaCadastro(api or NuvemshopAPI(config))
+                    try:
+                        p_info = loja.produto(pid_str)
+                        if p_info.get('published') is True:
+                            gravar({'subir_loja': 'feito', 'status': 'publicado'})
+                        else:
+                            loja.publicar(pid_str)
+                            gravar({'subir_loja': 'feito', 'status': 'publicado'})
+                    except Exception as erro_pub:
+                        motivo_curto = str(erro_pub)[:80]
+                        try:
+                            gravar({'subir_loja': f'erro: {motivo_curto}'})
+                        except Exception:
+                            pass
+                    continue
+            # Sem produto_id ainda (rascunho ou aprovado): segue o fluxo normal e publica depois de criado.
+            if l.get('status') not in ('rascunho','aprovado','criado','somar_estoque'): continue
             minhas_fotos=[f for f in fotos_lista if f.get('id_disco')==did]
             if any(not str(f.get('arquivo_drive_id','')).strip() for f in minhas_fotos):
                 entrada=c.get('Cadastro: pasta de entrada Drive (ID)','').strip()

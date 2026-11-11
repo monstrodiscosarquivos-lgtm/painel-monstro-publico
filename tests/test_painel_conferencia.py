@@ -43,7 +43,7 @@ def test_painel_conferencia_playwright():
         ],
         "produtos!M1:M7000": [["criado_em"], ["2026-11-01 10:00:00"], ["2026-11-02 12:00:00"], ["2026-10-15 09:00:00"], ["2026-11-03 14:00:00"]],
         "produtos!O1:O7000": [["imagem"], ["https://img.nuvemshop.com/101.jpg"], ["https://img.nuvemshop.com/102.jpg"], [""], [""]],
-        "cadastro_rascunhos!A1:AR500": [
+        "cadastro_rascunhos!A1:AZ500": [
             ["id", "titulo", "preco", "status", "produto_id", "conferido_em", "conferido_por", "marcado_vinil", "atualizado_em"],
             ["2026-11-01-01", "LP Secos & Molhados - Secos & Molhados", "150", "publicado", "101", "2026-11-05 18:30", "tulio", "", "2026-11-05 18:30"],
             ["2026-11-02-01", "LP Belchior - Alucinacao (Novo/Lacrado)", "220", "publicado", "102", "", "", "", "2026-11-02 12:00"],
@@ -158,15 +158,30 @@ def test_painel_conferencia_playwright():
         writes_after = page.evaluate("window._writes")
         assert len(writes_after) > len(writes)
 
-        # 9. Testar selecao em massa
+        # 9. Testar selecao em massa com mistura de itens (102 com rascunho, 103 sem rascunho da loja)
         chk_sel_all = page.locator("#cd-conf-sel-todos")
         chk_sel_all.click()
         page.wait_for_timeout(200)
-        # Botao de acao em massa deve aparecer
         btn_marcar_massa = page.locator("#cd-conf-bulk-marcar")
         assert btn_marcar_massa.is_visible()
         btn_marcar_massa.click()
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(500)
+
+        # Confirmar banner de sucesso do lote na tela
+        banner_sucesso = page.locator("div.banner")
+        assert banner_sucesso.is_visible()
+        texto_banner = banner_sucesso.inner_text()
+        assert "Lote gravado com sucesso" in texto_banner
+        assert "3 disco(s)" in texto_banner
+
+        # Confirmar que tanto o item com rascunho (102) quanto o item da loja (103) foram gravados
+        writes_bulk = page.evaluate("window._writes")
+        assert any("loja-103" in str(w["values"]) for w in writes_bulk)
+        assert any("feito" in str(w["values"]) for w in writes_bulk)
+
+        # Confirmar que pill 'Na loja ✓' aparece para itens confirmados
+        pill_loja = page.locator("span.pill.p-ok")
+        assert pill_loja.count() >= 2
 
         # 10. Testar impressao da lista sem popup
         btn_print = page.locator("#cd-conf-btn-imprimir")
@@ -214,7 +229,7 @@ def test_impressao_2000_discos_pdf():
         "produtos!B1:H7000": prod_b,
         "produtos!M1:M7000": prod_m,
         "produtos!O1:O7000": prod_o,
-        "cadastro_rascunhos!A1:AR500": [
+        "cadastro_rascunhos!A1:AZ500": [
             ["id", "titulo", "preco", "status", "produto_id", "conferido_em", "conferido_por", "marcado_vinil", "atualizado_em"],
         ],
         "cadastro_fotos!A1:F3000": [["id_foto", "ordem", "papel", "arquivo_drive_id", "tamanho_bytes", "hash"]],

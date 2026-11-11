@@ -74,18 +74,29 @@ function vigiarCadastro() {
   }
 }
 
-/** IDs com status "aprovado" e sem produto_id na aba cadastro_rascunhos. */
+/** IDs com status "aprovado" e sem produto_id, ou com subir_loja = "pedido" na aba cadastro_rascunhos. */
 function aprovadosPendentes_() {
   var aba = SpreadsheetApp.openById(VIGIA_PLANILHA).getSheetByName(VIGIA_ABA);
   if (!aba || aba.getLastRow() < 2) return [];
   var v = aba.getRange(1, 1, aba.getLastRow(), aba.getLastColumn()).getDisplayValues();
   var cab = v[0];
   var cId = cab.indexOf('id'), cSt = cab.indexOf('status'), cProd = cab.indexOf('produto_id');
-  if (cId < 0 || cSt < 0 || cProd < 0) return [];
+  var cSubir = cab.indexOf('subir_loja');
+  if (cId < 0) return [];
   var ids = [];
   for (var i = 1; i < v.length; i++) {
-    var st = String(v[i][cSt]).trim().toLowerCase();
-    if (st === 'aprovado' && !String(v[i][cProd]).trim() && String(v[i][cId]).trim()) ids.push(String(v[i][cId]).trim());
+    var idVal = String(v[i][cId]).trim();
+    if (!idVal) continue;
+    var st = cSt >= 0 ? String(v[i][cSt]).trim().toLowerCase() : '';
+    var prod = cProd >= 0 ? String(v[i][cProd]).trim() : '';
+    var subir = cSubir >= 0 ? String(v[i][cSubir]).trim().toLowerCase() : '';
+
+    var precisaAprovar = (st === 'aprovado' && !prod);
+    var precisaSubir = (subir === 'pedido');
+
+    if (precisaAprovar || precisaSubir) {
+      ids.push(idVal);
+    }
   }
   return ids;
 }

@@ -675,3 +675,60 @@ def test_processar_linha_foto_vertical_exif_8_com_cantos(tmp_path):
     # Confirmar que terminou publicado com sucesso e gravou as fotos ajustadas
     assert any(g.get('status') == 'publicado' for g in gravados)
     assert any('fotos_ajustadas' in g for g in gravados)
+
+
+
+def test_subir_loja_pedido_publica_produto_oculto(tmp_path, monkeypatch):
+    loja = Loja()
+    loja.produtos[123] = dict(id=123, published=False, handle={'pt': 'disco-oculto'}, sku=c.sku_da_linha('disco-123'))
+    l = linha(id='disco-123', produto_id='123', status='criado', subir_loja='pedido')
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame([l]))
+    monkeypatch.setattr(c, 'LojaCadastro', lambda _: loja)
+    res = c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, api=object(), drive=Drive())
+    atual = dict(zip(c.COLUNAS, c.ler(p, c.ABA)[1]))
+    assert atual['subir_loja'] == 'feito'
+    assert atual['status'] == 'publicado'
+    assert len(loja.puts) == 1 and loja.puts[0][0] == 123
+
+
+def test_subir_loja_pedido_ja_visivel_nao_chama_publicar(tmp_path, monkeypatch):
+    loja = Loja()
+    loja.produtos[123] = dict(id=123, published=True, handle={'pt': 'disco-visivel'}, sku=c.sku_da_linha('disco-123'))
+    l = linha(id='disco-123', produto_id='123', status='criado', subir_loja='pedido')
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame([l]))
+    monkeypatch.setattr(c, 'LojaCadastro', lambda _: loja)
+    res = c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, api=object(), drive=Drive())
+    atual = dict(zip(c.COLUNAS, c.ler(p, c.ABA)[1]))
+    assert atual['subir_loja'] == 'feito'
+    assert atual['status'] == 'publicado'
+    assert len(loja.puts) == 0
+
+
+def test_subir_loja_pedido_erro_registra_erro_curto(tmp_path, monkeypatch):
+    loja = Loja()
+    loja.produtos[123] = dict(id=123, published=False, handle={'pt': 'disco-oculto'}, sku=c.sku_da_linha('disco-123'))
+    def publicar_falha(pid):
+        raise RuntimeError('Falha de conexao com Nuvemshop')
+    loja.publicar = publicar_falha
+    l = linha(id='disco-123', produto_id='123', status='criado', subir_loja='pedido')
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame([l]))
+    monkeypatch.setattr(c, 'LojaCadastro', lambda _: loja)
+    res = c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, api=object(), drive=Drive())
+    atual = dict(zip(c.COLUNAS, c.ler(p, c.ABA)[1]))
+    assert atual['subir_loja'].startswith('erro:')
+    assert 'Falha de conexao' in atual['subir_loja']
+
+
+def test_subir_loja_sem_produto_id_mantem_pedido(tmp_path, monkeypatch):
+    loja = Loja()
+    l = linha(id='disco-123', produto_id='', status='rascunho', subir_loja='pedido')
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame([l]))
+    monkeypatch.setattr(c, 'LojaCadastro', lambda _: loja)
+    res = c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, api=object(), drive=Drive())
+    atual = dict(zip(c.COLUNAS, c.ler(p, c.ABA)[1]))
+    assert atual['subir_loja'] == 'pedido'
+    assert len(loja.puts) == 0
