@@ -3180,7 +3180,7 @@ function cdLote(){
 const CD_GRADES = ["M","NM","VG+","VG","G+","G","P"];
 const CD_CAPA_GRADES = ["M","NM","VG+","VG","G+","G","F"];
 const CD_PAPEIS = ["capa", "contracapa", "encarte frente", "encarte verso", "encarte aberto", "capa interna", "disco", "rótulo", "etiqueta", "referencia", "codigo_barras", "oficial"];
-const CD_FILTROS = [["rascunho","Para revisar"],["aprovado","Aprovados"],["criado","Criados (ocultos)"],["erro","Com erro"],["publicado","Publicados"],["marcar_vinil","Etiqueta verde"],["conferencia","Conferência"],["black_26","Black 26/11 (Lado A)"],["black_27","Black 27/11"],["black_28","Black 28/11"],["black_29","Black 29/11"],["somar_estoque","Soma confirmada"],["estoque_somado","Estoque somado"],["descartado","Descartados"],["todos","Todos"]];
+const CD_FILTROS = [["rascunho","Para revisar"],["aprovado","Aprovados"],["criado","Criados (ocultos)"],["erro","Com erro"],["publicado","Publicados"],["conferencia","Conferência"],["black_26","Black 26/11 (Lado A)"],["black_27","Black 27/11"],["black_28","Black 28/11"],["black_29","Black 29/11"],["somar_estoque","Soma confirmada"],["estoque_somado","Estoque somado"],["descartado","Descartados"],["todos","Todos"]];
 const cdGrupo = s => { s = String(s || "").trim().toLowerCase(); if (s.startsWith("erro")) return "erro"; if (s.startsWith("descartado")) return "descartado"; return ["rascunho","aprovado","criado","publicado","somar_estoque","estoque_somado"].includes(s) ? s : "rascunho"; };
 const CD_PILL = {somar_estoque:["p-wait","soma aguardando a rotina"], estoque_somado:["p-ok","estoque somado"], rascunho:["p-wait","para revisar"], aprovado:["p-info","aprovado, aguardando a rotina"], criado:["p-ok","criado oculto na loja"], erro:["p-bad","erro"], publicado:["p-ok","publicado"], descartado:["p-info","descartado"]};
 const colL = n => { let s = ""; n++; while (n > 0){ const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
@@ -3587,6 +3587,7 @@ function cdDiscosConferencia(){
       conferido_por: (rasc && rasc.conferido_por) || "",
       subir_loja: (rasc && rasc.subir_loja) || "",
       atualizar_preco: (rasc && rasc.atualizar_preco) || "",
+      refazer_discogs: (rasc && rasc.refazer_discogs) || "",
       marcado_vinil: (rasc && rasc.marcado_vinil) || "",
       rascunho_row: rasc ? rasc._row : null,
       rascunho_obj: rasc || null
@@ -3619,6 +3620,7 @@ function cdDiscosConferencia(){
       conferido_por: String(r.conferido_por || "").trim(),
       subir_loja: String(r.subir_loja || "").trim(),
       atualizar_preco: String(r.atualizar_preco || "").trim(),
+      refazer_discogs: String(r.refazer_discogs || "").trim(),
       marcado_vinil: String(r.marcado_vinil || "").trim(),
       rascunho_row: r._row || null,
       rascunho_obj: r
@@ -3962,6 +3964,8 @@ function cdRenderConferencia(){
         <td>
           <div style="font-weight:700;font-size:14px;line-height:1.25">${esc(art)}</div>
           ${o.rascunho_row && !o.produto_id ? `<div class="no-print" style="display:flex;gap:4px;margin-top:3px"><input type="text" class="cd-conf-titulo" data-chave="${esc(chaveItem)}" value="${esc(o.titulo)}" style="flex:1;min-width:180px;padding:3px 6px;font-size:12px"><button type="button" class="btn cd-conf-salvar" data-campo="titulo" data-chave="${esc(chaveItem)}" style="padding:2px 8px;font-size:11px">Salvar</button></div>` : `<div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(o.titulo)}</div>`}
+          ${o.rascunho_row && !o.visivel ? `<div class="no-print" style="display:flex;gap:4px;margin-top:4px;align-items:center"><input type="text" class="cd-conf-discogs" data-chave="${esc(chaveItem)}" placeholder="ID ou link do Discogs" style="width:150px;padding:3px 6px;font-size:12px"><button type="button" class="btn cd-conf-errado" data-chave="${esc(chaveItem)}" style="padding:2px 8px;font-size:11px">Cadastro errado</button></div>` : ""}
+          ${o.refazer_discogs === "pedido" ? `<div class="s" style="font-size:11px;color:var(--muted)">refazendo pelo Discogs…</div>` : (String(o.refazer_discogs || "").startsWith("erro") ? `<div class="s" style="font-size:11px;color:var(--bad)">${esc(o.refazer_discogs)}</div>` : (o.refazer_discogs === "feito" && !o.conferido_em ? `<div class="s" style="font-size:11px;color:var(--good)">refeito pelo Discogs: confira e marque de novo</div>` : ""))}
         </td>
         <td style="text-align:right;font-weight:700">
           ${o.rascunho_row ? `<div class="no-print" style="display:flex;gap:4px;justify-content:flex-end;align-items:center"><input type="number" step="0.01" min="0" inputmode="decimal" class="cd-conf-preco" data-chave="${esc(chaveItem)}" value="${esc(String(num(o.preco) || ""))}" style="width:76px;padding:3px 5px;text-align:right;font-weight:700"><button type="button" class="btn cd-conf-salvar" data-campo="preco" data-chave="${esc(chaveItem)}" style="padding:2px 8px;font-size:11px">Salvar</button></div>${o.atualizar_preco === "pedido" ? `<div class="s" style="font-size:11px;color:var(--muted)">atualizando na loja…</div>` : (String(o.atualizar_preco || "").startsWith("erro") ? `<div class="s" style="font-size:11px;color:var(--bad)">${esc(o.atualizar_preco)}</div>` : "")}` : `${esc(prTxt)}${o.produto_id ? `<div class="s" style="font-size:11px">corrija pelo Admin</div>` : ""}`}
@@ -4158,7 +4162,32 @@ function cdRenderConferencia(){
     tbody.addEventListener("click", (e) => {
       const btn = e.target && e.target.closest ? e.target.closest(".cd-conf-salvar") : null;
       if (btn) salvarCampoConf(btn);
+      const btnErr = e.target && e.target.closest ? e.target.closest(".cd-conf-errado") : null;
+      if (btnErr) cadastroErradoConf(btnErr);
     });
+    /* D-107: cadastro errado com o ID do Discogs; o robô refaz a ficha e o disco volta para conferir */
+    const cadastroErradoConf = async (btn) => {
+      const chave = String(btn.dataset.chave || "").trim();
+      const item = todos.find(o => String(o.produto_id || o.id_lote || "").trim() === chave);
+      const tr = btn.closest("tr");
+      const inp = tr && tr.querySelector(".cd-conf-discogs");
+      if (!item || !inp) return;
+      const bruto = String(inp.value || "").trim();
+      const m = bruto.match(/^\d{3,10}$/) ? [null, bruto] : bruto.match(/[/]release[/](\d+)/);
+      if (!m){ alert("Cole o número da edição no Discogs (ex.: 9626714) ou o link da release."); return; }
+      btn.disabled = true; btn.textContent = "…";
+      try {
+        await cdConfGravarColunas(item, {
+          discogs_url: "https:" + "/" + "/www.discogs.com/release/" + m[1],
+          refazer_discogs: "pedido", conferido_em: "", conferido_por: "", subir_loja: ""
+        });
+        try { await afterSave(); } catch(e){}
+        cdRenderConferencia();
+      } catch(err){
+        btn.disabled = false; btn.textContent = "Cadastro errado";
+        alert("Não consegui gravar: " + (err && err.message ? err.message : err));
+      }
+    };
     tbody.addEventListener("keydown", (e) => {
       const t = e.target;
       if (e.key !== "Enter" || !t || !(t.classList.contains("cd-conf-preco") || t.classList.contains("cd-conf-titulo"))) return;
@@ -4196,6 +4225,27 @@ function cdRenderConferencia(){
         }
       }
     });
+  }
+}
+
+/* D-107: grava várias colunas da linha do cadastro, criando o cabeçalho que faltar. */
+async function cdConfGravarColunas(item, campos){
+  const cadRows = D.cad || [];
+  if (cadRows.length < 1) throw new Error("Aba cadastro_rascunhos não carregada.");
+  if (!item.rascunho_row) throw new Error("Este disco não tem linha no cadastro: corrija pelo Admin da Nuvemshop.");
+  const cab = cadRows[0];
+  const row = item.rascunho_row;
+  for (const [campo, valor] of Object.entries(campos)){
+    let idx = cab.indexOf(campo);
+    if (idx < 0){
+      await write(`cadastro_rascunhos!${colL(cab.length)}1`, [[campo]]);
+      idx = cab.length;
+      cab.push(campo);
+    }
+    await write(`cadastro_rascunhos!${colL(idx)}${row}`, [[valor]]);
+    if (cadRows[row - 1]){ while (cadRows[row - 1].length <= idx) cadRows[row - 1].push(""); cadRows[row - 1][idx] = valor; }
+    item[campo] = valor;
+    if (item.rascunho_obj) item.rascunho_obj[campo] = valor;
   }
 }
 

@@ -841,3 +841,84 @@ def test_d106_aprovacao_alterada_nao_deixa_post_travado(tmp_path):
     assert loja.posts == []
     assert 'post_iniciado' not in str(l.get('cadastro_execucao', ''))
     assert not (tmp_path / 'cadastro.json').exists()
+
+
+RELEASE_SINATRA = {'id': 9626714, 'title': 'All Alone', 'year': 1962,
+                   'artists': [{'name': 'Frank Sinatra', 'anv': '', 'join': ''}]}
+
+
+class DiscogsFalso:
+    def __init__(self): self.pedidos = []
+    def get(self, caminho, **kw):
+        self.pedidos.append(caminho); return RELEASE_SINATRA
+    def buscar(self, titulo, catalogo='', url='', **kw):
+        return {'discogs_id': '9626714', 'discogs_url': 'https://www.discogs.com/release/9626714',
+                'discogs_confianca': 'alta', 'faixas': 'A1 All Alone', 'creditos': ''}
+
+
+def test_d107_id_discogs_aceita_numero_e_link():
+    assert c.id_discogs('9626714') == '9626714'
+    assert c.id_discogs('https://www.discogs.com/pt_BR/release/9626714-Frank-Sinatra-All-Alone') == '9626714'
+    assert c.id_discogs('https://www.discogs.com/master/123') == ''
+
+
+def test_d107_ficha_pelo_discogs_mantem_formato_e_preco():
+    l = linha(titulo='LP Frank Sinatra - Sozinho (1970) - (Vinil Usado, Duplo)', preco='100',
+              pendencias='capa não confere com o Discogs; Vinil estimado pela foto.')
+    d = c.ficha_pelo_discogs(l, RELEASE_SINATRA, DiscogsFalso().buscar(''))
+    assert d['titulo'] == 'LP Frank Sinatra - All Alone (1962) - (Vinil Usado, Duplo)'
+    assert d['marca'] == 'Frank Sinatra'
+    assert d['descricao'].startswith('Álbum de Frank Sinatra, lançado originalmente em 1962.')
+    assert 'capa não confere' not in d['pendencias'] and 'Vinil estimado' in d['pendencias']
+    assert 'preco' not in d and 'categorias' not in d
+
+
+def test_d107_rascunho_marcado_errado_e_refeito_e_volta_para_conferir(tmp_path, monkeypatch):
+    loja = Loja()
+    l = linha(id='261113a-01', status='rascunho', produto_id='', titulo='LP Errado - Errado (1980) - (Vinil Usado)',
+              discogs_url='https://www.discogs.com/release/9626714', refazer_discogs='pedido')
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame([l]))
+    monkeypatch.setattr(c, 'LojaCadastro', lambda _: loja)
+    c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, api=object(), drive=Drive(), discogs=DiscogsFalso())
+    atual = dict(zip(c.ler(p, c.ABA)[0], c.ler(p, c.ABA)[1]))
+    assert atual['titulo'] == 'LP Frank Sinatra - All Alone (1962) - (Vinil Usado)'
+    assert atual['refazer_discogs'] == 'feito'
+    assert atual['status'] == 'rascunho'
+    assert loja.posts == [] and loja.puts == []
+
+
+def test_d107_produto_visivel_nao_e_alterado(tmp_path, monkeypatch):
+    loja = Loja()
+    loja.produtos[123] = dict(id=123, published=True, handle={'pt': 'x'}, sku='CADX')
+    l = linha(id='261113a-02', status='criado', produto_id='123', discogs_url='9626714', refazer_discogs='pedido')
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame([l]))
+    monkeypatch.setattr(c, 'LojaCadastro', lambda _: loja)
+    c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, api=object(), drive=Drive(), discogs=DiscogsFalso())
+    atual = dict(zip(c.ler(p, c.ABA)[0], c.ler(p, c.ABA)[1]))
+    assert atual['refazer_discogs'].startswith('erro: já está visível no site')
+    assert atual['titulo'] == l['titulo']
+
+
+def test_d107_ficha_so_aceita_campos_de_texto():
+    loja = c.LojaCadastro(SimpleNamespace())
+    with pytest.raises(c.ErroCadastro):
+        loja.atualizar_ficha(1, {'name': {'pt': 'x'}, 'variants': []})
+
+
+def test_d107_produto_oculto_recebe_ficha_nova(tmp_path, monkeypatch):
+    loja = Loja()
+    loja.produtos[123] = dict(id=123, published=False, handle={'pt': 'x'}, sku='CADX')
+    fichas = []
+    loja.atualizar_ficha = lambda pid, corpo: fichas.append((int(pid), corpo))
+    l = linha(id='261113a-03', status='criado', produto_id='123', categorias='LP, Usado', discogs_url='9626714', refazer_discogs='pedido')
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame([l]))
+    monkeypatch.setattr(c, 'LojaCadastro', lambda _: loja)
+    c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, api=object(), drive=Drive(), discogs=DiscogsFalso())
+    atual = dict(zip(c.ler(p, c.ABA)[0], c.ler(p, c.ABA)[1]))
+    assert atual['refazer_discogs'] == 'feito' and atual['status'] == 'criado'
+    assert fichas and fichas[0][0] == 123
+    assert fichas[0][1]['name'] == {'pt': 'LP Frank Sinatra - All Alone (1962) - (Vinil Usado)'}
+    assert set(fichas[0][1]) == {'name', 'brand', 'description', 'seo_title', 'seo_description', 'tags'}

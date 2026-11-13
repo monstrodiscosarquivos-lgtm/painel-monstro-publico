@@ -83,6 +83,7 @@ function aprovadosPendentes_() {
   var cId = cab.indexOf('id'), cSt = cab.indexOf('status'), cProd = cab.indexOf('produto_id');
   var cSubir = cab.indexOf('subir_loja');
   var cPreco = cab.indexOf('atualizar_preco');   // D-104: preço corrigido na Conferência
+  var cRefazer = cab.indexOf('refazer_discogs');  // D-107: cadastro errado, refazer pelo Discogs
   if (cId < 0) return [];
   var ids = [];
   for (var i = 1; i < v.length; i++) {
@@ -95,8 +96,9 @@ function aprovadosPendentes_() {
     var precisaAprovar = (st === 'aprovado' && !prod);
     var precisaSubir = (subir === 'pedido');
     var precisaPreco = cPreco >= 0 && String(v[i][cPreco]).trim().toLowerCase() === 'pedido';
+    var precisaRefazer = cRefazer >= 0 && String(v[i][cRefazer]).trim().toLowerCase() === 'pedido';
 
-    if (precisaAprovar || precisaSubir || precisaPreco) {
+    if (precisaAprovar || precisaSubir || precisaPreco || precisaRefazer) {
       ids.push(idVal);
     }
   }

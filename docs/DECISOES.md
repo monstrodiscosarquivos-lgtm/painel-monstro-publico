@@ -323,3 +323,10 @@ eferencia.
 - Rascunho, aprovado ou com erro, sem `produto_id`, que tenha na loja exatamente um produto com o mesmo artista e álbum, SKU que não é do robô (não começa com `CAD`), mesmo tipo (usado ou lacrado) e criado a partir do dia do lote: a linha é ligada a esse produto (`produto_id`, `link_loja`, status `publicado` se visível ou `criado` se oculto) e o robô não cria outro.
 - Linha cujo produto foi excluído na loja (erro 404) recebe o aviso "produto não existe mais na loja; descarte ou recadastre".
 - O robô nunca oculta, apaga nem altera título, descrição ou estoque de produto existente. O que foi deixado visível no site continua visível.
+
+## D-107 · Cadastro errado se corrige pelo ID do Discogs (13/11/2026)
+
+- Na Conferência, disco que ainda não está visível no site tem o campo "ID ou link do Discogs" e o botão "Cadastro errado". O Painel grava `discogs_url`, `refazer_discogs = pedido` e limpa a conferência.
+- A rotina (disparada pelo vigia) busca a edição e refaz artista, título, ano, descrição, SEO, tags, faixas e créditos. Mantém fotos, preço, estoque, categorias e lote. O disco volta como rascunho para ser conferido de novo; a capa é comparada de novo com o Discogs.
+- Se o produto já existe e está oculto, a ficha nova também vai para a Nuvemshop (PUT só de nome, marca, descrição, SEO e tags, recusado se o produto estiver visível). Produto visível: corrigir pelo Admin.
+- A aba "Etiqueta verde" saiu do Painel: a marcação física não faz mais parte do fluxo.

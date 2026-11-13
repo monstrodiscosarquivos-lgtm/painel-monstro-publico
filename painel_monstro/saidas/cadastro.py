@@ -29,10 +29,10 @@ from painel_monstro.saidas.planilha_google import _letra
 
 ABA='cadastro_rascunhos'
 BASE='id lote pasta status titulo marca categorias ficha descricao capa vinil preco preco_referencia peso_kg altura_cm largura_cm comprimento_cm discogs_url discogs_confianca pendencias fotos seo_titulo seo_descricao tags produto_id link_loja observacao_tulio atualizado_em'.split()
-EXTRAS='discogs_id faixas creditos discogs_menor_preco discogs_a_venda faixas_na_descricao preco_origem cadastro_execucao fotos_ajustadas estoque publicar marcado_vinil capa_discogs_url conferido_em conferido_por subir_loja atualizar_preco'.split()
+EXTRAS='discogs_id faixas creditos discogs_menor_preco discogs_a_venda faixas_na_descricao preco_origem cadastro_execucao fotos_ajustadas estoque publicar marcado_vinil capa_discogs_url conferido_em conferido_por subir_loja atualizar_preco refazer_discogs'.split()
 COLUNAS=BASE+EXTRAS
 # D-104: colunas que a Conferência do Painel grava; não contam como edição do disco durante a rodada.
-COLUNAS_CONFERENCIA=('conferido_em','conferido_por','subir_loja','marcado_vinil','lote_black','atualizado_em','atualizar_preco')
+COLUNAS_CONFERENCIA=('conferido_em','conferido_por','subir_loja','marcado_vinil','lote_black','atualizado_em','atualizar_preco','refazer_discogs')
 FOTOS='id_disco ordem papel arquivo_drive_id cantos observacao'.split()
 
 
@@ -328,6 +328,20 @@ class LojaCadastro:
     def preco(self,pid,vid,valor):
         # D-104: correção de preço pedida na Conferência do Painel (só o preço da variante).
         return self._put(f'products/{int(pid)}/variants/{int(vid)}', {'price': f'{float(valor):.2f}'})
+    def atualizar_ficha(self,pid,corpo):
+        # D-107: só para produto OCULTO marcado como "Cadastro errado" na Conferência; nunca fotos, preço ou estoque.
+        permitidas={'name','brand','description','seo_title','seo_description','tags'}
+        if not corpo or set(corpo)-permitidas: raise ErroCadastro('ficha com campo não permitido')
+        if self.produto(pid).get('published') is not False: raise ErroCadastro('produto visível; corrija pelo Admin')
+        self.api._esperar_vaga()
+        try:
+            r=self.api._sessao.put(self.api._base+f'/products/{int(pid)}',headers=self.api._cabecalhos,
+                                   json=corpo,timeout=60,allow_redirects=False)
+            self.api._guardar_limites(r)
+            if r.status_code not in (200,201): raise ErroCadastro('PUT da ficha não confirmado')
+            return r.json()
+        except ErroCadastro: raise
+        except Exception: raise ErroCadastro('PUT da ficha não confirmado') from None
     def publicar(self,pid,corpo=None):
         return self._put(f'products/{int(pid)}',{'published':True} if corpo is None else corpo)
     def apagar_imagem(self,pid,iid):
@@ -619,6 +633,54 @@ def processar_linha(linha,fs,loja,drive,gravar,caminho,confirmar=lambda:True):
     gravar({'status':'publicado','link_loja':link_loja,'pendencias':pendencias_limpas})
 
 
+def id_discogs(texto):
+    """Aceita o número da edição (1234567) ou o link da release."""
+    t=str(texto or '').strip()
+    if re.fullmatch(r'\d{3,10}',t): return t
+    m=re.search(r'/release/(\d+)',t)
+    return m[1] if m else ''
+
+
+def ficha_pelo_discogs(linha,release,extras):
+    """D-107: refaz artista, título, ano, descrição, SEO, faixas e créditos a partir da edição informada.
+    Mantém fotos, preço, estoque, categorias e lote."""
+    artistas=release.get('artists') or []
+    artista=''
+    for i,a in enumerate(artistas):
+        nome=re.sub(r'\s+\(\d+\)$','',str(a.get('anv') or a.get('name') or '')).strip()
+        junta=str(a.get('join') or '').strip()
+        artista+=nome+((' '+junta+' ') if junta and junta!=',' and i<len(artistas)-1 else (', ' if i<len(artistas)-1 else ''))
+    artista=re.sub(r'\s+',' ',artista).strip() or 'Vários'
+    if artista.lower()=='various': artista='Vários'
+    album=str(release.get('title') or '').strip()
+    ano=str(release.get('year') or '').strip()
+    ano='' if ano in ('0','') else ano
+    antigo=str(linha.get('titulo',''))
+    lacrado=eh_lacrado(linha)
+    m=re.match(r'^(\S+)\s.*?(\s+-?\s*(?:\([^)]*\)\s*)*\([^)]*(?:usad|lacrad|novo)[^)]*\))\s*$',antigo,re.I)
+    prefixo=m[1] if m else 'LP'
+    sufixo=m[2] if m else (' - (Novo/Lacrado)' if lacrado else ' - (Vinil Usado)')
+    if not sufixo.lstrip().startswith('-'): sufixo=' -'+(sufixo if sufixo.startswith(' ') else ' '+sufixo)
+    anos=f' ({ano})' if ano else ''
+    titulo=f'{prefixo} {artista} - {album}{anos}{sufixo}'
+    estado='Vinil novo, lacrado.' if lacrado else 'Vinil usado, exemplar único.'
+    descricao=(f'Álbum de {artista}, lançado originalmente em {ano}. ' if ano else f'Álbum de {artista}. ')+estado
+    tipo='Novo/Lacrado' if lacrado else 'Vinil Usado'
+    pend=[x.strip() for x in re.split(r'[;|]',str(linha.get('pendencias',''))) if x.strip()]
+    pend=[x for x in pend if not re.search(r'discogs|capa não confere|identifica|título não confere|CONFERIR NO DISCO',x,re.I)]
+    rid=str(extras.get('discogs_id') or release.get('id') or '')
+    pend.append(f'refeito pelo Discogs (edição {rid}): conferir gênero e capa')
+    dados={'titulo':titulo,'marca':artista,'descricao':descricao,
+           'seo_titulo':f'{prefixo} {artista} {album}{anos} - {tipo}'[:70],
+           'seo_descricao':descricao[:160],
+           'tags':', '.join(filter(None,[artista,album,prefixo,f'{prefixo} Usado' if not lacrado else f'{prefixo} Novo',tipo])),
+           'pasta':' '.join(filter(None,[str(linha.get('pasta','')).split(' ')[0] if re.match(r'^\d+\s',str(linha.get('pasta',''))) else '',f'{artista} - {album}{anos}'])),
+           'capa_discogs_url':'','discogs_confianca':'alta','pendencias':'; '.join(pend)}
+    for k in ('discogs_id','discogs_url','faixas','creditos','discogs_menor_preco','discogs_a_venda'):
+        if k in extras: dados[k]=extras[k]
+    return dados
+
+
 def _data_do_lote(did):
     m=re.match(r'^(\d{4})-(\d{2})-(\d{2})',str(did)) or re.match(r'^(\d{2})(\d{2})(\d{2})N?[a-z]-',str(did))
     if not m: return None
@@ -739,6 +801,35 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                         try: gravar({'atualizar_preco':'erro: '+str(erro_preco)[:80]})
                         except Exception: pass
                 l['atualizar_preco']=''
+            # D-107: "Cadastro errado" na Conferência com o ID do Discogs: refaz a ficha e volta para conferir.
+            if l.get('refazer_discogs')=='pedido':
+                rid=id_discogs(l.get('discogs_url'))
+                pid_r=str(l.get('produto_id') or '').strip()
+                try:
+                    if not rid: raise ErroCadastro('informe o número da edição no Discogs')
+                    if str(l.get('status','')).startswith('publicado') and not pid_r: raise ErroCadastro('já está no site; corrija pelo Admin')
+                    loja_r=LojaCadastro(api or NuvemshopAPI(config)) if pid_r else None
+                    if loja_r and loja_r.produto(pid_r).get('published') is not False: raise ErroCadastro('já está visível no site; corrija pelo Admin')
+                    release=cliente_discogs.get('/releases/'+rid)
+                    extras=cliente_discogs.buscar(l.get('titulo',''),'','https://www.discogs.com/release/'+rid)
+                    dados=ficha_pelo_discogs(l,release,extras)
+                    if loja_r:
+                        corpo=corpo_produto({**l,**dados,'status':'aprovado'},loja_r.categorias())
+                        loja_r.atualizar_ficha(pid_r,{k:corpo[k] for k in ('name','brand','description','seo_title','seo_description','tags')})
+                    if l.get('status')=='aprovado' and not pid_r: dados['status']='rascunho'
+                    dados['refazer_discogs']='feito'
+                    linha_r=dict(l); linha_r.update(dados)
+                    if dados.get('status')=='rascunho':
+                        atual_r=ler(planilha,ABA); n_r=[i for i,x in enumerate(atual_r[1:],2) if x and x[0]==did]
+                        if len(n_r)==1:
+                            aba_r=planilha._ss.worksheet(ABA)
+                            aba_r.update([['rascunho']],f'{_letra(atual_r[0].index("status")+1)}{n_r[0]}',raw=True)
+                        dados.pop('status')
+                    gravar(dados)
+                except Exception as erro_r:
+                    try: gravar({'refazer_discogs':'erro: '+str(erro_r)[:80]})
+                    except Exception: pass
+                continue
             # D-104: conferido na loja física vale como aprovação. Sem preço, não cria nada.
             if l.get('status')=='rascunho' and l.get('subir_loja')=='pedido':
                 if not numero(l.get('preco')):
