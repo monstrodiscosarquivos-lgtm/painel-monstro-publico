@@ -305,3 +305,14 @@ eferencia.
   - Criada função de teste manual `dispararRotinaReservaAgora()` para teste imediato no editor do Apps Script.
 - Ajuste do alerta por email:
   - O alerta de rotina parada (> 3 horas) em `verificarRodada_()` agora inclui no corpo do email o status da tentativa do disparo reserva e a resposta exata do GitHub.
+
+## D-104 · Conferido sobe para o site (13/11/2026)
+
+- Conferir o disco na Conferência do Painel vale como aprovação: rascunho com `subir_loja = pedido` e preço válido vira `aprovado`, é criado e publicado. Sem preço, `subir_loja = erro: sem preço` e nada é criado.
+- Colunas gravadas pela Conferência (`conferido_em`, `conferido_por`, `subir_loja`, `marcado_vinil`, `lote_black`, `atualizado_em`, `atualizar_preco`) não contam como edição durante a rodada; acaba o falso "aprovação alterada antes do POST".
+- Preço e título editáveis na Conferência. Preço de disco que já existe na Nuvemshop grava `atualizar_preco = pedido`; a rotina atualiza só o preço da variante (PUT liberado apenas para `price`) e grava `feito` ou `erro`. O vigia dispara a rodada também para `atualizar_preco`.
+
+## D-105 · Nome da pasta define lote e tipo (13/11/2026)
+
+- Subpasta da sessão em `entrada`: `AAMMDD` + letra = usados (`261113a`); `AAMMDD` + `N` + letra = novos/lacrados (`261113Na`).
+- `scripts/cadastro_lote.py`: o lote padrão de `folhas` vira o nome da pasta; `conferir` recusa JSON com lote diferente da pasta e disco com formato diferente do tipo da pasta (livro aceito); disco sem formato herda o tipo da pasta.

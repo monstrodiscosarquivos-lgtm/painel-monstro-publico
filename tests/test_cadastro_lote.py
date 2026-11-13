@@ -1064,3 +1064,35 @@ def test_descricao_sem_faixas_gera_alerta():
     assert 'descrição incompleta' in rasc['pendencias']
     assert rasc['publicar'] == 'nao'
 
+
+
+def test_d105_nome_da_pasta_define_lote_e_tipo():
+    assert cl.info_pasta_lote('261113a') == {'lote': '261113a', 'formato': 'usado'}
+    assert cl.info_pasta_lote('261113Na') == {'lote': '261113Na', 'formato': 'lacrado'}
+    assert cl.info_pasta_lote('261113b')['formato'] == 'usado'
+    assert cl.info_pasta_lote('261113n')['formato'] == 'usado'  # n minúsculo é a letra do lote
+    for invalido in ('sessao-05-11', '2026-11-13', '261113', '261113NA', '261313a', '261113ab'):
+        assert cl.info_pasta_lote(invalido) is None
+
+
+def test_d105_formato_padrao_vem_da_pasta():
+    novo = cl.info_pasta_lote('261113Na')
+    usado = cl.info_pasta_lote('261113a')
+    assert cl.formato_do_disco({}, novo) == 'lacrado'
+    assert cl.formato_do_disco({}, usado) == 'usado'
+    assert cl.formato_do_disco({'formato': 'livro'}, novo) == 'livro'
+    assert cl.formato_do_disco({}, None) == 'usado'
+
+
+def test_d105_conferir_recusa_lote_e_formato_diferentes_da_pasta(tmp_path):
+    pasta = tmp_path / '261113Na'
+    pasta.mkdir()
+    arq = tmp_path / 'lote.json'
+    arq.write_text(json.dumps({'lote': '2026-11-13', 'discos': [
+        {'disco': 'D1', 'acao': 'cadastrar', 'formato': 'usado', 'artista': 'A', 'album': 'B', 'fotos': []},
+    ]}), encoding='utf-8')
+    rel = cl.validar_lote(arq, pasta, planilha=_nova_planilha(), gerar_previas=False, base_trabalho=tmp_path / 'out')
+    textos = ' '.join(m for _, m in rel['erros'])
+    assert 'deve ser o nome da pasta (261113Na)' in textos
+    assert 'é de discos novos (lacrados), mas o disco está como usado' in textos
+    assert not rel['ok']

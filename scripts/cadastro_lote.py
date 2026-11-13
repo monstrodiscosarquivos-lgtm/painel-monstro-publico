@@ -94,6 +94,30 @@ class ErroLote(Exception):
     pass
 
 
+# D-105: nome da subpasta da sessão define o lote e o tipo de disco.
+# AAMMDD + letra (ex.: 261113a) = discos usados; AAMMDD + N + letra (ex.: 261113Na) = discos novos (lacrados).
+PADRAO_PASTA_LOTE = re.compile(r'^(\d{2})(\d{2})(\d{2})(N?)([a-z])$')
+
+
+def info_pasta_lote(nome: str) -> dict[str, str] | None:
+    m = PADRAO_PASTA_LOTE.match(str(nome or '').strip())
+    if not m:
+        return None
+    aa, mm, dd, novo, _letra_lote = m.groups()
+    try:
+        datetime(2000 + int(aa), int(mm), int(dd))
+    except ValueError:
+        return None
+    return {'lote': m.group(0), 'formato': 'lacrado' if novo else 'usado'}
+
+
+def formato_do_disco(o: dict[str, Any], info: dict[str, str] | None) -> str:
+    bruto = str(o.get('formato') or '').strip().lower()
+    if not bruto:
+        return info['formato'] if info else 'usado'
+    return bruto
+
+
 def lote_padrao() -> str:
     return pd.Timestamp.now(tz='America/Sao_Paulo').strftime('%Y-%m-%d')
 
@@ -874,7 +898,7 @@ def derivar_lote(
         if anos and alb.endswith(anos.strip()):
             anos = ''
 
-        formato = str(o.get('formato') or 'usado').strip().lower()
+        formato = formato_do_disco(o, info_pasta_lote(Path(pasta_local).name) if pasta_local else None)
         if formato not in ('usado', 'lacrado', 'livro'):
             formato = 'usado'
 
@@ -1213,6 +1237,9 @@ def validar_lote(
     lote = str(dados.get('lote') or '').strip()
     if not lote:
         erros.append(('arquivo', 'Campo lote ausente ou vazio.'))
+    info_pasta = info_pasta_lote(Path(pasta_local).name) if pasta_local else None
+    if info_pasta and lote and lote != info_pasta['lote']:
+        erros.append(('arquivo', f'O lote do JSON ({lote}) deve ser o nome da pasta ({info_pasta["lote"]}).'))
 
     discos = dados.get('discos')
     if not isinstance(discos, list):
@@ -1238,6 +1265,12 @@ def validar_lote(
 
         if _contem_travessao(o):
             erros.append((rotulo_d, 'Travessão (—) encontrado no texto do disco.'))
+
+        if info_pasta and str(o.get('acao') or '').strip() == 'cadastrar':
+            fmt = formato_do_disco(o, info_pasta)
+            if fmt != 'livro' and fmt != info_pasta['formato']:
+                tipo = 'novos (lacrados)' if info_pasta['formato'] == 'lacrado' else 'usados'
+                erros.append((rotulo_d, f'A pasta {info_pasta["lote"]} é de discos {tipo}, mas o disco está como {fmt}. Mude o formato ou mova as fotos para a pasta certa.'))
 
         acao = str(o.get('acao') or '').strip()
         if acao not in ('cadastrar', 'pular'):
@@ -1301,7 +1334,7 @@ def validar_lote(
         if not any(p in ('capa', 'contracapa', 'etiqueta', 'referencia', 'oficial') for p in papeis_uteis):
             erros.append((rotulo_d, 'Disco a cadastrar sem nenhuma foto de capa, contracapa ou etiqueta.'))
 
-        formato = str(o.get('formato') or 'usado').strip().lower()
+        formato = formato_do_disco(o, info_pasta)
         if formato not in ('usado', 'lacrado', 'livro'):
             erros.append((rotulo_d, f'Formato inválido: {formato!r} (use usado, lacrado ou livro).'))
 
@@ -2071,7 +2104,8 @@ def main(argv: list[str] | None = None) -> int:
     planilha = PlanilhaGoogle.conectar(cfg)
 
     if args.comando == 'folhas':
-        res = gerar_folhas(pasta, planilha, args.lote or None)
+        info = info_pasta_lote(pasta.name)
+        res = gerar_folhas(pasta, planilha, args.lote or (info['lote'] if info else None))
         print(f'{res["fotos"]} foto(s) nova(s), {res["folhas"]} folha(s) gerada(s) em {res["fotos_txt"].parent}.')
         return 0
 

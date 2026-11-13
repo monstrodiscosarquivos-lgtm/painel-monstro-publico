@@ -2,12 +2,15 @@
 
 ## Fluxo atualizado D-099 (05/11/2026)
 
-1. Crie uma subpasta por sessão dentro de `entrada`, por exemplo `entrada/sessao-05-11`.
+1. Crie uma subpasta por sessão dentro de `entrada`. O nome da pasta define o lote e o tipo de disco (D-105):
+   - `AAMMDD` + letra = discos **usados**. Ex.: `entrada/261113a`, `entrada/261113b`.
+   - `AAMMDD` + `N` + letra = discos **novos (lacrados)**. Ex.: `entrada/261113Na`.
+   - O `N` é maiúsculo; a letra do lote é minúscula. O `lote` do JSON tem de ser igual ao nome da pasta (os IDs ficam `261113a-01`, `261113Na-01`...). Disco sem `formato` no JSON herda o tipo da pasta; formato diferente do da pasta é erro na conferência (livro é aceito nas duas). Pastas com outro nome continuam funcionando como antes, com o lote igual à data.
 2. Configure a câmera em JPG. Para usado, fotografe etiqueta, capa, contracapa e disco; inclua rótulo legível se houver dúvida de edição. Para lacrado, fotografe capa e código de barras.
-3. Rode `python scripts/cadastro_lote.py folhas --pasta "entrada/sessao-05-11"`.
+3. Rode `python scripts/cadastro_lote.py folhas --pasta "entrada/261113a"`.
 4. O agente agrupa e identifica as fotos. Em lacrado usa `referencia` para fotos próprias e `codigo_barras` para barcode; lê o número e preenche `barcode`. Se houver rótulo, preenche `rotulo_titulo` com o título lido, sem inventar quando ilegível. Informe `preco_etiqueta` apenas quando realmente lido da etiqueta. Preço de planilha continua sendo preço de planilha.
-5. Rode `python scripts/cadastro_lote.py conferir caminho/lote.json --pasta "entrada/sessao-05-11"`. Com token Discogs, o comando busca e baixa as oficiais antes de conferir; capas são comparadas automaticamente. Imagens oficiais de lacrado são até quatro, capa primeiro. Use somente JPG na sessão.
-6. Confira relatório e prévias. Rode `python scripts/cadastro_lote.py gravar caminho/lote.json --pasta "entrada/sessao-05-11" --confirmar`. Sem confirmar, simula as escritas na planilha. Depois de gravar as duas abas, move as fotos usadas para `entrada/processadas/<lote>`. Não apaga fotos. Não mova nem renomeie manualmente durante a operação.
+5. Rode `python scripts/cadastro_lote.py conferir caminho/lote.json --pasta "entrada/261113a"`. Com token Discogs, o comando busca e baixa as oficiais antes de conferir; capas são comparadas automaticamente. Imagens oficiais de lacrado são até quatro, capa primeiro. Use somente JPG na sessão.
+6. Confira relatório e prévias. Rode `python scripts/cadastro_lote.py gravar caminho/lote.json --pasta "entrada/261113a" --confirmar`. Sem confirmar, simula as escritas na planilha. Depois de gravar as duas abas, move as fotos usadas para `entrada/processadas/<lote>`. Não apaga fotos. Não mova nem renomeie manualmente durante a operação.
 7. No Painel, revise fotos lado a lado, preço, alertas e visibilidade. Publicação inicial só vem marcada com capa conferida, preço da etiqueta e confiança alta, sem alerta. A configuração `Cadastro: publicar direto quando não houver alerta` permite desligar esse padrão.
 8. Para lacrado repetido, confira edição, catálogo, país e ano. Use “Sim, somar N ao estoque deste produto” somente para a mesmíssima edição. Estoque infinito não é alterado. Resultado incerto deve ser conferido, sem apagar o diário.
 9. Abra “Etiqueta verde”, passe o marcador físico e tique “Passei o marcador verde”. Em “Conferência completa”, use “Conferido hoje”. Ambas têm “Imprimir lista”. Produtos esgotados ou ocultos saem após a sincronização da loja.
