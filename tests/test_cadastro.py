@@ -829,3 +829,15 @@ def test_d106_produto_excluido_na_loja_vira_aviso():
     atual = dict(zip(c.ler(p, c.ABA)[0], c.ler(p, c.ABA)[1]))
     assert atual['subir_loja'].startswith('erro: produto não existe mais na loja')
     assert atual['produto_id'] == '999'
+
+
+def test_d106_aprovacao_alterada_nao_deixa_post_travado(tmp_path):
+    loja = Loja(); drive = Drive(); l = linha()
+    gravados = []
+    def gravar(d):
+        gravados.append(d); l.update(d)
+    with pytest.raises(c.ErroCadastro, match='aprovação alterada antes do POST'):
+        c.processar_linha(l, lista_fotos(), loja, drive, gravar, tmp_path / 'cadastro.json', confirmar=lambda: False)
+    assert loja.posts == []
+    assert 'post_iniciado' not in str(l.get('cadastro_execucao', ''))
+    assert not (tmp_path / 'cadastro.json').exists()

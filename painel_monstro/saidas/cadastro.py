@@ -569,9 +569,10 @@ def processar_linha(linha,fs,loja,drive,gravar,caminho,confirmar=lambda:True):
         elif estado.get('post_iniciado'):
             raise ErroCadastro('POST anterior incerto; conferir na loja, não reenviar')
         else:
+            # D-106: confere a aprovação ANTES de marcar o POST como iniciado; se a linha mudou, nada fica travado.
+            if not confirmar(): raise ErroCadastro('aprovação alterada antes do POST')
             estado={'post_iniciado':True,'sku':sku_da_linha(linha['id']),'imagens':[],'manifesto':manifesto}
             persistir()  # planilha + cache ANTES do POST; sobrevive à perda do cache do Actions
-            if not confirmar(): raise ErroCadastro('aprovação alterada antes do POST')
             produto=loja.criar(corpo); pid=str(produto['id'])
         estado['produto_id']=pid; persistir()
     gravar({'produto_id':pid})
