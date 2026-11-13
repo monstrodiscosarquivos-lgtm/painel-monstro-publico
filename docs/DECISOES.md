@@ -328,5 +328,6 @@ eferencia.
 
 - Na Conferência, disco que ainda não está visível no site tem o campo "ID ou link do Discogs" e o botão "Cadastro errado". O Painel grava `discogs_url`, `refazer_discogs = pedido` e limpa a conferência.
 - A rotina (disparada pelo vigia) busca a edição e refaz artista, título, ano, descrição, SEO, tags, faixas e créditos. Mantém fotos, preço, estoque, categorias e lote. O disco volta como rascunho para ser conferido de novo; a capa é comparada de novo com o Discogs.
-- Se o produto já existe e está oculto, a ficha nova também vai para a Nuvemshop (PUT só de nome, marca, descrição, SEO e tags, recusado se o produto estiver visível). Produto visível: corrigir pelo Admin.
+- Se o produto já existe (oculto ou visível), a ficha nova também vai para a Nuvemshop: PUT só de nome, marca, descrição, SEO e tags, sem mexer em fotos, preço, estoque ou visibilidade. Só acontece no disco marcado pelo Túlio.
+- O botão também existe no cartão de cada disco no cadastro ("Corrigir pelo Discogs"), usando o campo Link do Discogs, que fica sempre editável.
 - A aba "Etiqueta verde" saiu do Painel: a marcação física não faz mais parte do fluxo.

@@ -329,10 +329,9 @@ class LojaCadastro:
         # D-104: correção de preço pedida na Conferência do Painel (só o preço da variante).
         return self._put(f'products/{int(pid)}/variants/{int(vid)}', {'price': f'{float(valor):.2f}'})
     def atualizar_ficha(self,pid,corpo):
-        # D-107: só para produto OCULTO marcado como "Cadastro errado" na Conferência; nunca fotos, preço ou estoque.
+        # D-107: só para disco marcado como "Cadastro errado" pelo Túlio; troca o texto da ficha, nunca fotos, preço, estoque ou visibilidade.
         permitidas={'name','brand','description','seo_title','seo_description','tags'}
         if not corpo or set(corpo)-permitidas: raise ErroCadastro('ficha com campo não permitido')
-        if self.produto(pid).get('published') is not False: raise ErroCadastro('produto visível; corrija pelo Admin')
         self.api._esperar_vaga()
         try:
             r=self.api._sessao.put(self.api._base+f'/products/{int(pid)}',headers=self.api._cabecalhos,
@@ -807,9 +806,8 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                 pid_r=str(l.get('produto_id') or '').strip()
                 try:
                     if not rid: raise ErroCadastro('informe o número da edição no Discogs')
-                    if str(l.get('status','')).startswith('publicado') and not pid_r: raise ErroCadastro('já está no site; corrija pelo Admin')
+                    if str(l.get('status','')).startswith('publicado') and not pid_r: raise ErroCadastro('linha sem produto_id; corrija pelo Admin')
                     loja_r=LojaCadastro(api or NuvemshopAPI(config)) if pid_r else None
-                    if loja_r and loja_r.produto(pid_r).get('published') is not False: raise ErroCadastro('já está visível no site; corrija pelo Admin')
                     release=cliente_discogs.get('/releases/'+rid)
                     extras=cliente_discogs.buscar(l.get('titulo',''),'','https://www.discogs.com/release/'+rid)
                     dados=ficha_pelo_discogs(l,release,extras)

@@ -888,17 +888,20 @@ def test_d107_rascunho_marcado_errado_e_refeito_e_volta_para_conferir(tmp_path, 
     assert loja.posts == [] and loja.puts == []
 
 
-def test_d107_produto_visivel_nao_e_alterado(tmp_path, monkeypatch):
+def test_d107_produto_visivel_recebe_ficha_e_continua_visivel(tmp_path, monkeypatch):
     loja = Loja()
     loja.produtos[123] = dict(id=123, published=True, handle={'pt': 'x'}, sku='CADX')
-    l = linha(id='261113a-02', status='criado', produto_id='123', discogs_url='9626714', refazer_discogs='pedido')
+    fichas = []
+    loja.atualizar_ficha = lambda pid, corpo: fichas.append((int(pid), corpo))
+    l = linha(id='261113a-02', status='publicado', produto_id='123', categorias='LP, Usado', discogs_url='9626714', refazer_discogs='pedido')
     p = PlanilhaGoogle(PlanilhaFalsa())
     p.substituir(c.ABA, pd.DataFrame([l]))
     monkeypatch.setattr(c, 'LojaCadastro', lambda _: loja)
     c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, api=object(), drive=Drive(), discogs=DiscogsFalso())
     atual = dict(zip(c.ler(p, c.ABA)[0], c.ler(p, c.ABA)[1]))
-    assert atual['refazer_discogs'].startswith('erro: já está visível no site')
-    assert atual['titulo'] == l['titulo']
+    assert atual['refazer_discogs'] == 'feito' and atual['status'] == 'publicado'
+    assert fichas and fichas[0][1]['name'] == {'pt': 'LP Frank Sinatra - All Alone (1962) - (Vinil Usado)'}
+    assert loja.puts == [] and loja.produtos[123]['published'] is True
 
 
 def test_d107_ficha_so_aceita_campos_de_texto():

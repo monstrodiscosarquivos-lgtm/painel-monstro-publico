@@ -3262,7 +3262,8 @@ function cdFormDetalhes(o, edit){
     ${o.faixas ? `<label class="s" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="faixas" style="width:auto"${/^sim$/i.test(o.faixas_na_descricao) ? " checked" : ""}${dis}> Incluir a lista de faixas do Discogs no fim da descrição</label>` : ""}
     <label>Tags<input data-f="tags" value="${esc(o.tags)}" data-orig="${esc(o.tags)}"${dis}></label>
     <label>Peso (kg)<input data-f="peso_kg" inputmode="decimal" value="${esc(o.peso_kg)}" data-orig="${esc(o.peso_kg)}"${dis}><span class="s" style="font-weight:400;display:block;margin-top:2px">Padrão: LP simples 0,50 kg · capa dupla/encarte 0,55 kg · duplo 0,80 kg · compacto/CD 0,20 kg · K7 0,17 kg</span></label>
-    <label>Link do Discogs<input data-f="discogs_url" type="url" value="${esc(o.discogs_url)}" data-orig="${esc(o.discogs_url)}"${dis}></label>
+    <label>Link do Discogs<input data-f="discogs_url" type="text" value="${esc(o.discogs_url)}" data-orig="${esc(o.discogs_url)}">
+      <span class="s" style="font-weight:400;display:block;margin-top:2px">Cadastro errado? Cole aqui o link ou o número da edição certa e clique em <b>Corrigir pelo Discogs</b>, embaixo.</span></label>
     <label>Observação para o Claude<input data-f="obs" value="${esc(o.observacao_tulio)}" data-orig="${esc(o.observacao_tulio)}"></label>
   </div>
   ${cdFotosEditor(o, edit)}
@@ -3964,7 +3965,7 @@ function cdRenderConferencia(){
         <td>
           <div style="font-weight:700;font-size:14px;line-height:1.25">${esc(art)}</div>
           ${o.rascunho_row && !o.produto_id ? `<div class="no-print" style="display:flex;gap:4px;margin-top:3px"><input type="text" class="cd-conf-titulo" data-chave="${esc(chaveItem)}" value="${esc(o.titulo)}" style="flex:1;min-width:180px;padding:3px 6px;font-size:12px"><button type="button" class="btn cd-conf-salvar" data-campo="titulo" data-chave="${esc(chaveItem)}" style="padding:2px 8px;font-size:11px">Salvar</button></div>` : `<div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(o.titulo)}</div>`}
-          ${o.rascunho_row && !o.visivel ? `<div class="no-print" style="display:flex;gap:4px;margin-top:4px;align-items:center"><input type="text" class="cd-conf-discogs" data-chave="${esc(chaveItem)}" placeholder="ID ou link do Discogs" style="width:150px;padding:3px 6px;font-size:12px"><button type="button" class="btn cd-conf-errado" data-chave="${esc(chaveItem)}" style="padding:2px 8px;font-size:11px">Cadastro errado</button></div>` : ""}
+          ${o.rascunho_row ? `<div class="no-print" style="display:flex;gap:4px;margin-top:4px;align-items:center"><input type="text" class="cd-conf-discogs" data-chave="${esc(chaveItem)}" placeholder="ID ou link do Discogs" style="width:150px;padding:3px 6px;font-size:12px"><button type="button" class="btn cd-conf-errado" data-chave="${esc(chaveItem)}" style="padding:2px 8px;font-size:11px">Cadastro errado</button></div>` : ""}
           ${o.refazer_discogs === "pedido" ? `<div class="s" style="font-size:11px;color:var(--muted)">refazendo pelo Discogs…</div>` : (String(o.refazer_discogs || "").startsWith("erro") ? `<div class="s" style="font-size:11px;color:var(--bad)">${esc(o.refazer_discogs)}</div>` : (o.refazer_discogs === "feito" && !o.conferido_em ? `<div class="s" style="font-size:11px;color:var(--good)">refeito pelo Discogs: confira e marque de novo</div>` : ""))}
         </td>
         <td style="text-align:right;font-weight:700">
@@ -4672,6 +4673,8 @@ function cdCard(o){
       ${edit ? `<button type="button" class="primary" data-a="aprovar">Aprovar para criar na loja</button>
       <label class="s" style="display:inline-flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" data-sel style="width:auto"${CD_SEL.has(o.id) ? " checked" : ""}> Selecionar para aprovar em lote</label>` : ""}
       ${g === "aprovado" && !o.produto_id ? `<button type="button" data-a="voltar">Voltar para revisão</button>` : ""}
+      ${g !== "descartado" ? `<button type="button" data-a="corrigir_discogs">Corrigir pelo Discogs</button>` : ""}
+      ${o.refazer_discogs === "pedido" ? `<span class="s">refazendo pelo Discogs…</span>` : (String(o.refazer_discogs || "").startsWith("erro") ? `<span class="s" style="color:var(--bad)">${esc(o.refazer_discogs)}</span>` : "")}
       ${["rascunho","aprovado","criado","erro"].includes(g) ? `<button type="button" data-a="descartar">Descartar</button>` : ""}
       ${g === "descartado" ? `<button type="button" data-a="restaurar">Restaurar</button>` : ""}
       <span class="status"></span>
@@ -4949,6 +4952,23 @@ function cdLigar(box, o){
       } else if (a === "restaurar"){
         await write(cel("status"), [[o.produto_id ? "criado" : "rascunho"]]); await write(cel("atualizado_em"), [[agora()]]);
         st.className = "status ok"; st.textContent = o.produto_id ? "Restaurado como criado." : "Voltou para revisão.";
+      } else if (a === "corrigir_discogs"){
+        /* D-107: cadastro errado; o robô refaz a ficha pela edição informada e o disco volta para conferir */
+        const campo = box.querySelector('[data-f="discogs_url"]');
+        const bruto = String(campo ? campo.value : "").trim();
+        const m = bruto.match(/^\d{3,10}$/) ? [null, bruto] : bruto.match(/[/]release[/](\d+)/);
+        if (!m) throw new Error("cole no campo Link do Discogs o link ou o número da edição certa");
+        const gravarCampo = async (k, v) => {
+          let i = o._h.indexOf(k);
+          if (i < 0){ await write(`cadastro_rascunhos!${colL(o._h.length)}1`, [[k]]); o._h.push(k); i = o._h.length - 1; }
+          await write(`cadastro_rascunhos!${colL(i)}${o._row}`, [[v]]);
+          o[k] = v;
+        };
+        await gravarCampo("discogs_url", "https:" + "/" + "/www.discogs.com/release/" + m[1]);
+        await gravarCampo("refazer_discogs", "pedido");
+        for (const k of ["conferido_em", "conferido_por", "subir_loja"]) if (o._h.indexOf(k) >= 0) await gravarCampo(k, "");
+        await write(cel("atualizado_em"), [[agora()]]);
+        st.className = "status ok"; st.textContent = "Pedido enviado. Em uns 10 minutos a ficha vem corrigida pelo Discogs e o disco volta para conferir.";
       } else if (a === "voltar"){
         if (o.produto_id) throw new Error("já tem produto criado; não dá para voltar");
         await write(cel("status"), [["rascunho"]]); await write(cel("atualizado_em"), [[agora()]]);
