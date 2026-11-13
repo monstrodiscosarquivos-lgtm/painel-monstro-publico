@@ -3674,6 +3674,7 @@ function cdDiscosConferencia(){
       conferido_em: (rasc && rasc.conferido_em) || "",
       conferido_por: (rasc && rasc.conferido_por) || "",
       subir_loja: (rasc && rasc.subir_loja) || "",
+      atualizar_preco: (rasc && rasc.atualizar_preco) || "",
       marcado_vinil: (rasc && rasc.marcado_vinil) || "",
       rascunho_row: rasc ? rasc._row : null,
       rascunho_obj: rasc || null
@@ -3705,6 +3706,7 @@ function cdDiscosConferencia(){
       conferido_em: String(r.conferido_em || "").trim(),
       conferido_por: String(r.conferido_por || "").trim(),
       subir_loja: String(r.subir_loja || "").trim(),
+      atualizar_preco: String(r.atualizar_preco || "").trim(),
       marcado_vinil: String(r.marcado_vinil || "").trim(),
       rascunho_row: r._row || null,
       rascunho_obj: r
@@ -4047,10 +4049,10 @@ function cdRenderConferencia(){
         </td>
         <td>
           <div style="font-weight:700;font-size:14px;line-height:1.25">${esc(art)}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(o.titulo)}</div>
+          ${o.rascunho_row && !o.produto_id ? `<div class="no-print" style="display:flex;gap:4px;margin-top:3px"><input type="text" class="cd-conf-titulo" data-chave="${esc(chaveItem)}" value="${esc(o.titulo)}" style="flex:1;min-width:180px;padding:3px 6px;font-size:12px"><button type="button" class="btn cd-conf-salvar" data-campo="titulo" data-chave="${esc(chaveItem)}" style="padding:2px 8px;font-size:11px">Salvar</button></div>` : `<div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(o.titulo)}</div>`}
         </td>
         <td style="text-align:right;font-weight:700">
-          ${esc(prTxt)}
+          ${o.rascunho_row ? `<div class="no-print" style="display:flex;gap:4px;justify-content:flex-end;align-items:center"><input type="number" step="0.01" min="0" inputmode="decimal" class="cd-conf-preco" data-chave="${esc(chaveItem)}" value="${esc(String(num(o.preco) || ""))}" style="width:76px;padding:3px 5px;text-align:right;font-weight:700"><button type="button" class="btn cd-conf-salvar" data-campo="preco" data-chave="${esc(chaveItem)}" style="padding:2px 8px;font-size:11px">Salvar</button></div>${o.atualizar_preco === "pedido" ? `<div class="s" style="font-size:11px;color:var(--muted)">atualizando na loja…</div>` : (String(o.atualizar_preco || "").startsWith("erro") ? `<div class="s" style="font-size:11px;color:var(--bad)">${esc(o.atualizar_preco)}</div>` : "")}` : `${esc(prTxt)}${o.produto_id ? `<div class="s" style="font-size:11px">corrija pelo Admin</div>` : ""}`}
         </td>
         <td style="text-align:center">
           <span class="pill ${estPill}">${esc(estTxt)}</span>
@@ -4220,6 +4222,38 @@ function cdRenderConferencia(){
   /* Delegação de eventos no corpo da tabela */
   const tbody = $("cd-conf-tbody");
   if (tbody){
+    /* D-104: corrigir preço e título direto na Conferência */
+    const salvarCampoConf = async (btn) => {
+      const chave = String(btn.dataset.chave || "").trim();
+      const campo = btn.dataset.campo;
+      const item = todos.find(o => String(o.produto_id || o.id_lote || "").trim() === chave);
+      const tr = btn.closest("tr");
+      const inp = tr && tr.querySelector(campo === "preco" ? ".cd-conf-preco" : ".cd-conf-titulo");
+      if (!item || !inp) return;
+      const valor = String(inp.value || "").trim();
+      if (campo === "preco" && !(num(valor) > 0)){ alert("Preço inválido."); return; }
+      if (campo === "titulo" && !valor){ alert("Título vazio."); return; }
+      btn.disabled = true; btn.textContent = "…";
+      try {
+        await cdConfSalvarCampo(item, campo, campo === "preco" ? String(num(valor)) : valor);
+        try { await afterSave(); } catch(e){}
+        cdRenderConferencia();
+      } catch(err){
+        btn.disabled = false; btn.textContent = "Salvar";
+        alert("Não consegui salvar: " + (err && err.message ? err.message : err));
+      }
+    };
+    tbody.addEventListener("click", (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest(".cd-conf-salvar") : null;
+      if (btn) salvarCampoConf(btn);
+    });
+    tbody.addEventListener("keydown", (e) => {
+      const t = e.target;
+      if (e.key !== "Enter" || !t || !(t.classList.contains("cd-conf-preco") || t.classList.contains("cd-conf-titulo"))) return;
+      e.preventDefault();
+      const btn = t.closest("tr") && t.closest("tr").querySelector(`.cd-conf-salvar[data-campo="${t.classList.contains("cd-conf-preco") ? "preco" : "titulo"}"]`);
+      if (btn) salvarCampoConf(btn);
+    });
     tbody.addEventListener("change", async (e) => {
       const target = e.target;
       if (!target) return;
@@ -4250,6 +4284,33 @@ function cdRenderConferencia(){
         }
       }
     });
+  }
+}
+
+/* D-104: grava preço ou título na linha do cadastro. Preço de disco que já existe na loja vira atualizar_preco = "pedido" para a rotina mandar à Nuvemshop. */
+async function cdConfSalvarCampo(item, campo, valor){
+  const cadRows = D.cad || [];
+  if (cadRows.length < 1) throw new Error("Aba cadastro_rascunhos não carregada.");
+  if (!item.rascunho_row) throw new Error("Este disco não tem linha no cadastro: corrija pelo Admin da Nuvemshop.");
+  const cab = cadRows[0];
+  const row = item.rascunho_row;
+  const idx = cab.indexOf(campo);
+  if (idx < 0) throw new Error("Coluna " + campo + " não encontrada.");
+  await write(`cadastro_rascunhos!${colL(idx)}${row}`, [[valor]]);
+  if (cadRows[row - 1]){ while (cadRows[row - 1].length <= idx) cadRows[row - 1].push(""); cadRows[row - 1][idx] = valor; }
+  item[campo] = campo === "preco" ? num(valor) : valor;
+  if (item.rascunho_obj) item.rascunho_obj[campo] = valor;
+  if (campo === "preco" && String(item.produto_id || "").trim()){
+    let ip = cab.indexOf("atualizar_preco");
+    if (ip < 0){
+      await write(`cadastro_rascunhos!${colL(cab.length)}1`, [["atualizar_preco"]]);
+      ip = cab.length;
+      cab.push("atualizar_preco");
+    }
+    await write(`cadastro_rascunhos!${colL(ip)}${row}`, [["pedido"]]);
+    if (cadRows[row - 1]){ while (cadRows[row - 1].length <= ip) cadRows[row - 1].push(""); cadRows[row - 1][ip] = "pedido"; }
+    item.atualizar_preco = "pedido";
+    if (item.rascunho_obj) item.rascunho_obj.atualizar_preco = "pedido";
   }
 }
 

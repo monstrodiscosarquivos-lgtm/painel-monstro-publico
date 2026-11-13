@@ -196,6 +196,17 @@ def test_painel_conferencia_playwright():
         assert print_area.inner_text() != ""
         assert "Monstro Discos" in print_area.inner_text()
 
+        # 11. D-104: corrigir preço na conferência de disco que já existe na loja
+        inp = page.locator('input.cd-conf-preco[data-chave="103"]')
+        assert inp.count() == 1
+        inp.fill("95")
+        page.locator('button.cd-conf-salvar[data-campo="preco"][data-chave="103"]').click()
+        page.wait_for_timeout(400)
+        w = page.evaluate("window._writes")
+        assert any(x["range"] == "cadastro_rascunhos!C4" and x["values"] == [["95"]] for x in w)
+        assert any(x["range"].endswith("1") and x["values"] == [["atualizar_preco"]] for x in w)
+        assert any(x["range"].endswith("4") and x["values"] == [["pedido"]] for x in w)
+
         browser.close()
 
 

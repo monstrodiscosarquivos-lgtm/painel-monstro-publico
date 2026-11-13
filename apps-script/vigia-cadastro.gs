@@ -74,7 +74,7 @@ function vigiarCadastro() {
   }
 }
 
-/** IDs com status "aprovado" e sem produto_id, ou com subir_loja = "pedido" na aba cadastro_rascunhos. */
+/** IDs com status "aprovado" e sem produto_id, com subir_loja = "pedido" ou atualizar_preco = "pedido" na aba cadastro_rascunhos. */
 function aprovadosPendentes_() {
   var aba = SpreadsheetApp.openById(VIGIA_PLANILHA).getSheetByName(VIGIA_ABA);
   if (!aba || aba.getLastRow() < 2) return [];
@@ -82,6 +82,7 @@ function aprovadosPendentes_() {
   var cab = v[0];
   var cId = cab.indexOf('id'), cSt = cab.indexOf('status'), cProd = cab.indexOf('produto_id');
   var cSubir = cab.indexOf('subir_loja');
+  var cPreco = cab.indexOf('atualizar_preco');   // D-104: preço corrigido na Conferência
   if (cId < 0) return [];
   var ids = [];
   for (var i = 1; i < v.length; i++) {
@@ -93,8 +94,9 @@ function aprovadosPendentes_() {
 
     var precisaAprovar = (st === 'aprovado' && !prod);
     var precisaSubir = (subir === 'pedido');
+    var precisaPreco = cPreco >= 0 && String(v[i][cPreco]).trim().toLowerCase() === 'pedido';
 
-    if (precisaAprovar || precisaSubir) {
+    if (precisaAprovar || precisaSubir || precisaPreco) {
       ids.push(idVal);
     }
   }

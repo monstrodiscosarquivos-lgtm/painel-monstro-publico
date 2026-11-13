@@ -29,8 +29,10 @@ from painel_monstro.saidas.planilha_google import _letra
 
 ABA='cadastro_rascunhos'
 BASE='id lote pasta status titulo marca categorias ficha descricao capa vinil preco preco_referencia peso_kg altura_cm largura_cm comprimento_cm discogs_url discogs_confianca pendencias fotos seo_titulo seo_descricao tags produto_id link_loja observacao_tulio atualizado_em'.split()
-EXTRAS='discogs_id faixas creditos discogs_menor_preco discogs_a_venda faixas_na_descricao preco_origem cadastro_execucao fotos_ajustadas estoque publicar marcado_vinil capa_discogs_url conferido_em conferido_por subir_loja'.split()
+EXTRAS='discogs_id faixas creditos discogs_menor_preco discogs_a_venda faixas_na_descricao preco_origem cadastro_execucao fotos_ajustadas estoque publicar marcado_vinil capa_discogs_url conferido_em conferido_por subir_loja atualizar_preco'.split()
 COLUNAS=BASE+EXTRAS
+# D-104: colunas que a Conferência do Painel grava; não contam como edição do disco durante a rodada.
+COLUNAS_CONFERENCIA=('conferido_em','conferido_por','subir_loja','marcado_vinil','lote_black','atualizado_em','atualizar_preco')
 FOTOS='id_disco ordem papel arquivo_drive_id cantos observacao'.split()
 
 
@@ -310,7 +312,7 @@ class LojaCadastro:
         return self._post(f'products/{int(pid)}/images',{'attachment':base64.b64encode(jpeg).decode(),
                                                       'filename':nome,'position':ordem})
     def _put(self,caminho,corpo):
-        if not ((re.fullmatch(r'products/\d+',caminho) and corpo == {'published': True}) or (re.fullmatch(r'products/\d+/variants/\d+',caminho) and isinstance(corpo,dict) and list(corpo)==['stock'] and type(corpo['stock']) is int and corpo['stock']>=0)):
+        if not ((re.fullmatch(r'products/\d+',caminho) and corpo == {'published': True}) or (re.fullmatch(r'products/\d+/variants/\d+',caminho) and isinstance(corpo,dict) and list(corpo)==['stock'] and type(corpo['stock']) is int and corpo['stock']>=0) or (re.fullmatch(r'products/\d+/variants/\d+',caminho) and isinstance(corpo,dict) and list(corpo)==['price'] and re.fullmatch(r'\d+\.\d{2}',str(corpo['price'])) and float(corpo['price'])>0)):
             raise ErroCadastro('PUT fora da publicação do cadastro bloqueado')
         self.api._esperar_vaga()
         try:
@@ -323,6 +325,9 @@ class LojaCadastro:
         except Exception: raise ErroCadastro('PUT não confirmado') from None
     def estoque(self,pid,vid,quantidade):
         return self._put(f'products/{int(pid)}/variants/{int(vid)}', {'stock': quantidade})
+    def preco(self,pid,vid,valor):
+        # D-104: correção de preço pedida na Conferência do Painel (só o preço da variante).
+        return self._put(f'products/{int(pid)}/variants/{int(vid)}', {'price': f'{float(valor):.2f}'})
     def publicar(self,pid,corpo=None):
         return self._put(f'products/{int(pid)}',{'published':True} if corpo is None else corpo)
     def apagar_imagem(self,pid,iid):
@@ -628,7 +633,8 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
             atuais=ler(planilha,ABA); matches=[i for i,r in enumerate(atuais[1:],2) if r and r[0]==did]
             if len(matches)!=1: raise ErroCadastro('id duplicado ou removido na planilha')
             n=matches[0]; row=dict(zip(atuais[0],atuais[n-1]))
-            if 'status' in mudancas and row.get('status') not in ('aprovado','criado','publicado','somar_estoque'):
+            conferido_vira_aprovado=(mudancas.get('status')=='aprovado' and row.get('status')=='rascunho' and row.get('subir_loja')=='pedido')
+            if 'status' in mudancas and row.get('status') not in ('aprovado','criado','publicado','somar_estoque') and not conferido_vira_aprovado:
                 raise ErroCadastro('status alterado pelo operador; preservado')
             if 'produto_id' in mudancas and row.get('produto_id') and str(row['produto_id'])!=str(mudancas['produto_id']):
                 raise ErroCadastro('produto_id alterado; interrompido')
@@ -645,6 +651,29 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
         gravar=gravador(did)
         try:
             if repetidos.count(did)!=1: raise ErroCadastro('id duplicado na planilha')
+            # D-104: preço corrigido na Conferência de um disco que já existe na Nuvemshop.
+            if l.get('atualizar_preco')=='pedido':
+                pid_p=str(l.get('produto_id') or '').strip(); valor=numero(l.get('preco'))
+                if not pid_p: gravar({'atualizar_preco':''})
+                elif not valor or valor<=0: gravar({'atualizar_preco':'erro: preço inválido'})
+                else:
+                    loja_p=LojaCadastro(api or NuvemshopAPI(config))
+                    try:
+                        vs=loja_p.produto(pid_p).get('variants') or []
+                        if len(vs)!=1: raise ErroCadastro('produto com mais de uma variante')
+                        loja_p.preco(pid_p,vs[0]['id'],valor)
+                        gravar({'atualizar_preco':'feito'})
+                    except Exception as erro_preco:
+                        try: gravar({'atualizar_preco':'erro: '+str(erro_preco)[:80]})
+                        except Exception: pass
+                l['atualizar_preco']=''
+            # D-104: conferido na loja física vale como aprovação. Sem preço, não cria nada.
+            if l.get('status')=='rascunho' and l.get('subir_loja')=='pedido':
+                if not numero(l.get('preco')):
+                    gravar({'subir_loja':'erro: sem preço'})
+                    continue
+                gravar({'status':'aprovado'})
+                l['status']='aprovado'
             if l['status']=='somar_estoque':
                 def confirmar_soma():
                     rows=ler(planilha,ABA)
@@ -757,14 +786,14 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                 # Revalida a aprovação imediatamente antes das escritas externas.
                 atuais=ler(planilha,ABA); atual=next(dict(zip(atuais[0],r)) for r in atuais[1:] if r and r[0]==did)
                 if atual.get('status')!='aprovado': continue
-                if atual!=l: continue  # houve edição depois do início da rodada; esperar a próxima
+                if any(str(atual.get(k,''))!=str(l.get(k,'')) for k in set(atual)|set(l) if k not in COLUNAS_CONFERENCIA and k!='status'): continue  # houve edição depois do início da rodada; esperar a próxima
                 def confirmar():
                     rows=ler(planilha,ABA)
                     matches=[dict(zip(rows[0],r)) for r in rows[1:] if r and r[0]==did]
                     fs_atuais=ler(planilha,'cadastro_fotos')
                     fotos_atuais=[dict(zip(fs_atuais[0],r)) for r in fs_atuais[1:] if r and r[0]==did] if fs_atuais else []
                     return fotos_atuais==minhas_fotos and len(matches)==1 and matches[0].get('status')=='aprovado' and all(
-                        str(matches[0].get(k,''))==str(l.get(k,'')) for k in COLUNAS if k not in ('produto_id','link_loja','atualizado_em','cadastro_execucao','fotos_ajustadas'))
+                        str(matches[0].get(k,''))==str(l.get(k,'')) for k in COLUNAS if k not in ('produto_id','link_loja','cadastro_execucao','fotos_ajustadas')+COLUNAS_CONFERENCIA)
                 processar_linha(l,minhas_fotos,loja,drive,gravar,
                                  Path(pasta_api)/('cadastro_'+sku_da_linha(did)+'.json'),confirmar)
                 resumo['criados']+=1

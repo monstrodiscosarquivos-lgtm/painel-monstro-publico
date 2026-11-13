@@ -722,13 +722,65 @@ def test_subir_loja_pedido_erro_registra_erro_curto(tmp_path, monkeypatch):
     assert 'Falha de conexao' in atual['subir_loja']
 
 
-def test_subir_loja_sem_produto_id_mantem_pedido(tmp_path, monkeypatch):
+def test_d104_rascunho_conferido_com_preco_vira_aprovado(tmp_path, monkeypatch):
     loja = Loja()
     l = linha(id='disco-123', produto_id='', status='rascunho', subir_loja='pedido')
     p = PlanilhaGoogle(PlanilhaFalsa())
     p.substituir(c.ABA, pd.DataFrame([l]))
     monkeypatch.setattr(c, 'LojaCadastro', lambda _: loja)
-    res = c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, api=object(), drive=Drive())
+    c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, api=object(), drive=Drive())
     atual = dict(zip(c.COLUNAS, c.ler(p, c.ABA)[1]))
-    assert atual['subir_loja'] == 'pedido'
-    assert len(loja.puts) == 0
+    assert atual['status'] != 'rascunho'
+    assert atual['subir_loja'] in ('pedido', 'feito')
+
+
+def test_d104_rascunho_conferido_sem_preco_nao_cria(tmp_path, monkeypatch):
+    loja = Loja()
+    l = linha(id='disco-123', produto_id='', status='rascunho', subir_loja='pedido', preco='')
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame([l]))
+    monkeypatch.setattr(c, 'LojaCadastro', lambda _: loja)
+    c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, api=object(), drive=Drive())
+    atual = dict(zip(c.COLUNAS, c.ler(p, c.ABA)[1]))
+    assert atual['status'] == 'rascunho'
+    assert atual['subir_loja'] == 'erro: sem preço'
+    assert loja.posts == [] and loja.puts == []
+
+
+def test_d104_atualizar_preco_manda_para_a_variante(tmp_path, monkeypatch):
+    loja = Loja()
+    loja.produtos[123] = dict(id=123, published=True, handle={'pt': 'disco'}, sku=c.sku_da_linha('disco-123'), variants=[{'id': 777}])
+    precos = []
+    loja.preco = lambda pid, vid, valor: precos.append((int(pid), int(vid), valor))
+    l = linha(id='disco-123', produto_id='123', status='publicado', preco='85', atualizar_preco='pedido')
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame([l]))
+    monkeypatch.setattr(c, 'LojaCadastro', lambda _: loja)
+    c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, api=object(), drive=Drive())
+    atual = dict(zip(c.COLUNAS, c.ler(p, c.ABA)[1]))
+    assert precos == [(123, 777, 85.0)]
+    assert atual['atualizar_preco'] == 'feito'
+    assert atual['status'] == 'publicado'
+
+
+def test_d104_put_de_preco_so_aceita_preco_valido():
+    chamadas = []
+    class Sessao:
+        def put(self, url, **kw):
+            chamadas.append(kw['json'])
+            return SimpleNamespace(status_code=200, json=lambda: {})
+    api = SimpleNamespace(_base='https://api.exemplo', _cabecalhos={}, _sessao=Sessao(),
+                          _esperar_vaga=lambda: None, _guardar_limites=lambda r: None)
+    loja = c.LojaCadastro(api)
+    loja.preco(1, 2, 79.9)
+    assert chamadas == [{'price': '79.90'}]
+    with pytest.raises(c.ErroCadastro):
+        loja._put('products/1/variants/2', {'price': '79.90', 'stock': 3})
+    with pytest.raises(c.ErroCadastro):
+        loja._put('products/1', {'name': 'x'})
+
+
+def test_d104_colunas_da_conferencia_nao_contam_como_edicao():
+    for k in ('conferido_em', 'conferido_por', 'subir_loja', 'marcado_vinil', 'lote_black', 'atualizar_preco'):
+        assert k in c.COLUNAS_CONFERENCIA
+    assert 'preco' not in c.COLUNAS_CONFERENCIA and 'titulo' not in c.COLUNAS_CONFERENCIA
