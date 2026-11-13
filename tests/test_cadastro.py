@@ -784,3 +784,48 @@ def test_d104_colunas_da_conferencia_nao_contam_como_edicao():
     for k in ('conferido_em', 'conferido_por', 'subir_loja', 'marcado_vinil', 'lote_black', 'atualizar_preco'):
         assert k in c.COLUNAS_CONFERENCIA
     assert 'preco' not in c.COLUNAS_CONFERENCIA and 'titulo' not in c.COLUNAS_CONFERENCIA
+
+
+def _produtos_site(*linhas):
+    return pd.DataFrame([dict(id=i, nome=n, categorias=cat, exibir=vis, sku=sku, url='lp-'+str(i), criado_em=cri)
+                         for i, n, cat, vis, sku, cri in linhas])
+
+
+def test_d106_rascunho_feito_a_mao_no_site_e_ligado_sem_duplicar(tmp_path, monkeypatch):
+    loja = Loja()
+    l = linha(id='261113a-01', status='rascunho', subir_loja='pedido',
+              titulo='LP Santana - Shango (1982) - (Vinil Usado)', categorias='LP, Usado, Rock')
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame([l]))
+    produtos = _produtos_site((555, 'LP Santana - Shango (1982) - (Vinil Usado)', 'LP, Usado', True, None, '2026-11-13T18:00:00+0000'))
+    monkeypatch.setattr(c, 'LojaCadastro', lambda _: loja)
+    c.passo_rotina(Config(), p, SimpleNamespace(produtos=produtos), tmp_path, api=object(), drive=Drive())
+    atual = dict(zip(c.ler(p, c.ABA)[0], c.ler(p, c.ABA)[1]))
+    assert atual['produto_id'] == '555'
+    assert atual['status'] == 'publicado'
+    assert atual['subir_loja'] == 'feito'
+    assert 'Ligado ao produto criado no site' in atual['pendencias']
+    assert loja.posts == [] and loja.puts == []
+
+
+def test_d106_nao_liga_produto_do_robo_nem_produto_antigo():
+    l = linha(id='261113a-01', status='aprovado', titulo='LP Santana - Shango (1982) - (Vinil Usado)')
+    robo = _produtos_site((1, 'LP Santana - Shango (1982) - (Vinil Usado)', 'LP, Usado', True, 'CAD123', '2026-11-13T18:00:00+0000'))
+    antigo = _produtos_site((2, 'LP Santana - Shango (1982) - (Vinil Usado)', 'LP, Usado', True, None, '2025-03-01T10:00:00+0000'))
+    dois = _produtos_site((3, 'LP Santana - Shango (1982) - (Vinil Usado)', 'LP, Usado', True, None, '2026-11-13T18:00:00+0000'),
+                          (4, 'LP Santana - Shango (1982) - (Vinil Usado)', 'LP, Usado', False, None, '2026-11-13T19:00:00+0000'))
+    assert c.produto_feito_no_site(l, robo, set()) is None
+    assert c.produto_feito_no_site(l, antigo, set()) is None
+    assert c.produto_feito_no_site(l, dois, set()) is None
+    assert c.produto_feito_no_site(l, dois, {'4'})['id'] == 3
+
+
+def test_d106_produto_excluido_na_loja_vira_aviso():
+    l = linha(id='2026-11-04-07', status='criado', produto_id='999', subir_loja='erro: A Nuvemshop respondeu 404')
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame([l]))
+    produtos = _produtos_site((555, 'LP Outro - Disco (1980) - (Vinil Usado)', 'LP, Usado', True, None, '2026-11-13T18:00:00+0000'))
+    assert c.conciliar_com_site(p, produtos) == 1
+    atual = dict(zip(c.ler(p, c.ABA)[0], c.ler(p, c.ABA)[1]))
+    assert atual['subir_loja'].startswith('erro: produto não existe mais na loja')
+    assert atual['produto_id'] == '999'

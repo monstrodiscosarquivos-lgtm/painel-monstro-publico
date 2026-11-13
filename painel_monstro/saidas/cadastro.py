@@ -618,11 +618,82 @@ def processar_linha(linha,fs,loja,drive,gravar,caminho,confirmar=lambda:True):
     gravar({'status':'publicado','link_loja':link_loja,'pendencias':pendencias_limpas})
 
 
+def _data_do_lote(did):
+    m=re.match(r'^(\d{4})-(\d{2})-(\d{2})',str(did)) or re.match(r'^(\d{2})(\d{2})(\d{2})N?[a-z]-',str(did))
+    if not m: return None
+    a,mes,d=m.groups()
+    try: return pd.Timestamp(int(a) if len(a)==4 else 2000+int(a),int(mes),int(d),tz='America/Sao_Paulo')
+    except ValueError: return None
+
+
+def produto_feito_no_site(linha,produtos,ids_vinculados):
+    """D-106: produto criado à mão na Nuvemshop para este rascunho (mesmo artista e álbum, SKU que não é do robô,
+    criado a partir do dia do lote e ainda não ligado a outra linha). Devolve o registro só se houver exatamente um."""
+    if produtos is None or getattr(produtos,'empty',True): return None
+    artista,album=identidade_titulo(linha.get('titulo',''))
+    if not album: return None
+    desde=_data_do_lote(linha.get('id',''))
+    candidatos=[]
+    for p in produtos.to_dict('records'):
+        pid=numero(p.get('id'))
+        if not pid or str(int(pid)) in ids_vinculados: continue
+        if str(p.get('sku') or '').startswith('CAD'): continue
+        if identidade_titulo(p.get('nome',''))!=(artista,album): continue
+        criado=pd.to_datetime(p.get('criado_em'),errors='coerce',utc=True)
+        if desde is None or pd.isna(criado) or criado<desde.tz_convert('UTC')-pd.Timedelta(days=1): continue
+        if eh_lacrado(linha)!=bool(re.search(r'lacrad|novo',str(p.get('nome',''))+' '+str(p.get('categorias','')),re.I)): continue
+        candidatos.append(p)
+    return candidatos[0] if len(candidatos)==1 else None
+
+
+def conciliar_com_site(planilha,produtos):
+    """D-106: liga ao produto já existente os rascunhos que o Túlio criou à mão na loja, para o robô não duplicar.
+    Também marca o produto excluído na loja. Nunca oculta, apaga ou altera produto na Nuvemshop."""
+    v=ler(planilha,ABA)
+    if not v or produtos is None or getattr(produtos,'empty',True): return 0
+    cab=v[0]; aba=planilha._ss.worksheet(ABA)
+    ids_loja={str(int(n)) for n in (numero(x) for x in produtos.get('id',[])) if n}
+    ids_vinculados={str(r[cab.index('produto_id')]).strip() for r in v[1:] if len(r)>cab.index('produto_id') and str(r[cab.index('produto_id')]).strip()}
+    feitos=0
+    for n,r in enumerate(v[1:],2):
+        l=dict(zip(cab,r)); did=str(l.get('id','')).strip(); st=str(l.get('status','')).strip()
+        if not did or st.startswith('descartado') or st=='somar_estoque': continue
+        pid=str(l.get('produto_id','')).strip()
+        if pid and pid in ids_loja: continue
+        if pid and not str(l.get('subir_loja','')).startswith('erro'): continue   # produto recém-criado pode não estar na coleta ainda
+        if not pid and (l.get('cadastro_execucao') or st not in ('rascunho','aprovado') and not st.startswith('erro')): continue
+        achado=produto_feito_no_site(l,produtos,ids_vinculados)
+        mud={}
+        if achado:
+            novo=str(int(numero(achado['id'])))
+            visivel=bool(achado.get('exibir'))
+            mud={'produto_id':novo,'link_loja':'https://lojamonstro.com.br/produtos/'+str(achado.get('url') or ''),
+                 'status':'publicado' if visivel else 'criado',
+                 'pendencias':'; '.join(filter(None,[str(l.get('pendencias','')).strip(),f'Ligado ao produto criado no site (ID {novo}); o robô não criou outro.']))}
+            if str(l.get('subir_loja','')).strip(): mud['subir_loja']='feito' if visivel else 'pedido'
+            ids_vinculados.add(novo)
+        elif pid and str(l.get('subir_loja','')).startswith('erro'):
+            mud={'subir_loja':'erro: produto não existe mais na loja; descarte ou recadastre'}
+            if l.get('subir_loja')==mud['subir_loja']: mud={}
+        if not mud: continue
+        atual=ler(planilha,ABA)
+        linhas=[i for i,x in enumerate(atual[1:],2) if x and x[0]==did]
+        if len(linhas)!=1: continue
+        agora=dict(zip(atual[0],atual[linhas[0]-1]))
+        if str(agora.get('produto_id','')).strip()!=pid: continue
+        for k,val in {**mud,'atualizado_em':pd.Timestamp.now(tz='America/Sao_Paulo').strftime('%Y-%m-%d %H:%M')}.items():
+            if k in atual[0]: aba.update([[val]],f'{_letra(atual[0].index(k)+1)}{linhas[0]}',raw=True)
+        feitos+=1
+    return feitos
+
+
 def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=None):
     """Enriquece rascunhos e processa só aprovados; erro de uma linha não derruba a loja."""
     resumo={'criados':0,'erros':0,'rascunhos':0}
     if not ler(planilha,ABA): return resumo
     preparar_abas(planilha)
+    try: resumo['conciliados']=conciliar_com_site(planilha,getattr(tabelas,'produtos',None))
+    except Exception: resumo['conciliados']=0   # conciliação nunca derruba o cadastro
     v=ler(planilha,ABA); cab=v[0]
     fs=ler(planilha,'cadastro_fotos'); fotos_lista=[dict(zip(fs[0],r)) for r in fs[1:]] if fs else []
     c={r[0]:r[1] for r in ler(planilha,'Configuração') if len(r)>1}

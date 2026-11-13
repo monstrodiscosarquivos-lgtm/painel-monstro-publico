@@ -316,3 +316,10 @@ eferencia.
 
 - Subpasta da sessão em `entrada`: `AAMMDD` + letra = usados (`261113a`); `AAMMDD` + `N` + letra = novos/lacrados (`261113Na`).
 - `scripts/cadastro_lote.py`: o lote padrão de `folhas` vira o nome da pasta; `conferir` recusa JSON com lote diferente da pasta e disco com formato diferente do tipo da pasta (livro aceito); disco sem formato herda o tipo da pasta.
+
+## D-106 · Conciliação com o que foi feito à mão no site (13/11/2026)
+
+- No começo de cada rodada do cadastro, `conciliar_com_site` compara `cadastro_rascunhos` com a coleta da Nuvemshop.
+- Rascunho, aprovado ou com erro, sem `produto_id`, que tenha na loja exatamente um produto com o mesmo artista e álbum, SKU que não é do robô (não começa com `CAD`), mesmo tipo (usado ou lacrado) e criado a partir do dia do lote: a linha é ligada a esse produto (`produto_id`, `link_loja`, status `publicado` se visível ou `criado` se oculto) e o robô não cria outro.
+- Linha cujo produto foi excluído na loja (erro 404) recebe o aviso "produto não existe mais na loja; descarte ou recadastre".
+- O robô nunca oculta, apaga nem altera título, descrição ou estoque de produto existente. O que foi deixado visível no site continua visível.
