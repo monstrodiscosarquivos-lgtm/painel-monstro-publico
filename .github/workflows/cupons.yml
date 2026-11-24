@@ -1,0 +1,39 @@
+name: Cupons da Black
+
+# D-109: confere ou grava os cupons da Black Monstro 2026 na Nuvemshop.
+# Actions > Cupons da Black > Run workflow. Escolha "conferir" primeiro; depois "aplicar".
+# Os códigos vêm da aba Configuração ("Black: cupons"); os do Lado A ficam mascarados no log.
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'conferir (não altera nada) ou aplicar (grava na loja)'
+        required: true
+        default: conferir
+        type: choice
+        options: [conferir, aplicar]
+
+permissions:
+  contents: read
+
+jobs:
+  cupons:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Cupons
+        env:
+          NUVEMSHOP_STORE_ID: ${{ secrets.NUVEMSHOP_STORE_ID }}
+          NUVEMSHOP_TOKEN: ${{ secrets.NUVEMSHOP_TOKEN }}
+          NUVEMSHOP_USER_AGENT: ${{ secrets.NUVEMSHOP_USER_AGENT }}
+          PLANILHA_ID: ${{ secrets.PLANILHA_ID }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: python -m scripts.cupons_black ${{ inputs.modo == 'aplicar' && '--aplicar' || '' }}
