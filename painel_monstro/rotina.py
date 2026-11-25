@@ -225,6 +225,13 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
         print('      Black: abas black_dia e black_resumo atualizadas.')
     except Exception as erro_bk:  # noqa: BLE001
         print(f'      Black: indisponível ({_resumo_do_erro(erro_bk)}); mantidas abas anteriores.')
+    # Black Monstro 2026 · Lado A no Brevo (adiciona quem usou ANTECIPA10)
+    try:
+        res_la = brevo.passo_lado_a(config, planilha, tabelas, hoje=hoje_brt.date())
+        print(f'      Black · Lado A no Brevo: {res_la.get("status", "ok")}; {res_la.get("adicionados", 0)} adicionados.')
+    except Exception as erro_la:  # noqa: BLE001 - nunca derruba a rotina
+        print(f'      Black · Lado A no Brevo: indisponível ({_resumo_do_erro(erro_la)}); a próxima rodada tenta de novo.')
+
     print('[5/5] Resumos para o painel e para o email de segunda')
     print('      Brevo: etapa processada; conferir resultado na planilha.')
     for g in gravacoes[antes:]:

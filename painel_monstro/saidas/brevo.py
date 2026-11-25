@@ -551,3 +551,278 @@ def planejar_do_dia(chave: str, classificacao: pd.DataFrame, tabelas: Tabelas, p
     except ErroBrevo as erro:
         return ResultadoBrevo(f'erro: {erro.tipo}', erro.detalhe, None, r.leitura_ok_em, r.conta)
     return r
+
+
+# ----------------------------------------------------------------------------
+# Black Monstro 2026 · Lado A no Brevo (D-096)
+# ----------------------------------------------------------------------------
+ABA_LADO_A_ENVIADOS = 'lado_a_enviados'
+COLUNAS_LADO_A = ['email', 'numero_pedido', 'data']
+CHAVE_LISTA_LADO_A = 'Black: ID da lista Lado A no Brevo'
+ID_LISTA_LADO_A_PADRAO = 33
+CUPOM_ANTECIPA = 'ANTECIPA10'
+DATA_INICIO_ANTECIPA_PADRAO = date(2026, 11, 10)
+DATA_FIM_ANTECIPA_PADRAO = date(2026, 11, 25)
+
+
+def _parse_data_config(valor: Any, padrao: date) -> date:
+    if not valor:
+        return padrao
+    t = str(valor).strip()
+    m = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})', t)
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            pass
+    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})', t)
+    if m:
+        try:
+            return date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            pass
+    m = re.match(r'^(\d{1,2})/(\d{1,2})$', t)
+    if m:
+        try:
+            return date(padrao.year, int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            pass
+    return padrao
+
+
+def _tem_cupom_antecipa(valor_cupom: Any) -> bool:
+    if pd.isna(valor_cupom):
+        return False
+    partes = [c.strip().upper() for c in str(valor_cupom).split(',') if c.strip()]
+    return CUPOM_ANTECIPA in partes
+
+
+def _ler_config_planilha(planilha: Any) -> dict[str, str]:
+    if hasattr(planilha, '_ss') and hasattr(planilha._ss, 'worksheet'):
+        try:
+            valores = planilha._ss.worksheet('Configuração').get_all_values()
+            return {str(r[0]).strip(): str(r[1]).strip() for r in valores if len(r) >= 2 and str(r[0]).strip()}
+        except Exception:
+            return {}
+    return {}
+
+
+def _ler_lado_a_enviados(planilha: Any) -> set[str]:
+    if hasattr(planilha, '_ss') and hasattr(planilha._ss, 'worksheet'):
+        try:
+            valores = planilha._ss.worksheet(ABA_LADO_A_ENVIADOS).get_all_values()
+            if len(valores) > 1:
+                return {str(l[0]).strip().lower() for l in valores[1:] if l and str(l[0]).strip()}
+        except Exception:
+            pass
+    return set()
+
+
+def _ler_bloqueio_emails(planilha: Any) -> set[str]:
+    try:
+        from painel_monstro.saidas import carrinhos_planilha
+        b = carrinhos_planilha.ler_bloqueio(planilha)
+        return {x.lower() for x in b if '@' in x}
+    except Exception:
+        pass
+    if hasattr(planilha, '_ss') and hasattr(planilha._ss, 'worksheet'):
+        try:
+            valores = planilha._ss.worksheet('Bloqueio').get_all_values()
+            achados = set()
+            for linha in valores[1:]:
+                for col in linha[:2]:
+                    txt = str(col).strip().lower()
+                    if '@' in txt:
+                        achados.add(txt)
+            return achados
+        except Exception:
+            pass
+    return set()
+
+
+def _registrar_alerta_brevo(planilha: Any, erro_msg: str, hoje: date) -> None:
+    try:
+        from painel_monstro.log_publico import resumo_erro
+        msg = resumo_erro(erro_msg) if not isinstance(erro_msg, str) else erro_msg
+        df_alerta = pd.DataFrame([{
+            'indicador': 'lado_a_brevo',
+            'condicao': 'erro',
+            'limite': '',
+            'ativo': 'sim',
+            'observacao': f'{hoje.isoformat()}: {msg}'[:300],
+        }], columns=['indicador', 'condicao', 'limite', 'ativo', 'observacao'])
+        if hasattr(planilha, 'mesclar'):
+            planilha.mesclar('alertas', df_alerta, ['indicador'])
+    except Exception:
+        pass
+
+
+def passo_lado_a(
+    config: Any,
+    planilha: Any,
+    tabelas: Any,
+    hoje: date | None = None,
+    sessao: Any = None,
+    brevo_cliente: Brevo | None = None,
+) -> dict[str, Any]:
+    """Adiciona clientes com pedido pago e cupom ANTECIPA10 à lista do Lado A no Brevo.
+
+    Regras:
+      1. Só roda entre 'Black: início do Antecipa' e 25/11 (lidos da aba Configuração).
+      2. Pedidos válidos com o cupom ANTECIPA10 (sem diferenciar maiúsculas/minúsculas).
+      3. Adiciona à lista do Brevo cujo ID está na linha 'Black: ID da lista Lado A no Brevo' (padrão: 33).
+      4. Idempotente: quem já está na lista ou em 'lado_a_enviados' não é reenviado nem duplicado.
+      5. Respeita quem se descadastrou (emailBlacklisted no Brevo), está na aba Bloqueio ou recusou marketing.
+      6. Erro no Brevo registra na aba alertas e não derruba a rotina.
+    """
+    if hoje is None:
+        hoje = datetime.now().date()
+    elif hasattr(hoje, 'date') and not isinstance(hoje, date):
+        hoje = hoje.date()
+
+    cfg = _ler_config_planilha(planilha)
+
+    # 1. Período do Antecipa (10 a 25/11)
+    dt_inicio = _parse_data_config(cfg.get('Black: início do Antecipa'), DATA_INICIO_ANTECIPA_PADRAO)
+    if 'Black: fim do Antecipa' in cfg:
+        dt_fim = _parse_data_config(cfg.get('Black: fim do Antecipa'), DATA_FIM_ANTECIPA_PADRAO)
+    elif 'Black: acesso Lado A' in cfg:
+        dt_acesso = _parse_data_config(cfg.get('Black: acesso Lado A'), date(2026, 11, 26))
+        dt_fim = dt_acesso - timedelta(days=1)
+    else:
+        dt_fim = DATA_FIM_ANTECIPA_PADRAO
+
+    if not (dt_inicio <= hoje <= dt_fim):
+        return {
+            'status': 'fora_do_periodo',
+            'adicionados': 0,
+            'detalhe': f'Hoje ({hoje.isoformat()}) fora do período do Antecipa ({dt_inicio.isoformat()} a {dt_fim.isoformat()}).',
+        }
+
+    # 2. ID da lista no Brevo
+    lista_id = ID_LISTA_LADO_A_PADRAO
+    for k, v in cfg.items():
+        if _norm(k) in (_norm(CHAVE_LISTA_LADO_A), _norm('Black: ID da lista VIP no Brevo')):
+            try:
+                lista_id = int(float(str(v).strip()))
+                break
+            except ValueError:
+                pass
+
+    # 3. Pedidos e clientes
+    pedidos = getattr(tabelas, 'pedidos', None)
+    if pedidos is None or len(pedidos) == 0:
+        return {'status': 'sem_pedidos', 'adicionados': 0, 'detalhe': 'Nenhum pedido para analisar.'}
+
+    ja_enviados = _ler_lado_a_enviados(planilha)
+    bloqueados = _ler_bloqueio_emails(planilha)
+
+    nao_aceitam = set()
+    nomes_clientes = {}
+    clientes_df = getattr(tabelas, 'clientes', None)
+    if clientes_df is not None and len(clientes_df):
+        for _, cl in clientes_df.iterrows():
+            em = str(cl.get('email') or '').strip().lower()
+            if not em:
+                continue
+            aceita = cl.get('aceita_marketing')
+            if aceita is False or str(aceita).strip().lower() in ('false', 'nao', 'não', '0'):
+                nao_aceitam.add(em)
+            nm = str(cl.get('nome') or '').strip()
+            if nm and em not in nomes_clientes:
+                nomes_clientes[em] = nm
+
+    candidatos: dict[str, dict[str, str]] = {}
+    for _, row in pedidos.iterrows():
+        v = row.get('valido')
+        if not (v is True or str(v).strip().lower() in ('true', '1', 'sim')):
+            continue
+        if not _tem_cupom_antecipa(row.get('cupom')):
+            continue
+        email = str(row.get('email') or '').strip().lower()
+        if not email or '@' not in email:
+            continue
+        if email in ja_enviados or email in bloqueados or email in nao_aceitam:
+            continue
+        nome = str(row.get('nome') or '').strip() or nomes_clientes.get(email, '')
+        num_pedido = str(row.get('numero') or row.get('numero_pedido') or '').strip()
+        data_pedido = str(row.get('data') or '').strip()[:10] or hoje.strftime('%Y-%m-%d')
+        candidatos[email] = {
+            'email': email,
+            'nome': nome,
+            'numero_pedido': num_pedido,
+            'data': data_pedido,
+        }
+
+    if not candidatos:
+        return {'status': 'nenhum_candidato', 'adicionados': 0, 'detalhe': 'Nenhum cliente elegível com cupom ANTECIPA10.'}
+
+    # 4. Brevo
+    if brevo_cliente is None:
+        chave = getattr(config, 'brevo_api_key', None) or (config.get('brevo_api_key') if isinstance(config, dict) else '') or ''
+        if not chave:
+            return {'status': 'sem_chave', 'adicionados': 0, 'detalhe': 'BREVO_API_KEY não configurada.'}
+        modo_teste = getattr(config, 'brevo_modo_teste', None) if not isinstance(config, dict) else config.get('brevo_modo_teste')
+        if modo_teste is None:
+            modo_teste = True
+        try:
+            brevo_cliente = Brevo(chave, modo_teste=modo_teste, sessao=sessao)
+        except ErroBrevo as erro:
+            _registrar_alerta_brevo(planilha, str(erro.detalhe), hoje)
+            return {'status': 'erro', 'adicionados': 0, 'erro': str(erro)}
+
+    if brevo_cliente.modo_teste:
+        return {
+            'status': 'modo_teste',
+            'adicionados': 0,
+            'candidatos': len(candidatos),
+            'detalhe': f'{len(candidatos)} cliente(s) receberiam (modo teste ativo; nada foi escrito).',
+        }
+
+    adicionados = 0
+    novos_registros = []
+    try:
+        for email, cand in candidatos.items():
+            contato = brevo_cliente.contato(email)
+            if contato is not None and contato.get('emailBlacklisted'):
+                continue
+
+            primeiro_nome = cand['nome'].split()[0].title() if cand['nome'] else ''
+
+            if contato is None:
+                atributos = {'FIRSTNAME': primeiro_nome} if primeiro_nome else {}
+                brevo_cliente.criar_contato(email, atributos)
+                brevo_cliente.adicionar_a_lista(lista_id, [email])
+                adicionados += 1
+                novos_registros.append({
+                    'email': email,
+                    'numero_pedido': cand['numero_pedido'],
+                    'data': cand['data'],
+                })
+            else:
+                list_ids = contato.get('listIds') or []
+                if lista_id not in list_ids:
+                    if primeiro_nome and not (contato.get('attributes') or {}).get('FIRSTNAME'):
+                        brevo_cliente.atualizar_contato(email, {'FIRSTNAME': primeiro_nome})
+                    brevo_cliente.adicionar_a_lista(lista_id, [email])
+                    adicionados += 1
+                novos_registros.append({
+                    'email': email,
+                    'numero_pedido': cand['numero_pedido'],
+                    'data': cand['data'],
+                })
+
+        if novos_registros and hasattr(planilha, 'mesclar'):
+            df_gravar = pd.DataFrame(novos_registros, columns=COLUNAS_LADO_A)
+            planilha.mesclar(ABA_LADO_A_ENVIADOS, df_gravar, ['email'])
+
+        return {
+            'status': 'ok',
+            'adicionados': adicionados,
+            'total_registrados': len(novos_registros),
+            'detalhe': f'{adicionados} adicionado(s) à lista {lista_id} no Brevo.',
+        }
+    except Exception as erro:
+        _registrar_alerta_brevo(planilha, str(erro), hoje)
+        return {'status': 'erro', 'adicionados': adicionados, 'erro': str(erro)}
+
