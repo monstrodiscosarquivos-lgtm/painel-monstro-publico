@@ -331,3 +331,8 @@ eferencia.
 - Se o produto já existe (oculto ou visível), a ficha nova também vai para a Nuvemshop: PUT só de nome, marca, descrição, SEO e tags, sem mexer em fotos, preço, estoque ou visibilidade. Só acontece no disco marcado pelo Túlio.
 - O botão também existe no cartão de cada disco no cadastro ("Corrigir pelo Discogs"), usando o campo Link do Discogs, que fica sempre editável.
 - A aba "Etiqueta verde" saiu do Painel: a marcação física não faz mais parte do fluxo.
+
+## D-108 · LTV com recorte de período e Painel do Claude em sincronia (17/11/2026)
+
+- Aba Resultados ganhou o bloco "LTV: quanto vale um cliente", que segue o período escolhido no topo: clientes novos (primeira compra no período), LTV até hoje, em 90 dias e em 12 meses (marcados como parciais quando a turma é recente), taxa de recompra, pedidos por cliente e LTV da base inteira. Receita sem frete e sem estornos; cliente contado pelo email do pedido.
+- O artifact "Painel Monstro" no Claude passa a ser republicado junto com o Painel do Apps Script sempre que `painel-monstro.html` mudar (com o ID da planilha injetado só na cópia publicada, fora do git).
