@@ -1,3 +1,13 @@
+# Atualização de sessão · Relógios do Apps Script para Rotina do Painel e Black rápido (D-109), 27/11/2026
+
+- **Relógios no Apps Script (`apps-script/vigia-cadastro.gs`):**
+  - Reaproveitado o envio via `repository_dispatch` com `GITHUB_REPO` e `GITHUB_TOKEN` das Propriedades do script (helper `dispararDispatch_`).
+  - Criadas as funções `dispararRotina()` (`event_type: 'rotina'`), `dispararBlackRapido()` (`event_type: 'black-rapido'`, ativo somente de 26/11/2026 a 01/12/2026 em Brasília), `instalarRelogios()` (sem duplicar: `dispararRotina` a cada 1h e `dispararBlackRapido` a cada 15 min) e `removerRelogiosBlack()` (remove só o acionador do Black depois do evento).
+- **Workflow `.github/workflows/black-rapido.yml`:**
+  - Acrescentado `repository_dispatch: types: [black-rapido]`, mantendo `schedule` (`*/20 * * * *`) como reserva e `concurrency: group: black-rapido, cancel-in-progress: false`. Confirmado também `concurrency: group: rotina-painel, cancel-in-progress: false` em `rotina.yml` e `cadastro.yml`.
+
+Próximo passo: Túlio subir os arquivos alterados para o GitHub, colar `apps-script/vigia-cadastro.gs` no projeto `vigia-cadastro` do Apps Script, rodar `instalarRelogios()` uma vez e autorizar.
+
 # Atualização de sessão · Estabilização da rotina, workflow Black rápido e área Black 2026 no Painel, 27/11/2026
 
 - **Parte A · Rotina do Painel e workflow Black rápido:**

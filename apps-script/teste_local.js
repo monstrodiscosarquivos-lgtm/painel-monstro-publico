@@ -1545,6 +1545,104 @@ teste('Tela de Conferência: consolidação de produtos e rascunhos, filtros, bu
   assert.strictEqual(semLote.length, 0); // só entram discos do cadastro, todos com lote
 });
 
+function carregarVigia(estado = {}) {
+  const codigoVigia = fs.readFileSync(path.join(__dirname, 'vigia-cadastro.gs'), 'utf8');
+  const props = { GITHUB_REPO: 'dono/painel-monstro-publico', GITHUB_TOKEN: 'token-vigia-fake', PLANILHA_ID: 'plan-id', ...(estado.props || {}) };
+  const chamadas = [];
+  const log = [];
+  let triggers = [...(estado.triggers || [])];
+  const fuso = -3 * 3600 * 1000;
+  const baseData = Date;
+  const agoraRef = () => estado.agora || utc('2026-11-27T18:00:00');
+  class DataVigia extends baseData {
+    constructor(...a) { if (a.length === 0) super(agoraRef()); else super(...a); }
+    static now() { return new baseData(agoraRef()).getTime(); }
+  }
+  const pad = (n, t = 2) => String(n).padStart(t, '0');
+  const local = (d) => new baseData(d.getTime() + fuso);
+  const ctx = {
+    Date: DataVigia,
+    JSON, String, Number, Array, Object, RegExp, Math, console,
+    Logger: { log: (m) => log.push(String(m)) },
+    LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = v; }, deleteProperty: (k) => { delete props[k]; } }) },
+    UrlFetchApp: {
+      fetch: (url, opcoes) => {
+        chamadas.push({ url, opcoes });
+        return { getResponseCode: () => estado.httpCode || 204, getContentText: () => '' };
+      },
+    },
+    ScriptApp: {
+      getProjectTriggers: () => triggers.map((t) => ({ ...t, getHandlerFunction: () => t.fn })),
+      deleteTrigger: (t) => { triggers = triggers.filter((x) => x !== t && !(x.fn === t.getHandlerFunction() && x.id === t.id)); },
+      newTrigger: (fn) => ({
+        timeBased: () => ({
+          everyHours: (h) => ({ create: () => triggers.push({ id: triggers.length + 1, fn, tipo: 'hours', valor: h }) }),
+          everyMinutes: (m) => ({ create: () => triggers.push({ id: triggers.length + 1, fn, tipo: 'minutes', valor: m }) }),
+          everyDays: (d) => ({ atHour: (h) => ({ create: () => triggers.push({ id: triggers.length + 1, fn, tipo: 'days', valor: d, hora: h }) }) }),
+        }),
+      }),
+    },
+    Utilities: {
+      formatDate: (d) => {
+        const l = local(d);
+        return `${pad(l.getUTCFullYear(), 4)}-${pad(l.getUTCMonth() + 1)}-${pad(l.getUTCDate())}`;
+      },
+    },
+    getTriggers: () => triggers,
+  };
+  vm.createContext(ctx);
+  vm.runInContext(codigoVigia, ctx);
+  return { ctx, props, chamadas, log };
+}
+
+teste('vigia-cadastro (D-109): dispararRotina e dispararCadastro_ reutilizam dispatch com Script Properties', () => {
+  const v = carregarVigia();
+  assert.strictEqual(v.ctx.dispararRotina(), true);
+  assert.strictEqual(v.ctx.dispararCadastro_(), true);
+  assert.strictEqual(v.chamadas.length, 2);
+  assert.strictEqual(v.chamadas[0].url, 'https://api.github.com/repos/dono/painel-monstro-publico/dispatches');
+  assert.strictEqual(v.chamadas[0].opcoes.headers.Authorization, 'Bearer token-vigia-fake');
+  assert.strictEqual(JSON.parse(v.chamadas[0].opcoes.payload).event_type, 'rotina');
+  assert.strictEqual(JSON.parse(v.chamadas[1].opcoes.payload).event_type, 'cadastro');
+  assert.ok(v.log.every((l) => !l.includes('token-vigia-fake')));
+});
+
+teste('vigia-cadastro (D-109): dispararBlackRapido respeita janela 26/11/2026 a 01/12/2026 (Brasília)', () => {
+  const est = { agora: utc('2026-11-25T23:55:00') };
+  const v = carregarVigia(est);
+  assert.strictEqual(v.ctx.dispararBlackRapido(), false);
+  assert.strictEqual(v.chamadas.length, 0);
+
+  est.agora = utc('2026-11-26T00:05:00');
+  assert.strictEqual(v.ctx.dispararBlackRapido(), true);
+  est.agora = utc('2026-12-01T23:50:00'); // ainda 01/12 em Brasília (02:50 UTC de 02/12)
+  assert.strictEqual(v.ctx.dispararBlackRapido(), true);
+  assert.strictEqual(v.chamadas.length, 2);
+  assert.strictEqual(JSON.parse(v.chamadas[0].opcoes.payload).event_type, 'black-rapido');
+
+  est.agora = utc('2026-12-02T00:05:00');
+  assert.strictEqual(v.ctx.dispararBlackRapido(), false);
+  assert.strictEqual(v.chamadas.length, 2);
+});
+
+teste('vigia-cadastro (D-109): instalarRelogios nao duplica, preserva vigia e removerRelogiosBlack tira so Black', () => {
+  const v = carregarVigia({ triggers: [{ id: 10, fn: 'vigiarCadastro', tipo: 'minutes', valor: 5 }, { id: 11, fn: 'arquivarFotos', tipo: 'days', valor: 1 }] });
+  v.ctx.instalarRelogios();
+  v.ctx.instalarRelogios();
+  const tr1 = v.ctx.getTriggers();
+  assert.strictEqual(tr1.filter((t) => t.fn === 'dispararRotina' && t.tipo === 'hours' && t.valor === 1).length, 1);
+  assert.strictEqual(tr1.filter((t) => t.fn === 'dispararBlackRapido' && t.tipo === 'minutes' && t.valor === 15).length, 1);
+  assert.strictEqual(tr1.filter((t) => t.fn === 'vigiarCadastro').length, 1);
+  assert.strictEqual(tr1.filter((t) => t.fn === 'arquivarFotos').length, 1);
+
+  v.ctx.removerRelogiosBlack();
+  const tr2 = v.ctx.getTriggers();
+  assert.strictEqual(tr2.filter((t) => t.fn === 'dispararBlackRapido').length, 0);
+  assert.strictEqual(tr2.filter((t) => t.fn === 'dispararRotina').length, 1);
+  assert.strictEqual(tr2.filter((t) => t.fn === 'vigiarCadastro').length, 1);
+});
+
 (async () => {
   for (const [nome, fn] of testesAsync) { await fn(); n += 1; console.log('ok  ' + nome); }
   console.log(`\n${n} testes do script passaram.`);

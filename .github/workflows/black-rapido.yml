@@ -5,6 +5,8 @@ name: Black rápido
 on:
   schedule:
     - cron: '*/20 * * * *'
+  repository_dispatch:
+    types: [black-rapido]
   workflow_dispatch:
 
 permissions:

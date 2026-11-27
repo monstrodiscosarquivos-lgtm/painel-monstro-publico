@@ -336,3 +336,15 @@ eferencia.
 
 - Aba Resultados ganhou o bloco "LTV: quanto vale um cliente", que segue o período escolhido no topo: clientes novos (primeira compra no período), LTV até hoje, em 90 dias e em 12 meses (marcados como parciais quando a turma é recente), taxa de recompra, pedidos por cliente e LTV da base inteira. Receita sem frete e sem estornos; cliente contado pelo email do pedido.
 - O artifact "Painel Monstro" no Claude passa a ser republicado junto com o Painel do Apps Script sempre que `painel-monstro.html` mudar (com o ID da planilha injetado só na cópia publicada, fora do git).
+
+## D-109 · Relógios do Apps Script para Rotina do Painel e Black rápido (27/11/2026)
+
+- **Contexto:** o agendador (`schedule` / `cron`) do GitHub Actions deixou a "Rotina do Painel" (`17 * * * *`) mais de 8 horas parada e não disparou o "Black rápido" (`*/20 * * * *`) automaticamente.
+- **Solução adotada no projeto `vigia-cadastro` (`apps-script/vigia-cadastro.gs`), reaproveitando `GITHUB_REPO` e `GITHUB_TOKEN` das Propriedades do script:**
+  - Extraído o helper `dispararDispatch_(payload)` compartilhado entre `dispararCadastro_()` (`cadastro`), `dispararRotina()` (`rotina`) e `dispararBlackRapido()` (`black-rapido`).
+  - `dispararBlackRapido()` só dispara entre `26/11/2026` e `01/12/2026` no horário de Brasília (`America/Sao_Paulo`); fora dessa janela retorna `false` sem chamar o GitHub.
+  - `instalarRelogios()` cria (sem duplicar e sem mexer nos gatilhos `vigiarCadastro` e `arquivarFotos`) dois acionadores de tempo: `dispararRotina` a cada 1 hora e `dispararBlackRapido` a cada 15 minutos.
+  - `removerRelogiosBlack()` remove apenas o acionador de `dispararBlackRapido`, mantendo `dispararRotina` e o vigia do cadastro ativos.
+- **Workflow e concorrência:**
+  - `.github/workflows/black-rapido.yml` passou a aceitar `repository_dispatch: types: [black-rapido]`, mantendo `schedule: cron: '*/20 * * * *'` e `workflow_dispatch` como reserva.
+  - Concorrência confirmada sem atropelo: `black-rapido.yml` usa `group: black-rapido` (`cancel-in-progress: false`); `rotina.yml` e `cadastro.yml` compartilham `group: rotina-painel` (`cancel-in-progress: false`).

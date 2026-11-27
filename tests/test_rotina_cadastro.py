@@ -79,6 +79,21 @@ def test_vigia_le_o_token_das_propriedades_e_so_dispara_o_cadastro():
     assert 'deleteTrigger' in g and "f === 'vigiarCadastro' || f === 'arquivarFotos'" in g   # remove só os próprios agendamentos
 
 
+def test_vigia_relogios_rotina_e_black_rapido():
+    with open(VIGIA, encoding='utf-8') as arq:
+        g = arq.read()
+    assert 'function dispararRotina()' in g and "event_type: 'rotina'" in g
+    assert 'function dispararBlackRapido()' in g and "event_type: 'black-rapido'" in g
+    assert '2026-11-26' in g and '2026-12-01' in g
+    assert 'function instalarRelogios()' in g and 'everyHours(1)' in g and 'everyMinutes(15)' in g
+    assert 'function removerRelogiosBlack()' in g
+    with open(os.path.join(RAIZ, '.github', 'workflows', 'rotina.yml'), encoding='utf-8') as arq:
+        import yaml
+        wf_rot = yaml.safe_load(arq.read())
+    assert wf_rot.get('on', wf_rot.get(True))['repository_dispatch']['types'] == ['rotina']
+    assert wf_rot['concurrency'] == {'group': 'rotina-painel', 'cancel-in-progress': False}
+
+
 def test_arquivo_de_fotos_so_move_publicados_e_descartados_e_nunca_apaga():
     with open(VIGIA, encoding='utf-8') as arq:
         g = arq.read()

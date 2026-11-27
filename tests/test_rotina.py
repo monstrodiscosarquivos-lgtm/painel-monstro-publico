@@ -297,8 +297,11 @@ def test_workflow_black_rapido_estrutura():
     dados = yaml.safe_load(open(caminho, encoding='utf-8').read())
     assert dados['name'] == 'Black rápido'
     assert dados['concurrency'] == {'group': 'black-rapido', 'cancel-in-progress': False}
-    crons = [c['cron'] for c in dados.get('on', dados.get(True))['schedule']]
+    gatilhos = dados.get('on', dados.get(True))
+    crons = [c['cron'] for c in gatilhos['schedule']]
     assert '*/20 * * * *' in crons
+    assert gatilhos['repository_dispatch']['types'] == ['black-rapido']
+    assert 'workflow_dispatch' in gatilhos
     job = dados['jobs']['black-rapido']
     assert job['timeout-minutes'] <= 10
     passos = job['steps']
