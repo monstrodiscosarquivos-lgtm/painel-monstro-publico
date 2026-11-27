@@ -1,11 +1,38 @@
 """Cálculos da Black Monstro 2026 e premissas de margem."""
 from __future__ import annotations
 from dataclasses import dataclass, field
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import json
 import re
 from typing import Any
 import pandas as pd
+
+
+BLACK_2026_DIAS = (
+    ("D1", "Sexta", "2026-11-27"),
+    ("D2", "Sábado", "2026-11-28"),
+    ("D3", "Domingo", "2026-11-29"),
+    ("D4", "Segunda", "2026-11-30"),
+)
+BLACK_2025_DIAS = (
+    ("D1", "Sexta", "2025-11-28"),
+    ("D2", "Sábado", "2025-11-29"),
+    ("D3", "Domingo", "2025-11-30"),
+    ("D4", "Segunda", "2025-12-01"),
+)
+CUPONS_BLACK_2026 = (
+    "BLACK25", "BLACK30", "BLACK35",
+    "SULCO25", "SULCO30", "SULCO35",
+    "GRUPO25", "GRUPO30", "GRUPO35",
+    "ANTECIPA10", "Sem cupom",
+)
+CAMPANHAS_BLACK_META = (
+    "black26_rmk",
+    "prosp_vendas_recorrente",
+    "black26_loja_fisica_2811",
+)
+CONFIG_CUSTO_PADRAO = "Black: custo padrão %"
+CUSTO_PADRAO_DEFAULT = 50.0
 
 
 @dataclass
@@ -481,3 +508,612 @@ def calcular_black(
     }
 
     return df_black_dia, resumo
+
+
+# ----------------------------------------------------------------------------
+# Black 2026 · 5 blocos (aba "Black" da planilha e seção Black 2026 no Painel)
+# ----------------------------------------------------------------------------
+def _normalizar_cupom_black(valor: Any) -> str:
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+        return "Sem cupom"
+    texto = str(valor).strip()
+    if not texto or texto.upper() in ("NONE", "NAN", "SEM_CUPOM", "SEM CUPOM"):
+        return "Sem cupom"
+    primeiro = texto.split(",")[0].strip().upper()
+    return primeiro or "Sem cupom"
+
+
+def _preparar_pedidos_black(pedidos_df: pd.DataFrame | None) -> pd.DataFrame:
+    if pedidos_df is None or pedidos_df.empty:
+        return pd.DataFrame(columns=[
+            "numero", "data_ts", "dt", "hora", "valido_bool",
+            "subtotal_num", "desconto_num", "total_num", "receita_num", "cupom_norm",
+        ])
+    df = pedidos_df.copy()
+    df["data_ts"] = pd.to_datetime(df["data"], errors="coerce")
+    df["dt"] = df["data_ts"].dt.strftime("%Y-%m-%d").fillna(df["data"].astype(str).str.slice(0, 10))
+    df["hora"] = df["data_ts"].dt.hour.fillna(0).astype(int)
+    df["valido_bool"] = df["valido"].apply(lambda v: v is True or str(v).strip().upper() in ("TRUE", "1", "SIM"))
+    df["subtotal_num"] = df["subtotal"].apply(_parse_num) if "subtotal" in df.columns else 0.0
+    df["desconto_num"] = df["desconto"].apply(_parse_num) if "desconto" in df.columns else 0.0
+    df["total_num"] = df["total"].apply(_parse_num) if "total" in df.columns else 0.0
+    # Receita líquida de produtos (já com desconto, sem frete); fallback para total se subtotal vier zerado.
+    df["receita_num"] = [
+        max(0.0, s - d) if s > 0 else max(0.0, t)
+        for s, d, t in zip(df["subtotal_num"], df["desconto_num"], df["total_num"])
+    ]
+    df["cupom_norm"] = df["cupom"].apply(_normalizar_cupom_black) if "cupom" in df.columns else "Sem cupom"
+    df["numero_str"] = df["numero"].astype(str).str.strip()
+    return df
+
+
+def calcular_bloco_cupons(df_p: pd.DataFrame, hoje_str: str) -> dict[str, Any]:
+    """Bloco 1: Pedidos pagos por cupom (por dia D1-D4, por hora hoje e tabela resumo)."""
+    datas_26 = [d[2] for d in BLACK_2026_DIAS]
+    p26 = df_p[df_p["valido_bool"] & df_p["dt"].isin(datas_26)].copy()
+
+    def _serie(cupom: str) -> str:
+        return cupom if cupom in CUPONS_BLACK_2026 else "Outros"
+
+    if not p26.empty:
+        p26["serie"] = p26["cupom_norm"].map(_serie)
+    else:
+        p26["serie"] = pd.Series(dtype=str)
+
+    series_presentes = [c for c in CUPONS_BLACK_2026 if not p26.empty and (p26["serie"] == c).any()]
+    if not p26.empty and (p26["serie"] == "Outros").any():
+        series_presentes.append("Outros")
+    if not series_presentes:
+        series_presentes = list(CUPONS_BLACK_2026)
+
+    por_dia = []
+    for codigo, nome_dia, dt in BLACK_2026_DIAS:
+        sub = p26[p26["dt"] == dt]
+        contagem = {s: int((sub["serie"] == s).sum()) for s in series_presentes}
+        por_dia.append({
+            "dia": codigo,
+            "rotulo": f"{codigo} · {nome_dia[:3]} {dt[8:10]}/{dt[5:7]}",
+            "data": dt,
+            "total_pedidos": int(len(sub)),
+            "cupons": contagem,
+        })
+
+    # Dia de referência para o gráfico por hora: hoje se dentro da Black, senão último dia com pedidos ou D1
+    if hoje_str in datas_26:
+        dia_hora = hoje_str
+    elif not p26.empty:
+        dia_hora = str(p26["dt"].max())
+    else:
+        dia_hora = BLACK_2026_DIAS[0][2]
+
+    sub_hj = p26[p26["dt"] == dia_hora]
+    por_hora = []
+    for h in range(24):
+        sh = sub_hj[sub_hj["hora"] == h]
+        contagem = {s: int((sh["serie"] == s).sum()) for s in series_presentes}
+        por_hora.append({
+            "hora": f"{h:02d}h",
+            "hora_num": h,
+            "total_pedidos": int(len(sh)),
+            "cupons": contagem,
+        })
+
+    # Tabela por cupom
+    tabela = []
+    if not p26.empty:
+        for cupom, grp in p26.groupby("cupom_norm"):
+            n = int(len(grp))
+            rec = float(grp["receita_num"].sum())
+            desc = float(grp["desconto_num"].sum())
+            tabela.append({
+                "cupom": cupom,
+                "pedidos": n,
+                "receita": round(rec, 2),
+                "ticket_medio": round(rec / n, 2) if n else 0.0,
+                "desconto": round(desc, 2),
+            })
+        ordem_padrao = {c: i for i, c in enumerate(CUPONS_BLACK_2026)}
+        tabela.sort(key=lambda r: (ordem_padrao.get(r["cupom"], 999), -r["receita"]))
+
+    return {
+        "series": series_presentes,
+        "por_dia": por_dia,
+        "dia_hora": dia_hora,
+        "por_hora_hoje": por_hora,
+        "tabela": tabela,
+        "total_pedidos": int(len(p26)),
+        "total_receita": round(float(p26["receita_num"].sum()), 2) if not p26.empty else 0.0,
+        "total_desconto": round(float(p26["desconto_num"].sum()), 2) if not p26.empty else 0.0,
+    }
+
+
+def _var_pct(v26: float | None, v25: float | None) -> float | None:
+    if v26 is None or v25 is None or v25 <= 0:
+        return None
+    return round((v26 - v25) / v25 * 100.0, 1)
+
+
+def _metricas_dia_comp(sub: pd.DataFrame) -> dict[str, Any]:
+    n = int(len(sub))
+    rec = float(sub["receita_num"].sum()) if n else 0.0
+    desc = float(sub["desconto_num"].sum()) if n else 0.0
+    com_cupom = int((sub["cupom_norm"] != "Sem cupom").sum()) if n else 0
+    return {
+        "pedidos": n,
+        "receita": round(rec, 2),
+        "ticket_medio": round(rec / n, 2) if n else 0.0,
+        "desconto": round(desc, 2),
+        "pct_com_cupom": round(com_cupom / n * 100.0, 1) if n else 0.0,
+    }
+
+
+def calcular_bloco_2026_x_2025(df_p: pd.DataFrame, hoje_str: str) -> dict[str, Any]:
+    """Bloco 2: Comparação D1..D4 (2026 x 2025). Dias futuros de 2026 ficam em branco (None)."""
+    validos = df_p[df_p["valido_bool"]]
+    dias_out = []
+    sub_26_total_list = []
+    sub_25_total_list = []
+
+    for (cod, nome, dt26), (_, _, dt25) in zip(BLACK_2026_DIAS, BLACK_2025_DIAS):
+        s25 = validos[validos["dt"] == dt25]
+        m25 = _metricas_dia_comp(s25)
+        sub_25_total_list.append(s25)
+
+        ocorrido = dt26 <= hoje_str
+        if ocorrido:
+            s26 = validos[validos["dt"] == dt26]
+            m26 = _metricas_dia_comp(s26)
+            sub_26_total_list.append(s26)
+            variacao = {
+                "pedidos_pct": _var_pct(m26["pedidos"], m25["pedidos"]),
+                "receita_pct": _var_pct(m26["receita"], m25["receita"]),
+                "ticket_pct": _var_pct(m26["ticket_medio"], m25["ticket_medio"]),
+                "desconto_pct": _var_pct(m26["desconto"], m25["desconto"]),
+                "cupom_pp": round(m26["pct_com_cupom"] - m25["pct_com_cupom"], 1),
+            }
+        else:
+            m26 = None
+            variacao = None
+
+        dias_out.append({
+            "dia": cod,
+            "nome": nome,
+            "data_2026": dt26,
+            "data_2025": dt25,
+            "ocorrido": ocorrido,
+            "y2026": m26,
+            "y2025": m25,
+            "variacao": variacao,
+        })
+
+    df25_tot = pd.concat(sub_25_total_list, ignore_index=True) if sub_25_total_list else validos.iloc[0:0]
+    m25_tot = _metricas_dia_comp(df25_tot)
+    if sub_26_total_list:
+        df26_tot = pd.concat(sub_26_total_list, ignore_index=True)
+        m26_tot = _metricas_dia_comp(df26_tot)
+        var_tot = {
+            "pedidos_pct": _var_pct(m26_tot["pedidos"], m25_tot["pedidos"]),
+            "receita_pct": _var_pct(m26_tot["receita"], m25_tot["receita"]),
+            "ticket_pct": _var_pct(m26_tot["ticket_medio"], m25_tot["ticket_medio"]),
+            "desconto_pct": _var_pct(m26_tot["desconto"], m25_tot["desconto"]),
+            "cupom_pp": round(m26_tot["pct_com_cupom"] - m25_tot["pct_com_cupom"], 1),
+        }
+    else:
+        m26_tot = None
+        var_tot = None
+
+    return {
+        "dias": dias_out,
+        "total": {
+            "y2026": m26_tot,
+            "y2025": m25_tot,
+            "variacao": var_tot,
+        },
+    }
+
+
+def avaliar_gatilhos_meta(campanhas_meta: list[dict[str, Any]] | None, atualizado_em: str = "") -> dict[str, Any]:
+    """Bloco 3: Regras de ação imediata para campanhas da Black no Meta Ads."""
+    acoes: list[dict[str, str]] = []
+    linhas: list[dict[str, Any]] = []
+
+    for c in (campanhas_meta or []):
+        nome = str(c.get("campanha") or "").strip()
+        if not nome:
+            continue
+        gasto_hoje = _parse_num(c.get("gasto_hoje"))
+        gasto_ontem = _parse_num(c.get("gasto_ontem"))
+        gasto_3d = _parse_num(c.get("gasto_3d"))
+        compras_hoje = int(round(_parse_num(c.get("compras_hoje"))))
+        compras_ontem = int(round(_parse_num(c.get("compras_ontem"))))
+        compras_3d = int(round(_parse_num(c.get("compras_3d"))))
+        receita_hoje = _parse_num(c.get("receita_hoje"))
+        receita_3d = _parse_num(c.get("receita_3d"))
+        cliques_hoje = _parse_num(c.get("cliques_hoje"))
+        cliques_3d = _parse_num(c.get("cliques_3d"))
+        freq_hoje = _parse_num(c.get("frequencia_hoje"))
+        freq_3d = _parse_num(c.get("frequencia_3d"))
+        orcamento_dia = _parse_num(c.get("orcamento_dia"))
+
+        gasto_desde_ontem = gasto_hoje + gasto_ontem
+        compras_desde_ontem = compras_hoje + compras_ontem
+        roas_hoje = (receita_hoje / gasto_hoje) if gasto_hoje > 0 else None
+        roas_3d = (receita_3d / gasto_3d) if gasto_3d > 0 else None
+        roas = roas_hoje if gasto_hoje > 0 else roas_3d
+        cpc_hoje = (gasto_hoje / cliques_hoje) if cliques_hoje > 0 else None
+        cpc_3d = (gasto_3d / cliques_3d) if cliques_3d > 0 else None
+        cpc = cpc_hoje if cliques_hoje > 0 else cpc_3d
+        frequencia = max(freq_hoje, freq_3d)
+
+        # Gatilho 1: frequência de campanha de remarketing (nome contém rmk) acima de 4
+        if "rmk" in nome.lower() and frequencia > 4.0:
+            acoes.append({
+                "campanha": nome,
+                "regra": "frequencia_rmk",
+                "nivel": "alerta",
+                "frase": f"Tire R$50 de {nome} e passe para a campanha comum",
+            })
+
+        # Gatilho 2: gastou R$40 ou mais desde ontem sem compra
+        if gasto_desde_ontem >= 40.0 and compras_desde_ontem == 0:
+            acoes.append({
+                "campanha": nome,
+                "regra": "gasto_sem_compra",
+                "nivel": "perigo",
+                "frase": f"Reduza {nome} à metade",
+            })
+
+        # Gatilho 3: ROAS acima de 6 e gastando todo o orçamento do dia (>= 90% do orçamento)
+        if roas is not None and roas > 6.0 and orcamento_dia > 0 and gasto_hoje >= orcamento_dia * 0.90:
+            acoes.append({
+                "campanha": nome,
+                "regra": "escalar_roas",
+                "nivel": "oportunidade",
+                "frase": f"Aumente {nome} em 20% (1 vez por dia)",
+            })
+
+        # Gatilho 4: CPC acima de R$2,50
+        if cpc is not None and cpc > 2.50:
+            acoes.append({
+                "campanha": nome,
+                "regra": "cpc_alto",
+                "nivel": "alerta",
+                "frase": f"Troque o criativo de {nome}",
+            })
+
+        linhas.append({
+            "campanha": nome,
+            "gasto_hoje": round(gasto_hoje, 2),
+            "gasto_desde_ontem": round(gasto_desde_ontem, 2),
+            "gasto_3d": round(gasto_3d, 2),
+            "compras_hoje": compras_hoje,
+            "compras_3d": compras_3d,
+            "receita_hoje": round(receita_hoje, 2),
+            "receita_3d": round(receita_3d, 2),
+            "roas": round(roas, 2) if roas is not None else None,
+            "frequencia": round(frequencia, 2),
+            "cpc": round(cpc, 2) if cpc is not None else None,
+            "orcamento_dia": round(orcamento_dia, 2) if orcamento_dia > 0 else None,
+        })
+
+    if not acoes:
+        acoes.append({
+            "campanha": "",
+            "regra": "nada",
+            "nivel": "ok",
+            "frase": "Não mexa em nada",
+        })
+
+    return {
+        "atualizado_em": atualizado_em,
+        "acoes": acoes,
+        "campanhas": linhas,
+    }
+
+
+def _calcular_custo_subconjunto(
+    pedidos_sub: pd.DataFrame,
+    itens_por_pedido: dict[str, list[dict[str, Any]]],
+    custo_por_pid: dict[str, float],
+    custo_por_sku: dict[str, float],
+    custo_padrao_pct: float,
+) -> tuple[float, int, int]:
+    """Devolve (custo_total, total_itens_unidades, itens_com_custo_padrao_unidades)."""
+    fator_padrao = max(0.0, min(100.0, custo_padrao_pct)) / 100.0
+    custo_total = 0.0
+    total_itens = 0
+    itens_padrao = 0
+
+    for row in pedidos_sub.itertuples():
+        num = str(row.numero_str)
+        itens = itens_por_pedido.get(num, [])
+        if not itens:
+            custo_total += float(row.subtotal_num if row.subtotal_num > 0 else row.receita_num) * fator_padrao
+            total_itens += 1
+            itens_padrao += 1
+            continue
+        for it in itens:
+            qtd = max(1, int(round(it["qtd"])))
+            custo_unit = it["custo"]
+            if custo_unit <= 0 and it["pid"]:
+                custo_unit = custo_por_pid.get(it["pid"], 0.0)
+            if custo_unit <= 0 and it["sku"]:
+                custo_unit = custo_por_sku.get(it["sku"], 0.0)
+            total_itens += qtd
+            if custo_unit > 0:
+                custo_total += custo_unit * qtd
+            else:
+                custo_total += it["valor"] * qtd * fator_padrao
+                itens_padrao += qtd
+
+    return round(custo_total, 2), total_itens, itens_padrao
+
+
+def calcular_bloco_saude(
+    df_p: pd.DataFrame,
+    itens_df: pd.DataFrame | None,
+    produtos_df: pd.DataFrame | None,
+    hoje_str: str,
+    custo_padrao_pct: float = CUSTO_PADRAO_DEFAULT,
+) -> dict[str, Any]:
+    """Bloco 4: Saúde da Black (margem bruta x volume) comparada às 4 semanas anteriores."""
+    # Mapas de custo da variante na Nuvemshop
+    custo_por_pid: dict[str, float] = {}
+    custo_por_sku: dict[str, float] = {}
+    if produtos_df is not None and not produtos_df.empty:
+        for _, r in produtos_df.iterrows():
+            custo_v = _parse_num(r.get("custo", r.get("cost", 0)))
+            if custo_v > 0:
+                pid = str(r.get("id", "")).strip()
+                if pid.endswith(".0"):
+                    pid = pid[:-2]
+                sku = str(r.get("sku", "")).strip()
+                if pid and pid.lower() != "nan":
+                    custo_por_pid[pid] = custo_v
+                if sku and sku.lower() != "nan":
+                    custo_por_sku[sku] = custo_v
+
+    # Agrupar itens por número de pedido
+    itens_por_pedido: dict[str, list[dict[str, Any]]] = {}
+    if itens_df is not None and not itens_df.empty:
+        for _, r in itens_df.iterrows():
+            num = str(r.get("numero", "")).strip()
+            if not num:
+                continue
+            pid = str(r.get("produto_id", "")).strip()
+            if pid.endswith(".0"):
+                pid = pid[:-2]
+            sku = str(r.get("sku", "")).strip()
+            custo_it = _parse_num(r.get("custo", r.get("cost", 0)))
+            itens_por_pedido.setdefault(num, []).append({
+                "valor": _parse_num(r.get("valor", 0)),
+                "qtd": _parse_num(r.get("quantidade", 1)) or 1.0,
+                "pid": "" if pid.lower() == "nan" else pid,
+                "sku": "" if sku.lower() == "nan" else sku,
+                "custo": custo_it,
+            })
+
+    validos = df_p[df_p["valido_bool"]]
+
+    # Linha de base: média das 4 sextas, 4 sábados, 4 domingos e 4 segundas anteriores a 27/11/2026
+    base_por_dia = []
+    for codigo, nome, dt_black in BLACK_2026_DIAS:
+        dt_ref = date.fromisoformat(dt_black)
+        datas_base = [(dt_ref - timedelta(days=7 * k)).isoformat() for k in (1, 2, 3, 4)]
+        sub_b = validos[validos["dt"].isin(datas_base)]
+        rec_b = float(sub_b["receita_num"].sum())
+        ped_b = int(len(sub_b))
+        custo_b, _, _ = _calcular_custo_subconjunto(sub_b, itens_por_pedido, custo_por_pid, custo_por_sku, custo_padrao_pct)
+        marg_b = rec_b - custo_b
+        base_por_dia.append({
+            "dia": codigo,
+            "nome": nome,
+            "data_black": dt_black,
+            "datas_base": datas_base,
+            "pedidos_dia": round(ped_b / 4.0, 2),
+            "receita_dia": round(rec_b / 4.0, 2),
+            "margem_dia": round(marg_b / 4.0, 2),
+        })
+
+    # Dias ocorridos da Black 2026
+    dias_ocorridos = [b for b in base_por_dia if b["data_black"] <= hoje_str]
+    n_dias = len(dias_ocorridos)
+    datas_ocorridas = [b["data_black"] for b in dias_ocorridos]
+    sub_bk = validos[validos["dt"].isin(datas_ocorridas)] if datas_ocorridas else validos.iloc[0:0]
+
+    ped_bk = int(len(sub_bk))
+    rec_bk = float(sub_bk["receita_num"].sum()) if ped_bk else 0.0
+    desc_bk = float(sub_bk["desconto_num"].sum()) if ped_bk else 0.0
+    custo_bk, total_itens_bk, itens_padrao_bk = _calcular_custo_subconjunto(
+        sub_bk, itens_por_pedido, custo_por_pid, custo_por_sku, custo_padrao_pct
+    )
+    marg_bk = rec_bk - custo_bk
+    pct_itens_padrao = round((itens_padrao_bk / total_itens_bk * 100.0), 1) if total_itens_bk > 0 else 0.0
+
+    # Baseline proporcional aos dias ocorridos (para não comparar 1 dia com 4 dias)
+    ped_base_tot = sum(b["pedidos_dia"] for b in dias_ocorridos)
+    rec_base_tot = sum(b["receita_dia"] for b in dias_ocorridos)
+    marg_base_tot = sum(b["margem_dia"] for b in dias_ocorridos)
+
+    vol_extra_ped = ped_bk - ped_base_tot
+    vol_extra_rec = rec_bk - rec_base_tot
+    marg_extra = marg_bk - marg_base_tot
+
+    if marg_base_tot <= 0:
+        semaforo = "verde" if marg_bk > 0 else "amarelo"
+    else:
+        ratio = marg_bk / marg_base_tot
+        if ratio > 1.0:
+            semaforo = "verde"
+        elif ratio >= 0.90:
+            semaforo = "amarelo"
+        else:
+            semaforo = "vermelho"
+
+    # Frase pronta: "Para compensar o desconto, precisamos de X pedidos a mais por dia; estamos com Y."
+    if n_dias > 0:
+        ped_base_dia = ped_base_tot / n_dias
+        marg_base_dia = marg_base_tot / n_dias
+        ped_bk_dia = ped_bk / n_dias
+        marg_por_ped_bk = (marg_bk / ped_bk) if ped_bk > 0 else 0.0
+        if marg_por_ped_bk > 0:
+            ped_nec_dia = marg_base_dia / marg_por_ped_bk
+            x_extra = max(0.0, ped_nec_dia - ped_base_dia)
+        else:
+            x_extra = 0.0
+        y_extra = ped_bk_dia - ped_base_dia
+    else:
+        x_extra, y_extra = 0.0, 0.0
+
+    def _fmt_num(v: float) -> str:
+        s = f"{v:.1f}".replace(".", ",")
+        return s[:-2] if s.endswith(",0") else s
+
+    frase = f"Para compensar o desconto, precisamos de {_fmt_num(x_extra)} pedidos a mais por dia; estamos com {_fmt_num(y_extra)}."
+
+    return {
+        "custo_padrao_pct": round(custo_padrao_pct, 1),
+        "pct_itens_padrao": pct_itens_padrao,
+        "dias_ocorridos": n_dias,
+        "desconto_dado": round(desc_bk, 2),
+        "pedidos_black": ped_bk,
+        "receita_black": round(rec_bk, 2),
+        "custo_black": round(custo_bk, 2),
+        "margem_black": round(marg_bk, 2),
+        "pedidos_base": round(ped_base_tot, 2),
+        "receita_base": round(rec_base_tot, 2),
+        "margem_base": round(marg_base_tot, 2),
+        "volume_extra_pedidos": round(vol_extra_ped, 2),
+        "volume_extra_receita": round(vol_extra_rec, 2),
+        "margem_extra": round(marg_extra, 2),
+        "semaforo": semaforo,
+        "precisamos_pedidos_extra_dia": round(x_extra, 1),
+        "estamos_pedidos_extra_dia": round(y_extra, 1),
+        "frase": frase,
+        "base_por_dia": base_por_dia,
+    }
+
+
+def calcular_bloco_projecao(
+    df_p: pd.DataFrame,
+    saude: dict[str, Any],
+    agora_brt: pd.Timestamp,
+) -> dict[str, Any]:
+    """Bloco 5: Projeção dos 4 dias (96h) por ritmo atual e pela curva horária de 2025."""
+    agora_naive = agora_brt.tz_convert("America/Sao_Paulo").tz_localize(None) if agora_brt.tzinfo is not None else agora_brt
+    inicio_26 = pd.Timestamp("2026-11-27 00:00:00")
+    inicio_25 = pd.Timestamp("2025-11-28 00:00:00")
+    horas_totais = 96.0
+    horas_decorridas = max(0.0, min(horas_totais, (agora_naive - inicio_26).total_seconds() / 3600.0))
+
+    ped_26 = int(saude.get("pedidos_black", 0))
+    rec_26 = float(saude.get("receita_black", 0.0))
+    marg_26 = float(saude.get("margem_black", 0.0))
+
+    # Método (a): ritmo atual por hora
+    if horas_decorridas > 0:
+        fator_ritmo = horas_totais / horas_decorridas
+        ritmo = {
+            "pedidos": round(ped_26 * fator_ritmo, 1),
+            "receita": round(rec_26 * fator_ritmo, 2),
+            "margem": round(marg_26 * fator_ritmo, 2),
+        }
+    else:
+        ritmo = {"pedidos": 0.0, "receita": 0.0, "margem": 0.0}
+
+    # Base 2025 (4 dias: 28/11 a 01/12/2025)
+    validos = df_p[df_p["valido_bool"]]
+    datas_25 = [d[2] for d in BLACK_2025_DIAS]
+    p25 = validos[validos["dt"].isin(datas_25)].copy()
+    ped_25_total = int(len(p25))
+    rec_25_total = float(p25["receita_num"].sum()) if ped_25_total else 0.0
+
+    # Método (b): curva horária de 2025
+    curva = {"pedidos": None, "receita": None, "margem": None}
+    fracao_25_rec = 0.0
+    fracao_25_ped = 0.0
+    if ped_25_total > 0 and horas_decorridas > 0:
+        if horas_decorridas >= horas_totais:
+            fracao_25_ped = 1.0
+            fracao_25_rec = 1.0
+        else:
+            horas_rel = (p25["data_ts"] - inicio_25).dt.total_seconds() / 3600.0
+            ate_agora = p25[horas_rel <= horas_decorridas]
+            fracao_25_ped = len(ate_agora) / ped_25_total
+            fracao_25_rec = (float(ate_agora["receita_num"].sum()) / rec_25_total) if rec_25_total > 0 else 0.0
+        curva = {
+            "pedidos": round(ped_26 / fracao_25_ped, 1) if fracao_25_ped > 0 else None,
+            "receita": round(rec_26 / fracao_25_rec, 2) if fracao_25_rec > 0 else None,
+            "margem": round(marg_26 / fracao_25_rec, 2) if fracao_25_rec > 0 else None,
+        }
+
+    def _faixa(a: float | None, b: float | None) -> dict[str, float | None]:
+        vals = [v for v in (a, b) if v is not None]
+        if not vals:
+            return {"min": None, "max": None}
+        return {"min": min(vals), "max": max(vals)}
+
+    return {
+        "horas_decorridas": round(horas_decorridas, 1),
+        "horas_totais": horas_totais,
+        "fracao_2025_pedidos_pct": round(fracao_25_ped * 100.0, 1),
+        "fracao_2025_receita_pct": round(fracao_25_rec * 100.0, 1),
+        "ritmo_atual": ritmo,
+        "curva_2025": curva,
+        "faixa": {
+            "pedidos": _faixa(ritmo["pedidos"], curva["pedidos"]),
+            "receita": _faixa(ritmo["receita"], curva["receita"]),
+            "margem": _faixa(ritmo["margem"], curva["margem"]),
+        },
+        "total_2025": {
+            "pedidos": ped_25_total,
+            "receita": round(rec_25_total, 2),
+        },
+        "falta_bater_2025": {
+            "pedidos": max(0, ped_25_total - ped_26),
+            "receita": round(max(0.0, rec_25_total - rec_26), 2),
+            "bateu_pedidos": ped_25_total > 0 and ped_26 >= ped_25_total,
+            "bateu_receita": rec_25_total > 0 and rec_26 >= rec_25_total,
+        },
+    }
+
+
+def calcular_black_2026(
+    pedidos_df: pd.DataFrame | None,
+    itens_df: pd.DataFrame | None,
+    produtos_df: pd.DataFrame | None,
+    campanhas_meta: list[dict[str, Any]] | None = None,
+    config_params: dict[str, Any] | None = None,
+    agora_brt: pd.Timestamp | None = None,
+    meta_atualizado_em: str = "",
+) -> dict[str, Any]:
+    """Calcula os 5 blocos completos da área Black 2026 (agregados, sem dados de cliente)."""
+    if agora_brt is None:
+        agora_brt = pd.Timestamp.now(tz="America/Sao_Paulo")
+    agora_sp = agora_brt.tz_convert("America/Sao_Paulo") if agora_brt.tzinfo is not None else agora_brt
+    hoje_str = agora_sp.strftime("%Y-%m-%d")
+    atualizado_em = agora_sp.strftime("%Y-%m-%d %H:%M")
+
+    cfg = config_params or {}
+    custo_cfg = _parse_num(cfg.get(CONFIG_CUSTO_PADRAO, CUSTO_PADRAO_DEFAULT))
+    if custo_cfg <= 0 or custo_cfg > 100:
+        custo_cfg = CUSTO_PADRAO_DEFAULT
+
+    df_p = _preparar_pedidos_black(pedidos_df)
+    cupons = calcular_bloco_cupons(df_p, hoje_str)
+    comp_2025 = calcular_bloco_2026_x_2025(df_p, hoje_str)
+    meta_ads = avaliar_gatilhos_meta(campanhas_meta, atualizado_em=meta_atualizado_em or atualizado_em)
+    saude = calcular_bloco_saude(df_p, itens_df, produtos_df, hoje_str, custo_padrao_pct=custo_cfg)
+    projecao = calcular_bloco_projecao(df_p, saude, agora_sp)
+
+    return {
+        "atualizado_em": atualizado_em,
+        "hoje_data": hoje_str,
+        "custo_padrao_pct": round(custo_cfg, 1),
+        "pct_itens_padrao": saude["pct_itens_padrao"],
+        "cupons": cupons,
+        "comp_2025": comp_2025,
+        "meta_ads": meta_ads,
+        "saude": saude,
+        "projecao": projecao,
+    }

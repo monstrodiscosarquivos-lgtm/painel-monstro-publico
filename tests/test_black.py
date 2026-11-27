@@ -124,3 +124,176 @@ def test_calculo_black_dias_e_metas():
     mat_res = saida_black.preparar_black_resumo(resumo)
     assert len(mat_dia) == 22
     assert len(mat_res) > 18
+
+
+# ----------------------------------------------------------------------------
+# Testes da área Black 2026 (5 blocos + aba Black)
+# ----------------------------------------------------------------------------
+def test_black26_bloco1_cupons_ignora_cancelados_e_agrupa_dia_hora():
+    pedidos = pd.DataFrame([
+        {"numero": "1", "email": "a@exemplo.com", "data": "2026-11-27 10:15:00", "valido": True, "subtotal": 300.0, "desconto": 75.0, "total": 225.0, "cupom": "BLACK25"},
+        {"numero": "2", "email": "b@exemplo.com", "data": "2026-11-27 10:45:00", "valido": True, "subtotal": 500.0, "desconto": 150.0, "total": 350.0, "cupom": "SULCO30"},
+        {"numero": "3", "email": "c@exemplo.com", "data": "2026-11-27 14:20:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": None},
+        {"numero": "4", "email": "d@exemplo.com", "data": "2026-11-27 15:00:00", "valido": False, "subtotal": 999.0, "desconto": 300.0, "total": 699.0, "cupom": "BLACK35"},
+    ])
+    dados = motor_black.calcular_black_2026(
+        pedidos, None, None,
+        agora_brt=pd.Timestamp("2026-11-27 16:00:00", tz="America/Sao_Paulo"),
+    )
+    bloco1 = dados["cupons"]
+    assert bloco1["total_pedidos"] == 3
+    assert bloco1["total_receita"] == 775.0  # (300-75) + (500-150) + 200
+    assert bloco1["total_desconto"] == 225.0
+    d1 = bloco1["por_dia"][0]
+    assert d1["dia"] == "D1" and d1["total_pedidos"] == 3
+    assert d1["cupons"]["BLACK25"] == 1 and d1["cupons"]["SULCO30"] == 1 and d1["cupons"]["Sem cupom"] == 1
+    hora10 = bloco1["por_hora_hoje"][10]
+    assert hora10["hora"] == "10h" and hora10["total_pedidos"] == 2
+    tab = {r["cupom"]: r for r in bloco1["tabela"]}
+    assert "BLACK35" not in tab  # cancelado ignorado
+    assert tab["BLACK25"]["receita"] == 225.0 and tab["BLACK25"]["desconto"] == 75.0
+
+
+def test_black26_bloco2_comparacao_2026_x_2025_dias_futuros_em_branco():
+    pedidos = pd.DataFrame([
+        # 2025: D1 (28/11) 2 pedidos, D2 (29/11) 1 pedido, D4 (01/12) 1 pedido
+        {"numero": "2501", "email": "x@exemplo.com", "data": "2025-11-28 09:00:00", "valido": True, "subtotal": 400.0, "desconto": 100.0, "total": 300.0, "cupom": "BLACKMONSTRO"},
+        {"numero": "2502", "email": "y@exemplo.com", "data": "2025-11-28 18:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": ""},
+        {"numero": "2503", "email": "z@exemplo.com", "data": "2025-11-29 12:00:00", "valido": True, "subtotal": 300.0, "desconto": 75.0, "total": 225.0, "cupom": "BLACKMONSTRO"},
+        {"numero": "2504", "email": "w@exemplo.com", "data": "2025-12-01 20:00:00", "valido": True, "subtotal": 300.0, "desconto": 75.0, "total": 225.0, "cupom": "BLACKMONSTRO"},
+        # 2026: D1 (27/11) 3 pedidos
+        {"numero": "2601", "email": "a@exemplo.com", "data": "2026-11-27 10:00:00", "valido": True, "subtotal": 400.0, "desconto": 100.0, "total": 300.0, "cupom": "BLACK25"},
+        {"numero": "2602", "email": "b@exemplo.com", "data": "2026-11-27 11:00:00", "valido": True, "subtotal": 400.0, "desconto": 100.0, "total": 300.0, "cupom": "BLACK25"},
+        {"numero": "2603", "email": "c@exemplo.com", "data": "2026-11-27 12:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": None},
+    ])
+    dados = motor_black.calcular_black_2026(
+        pedidos, None, None,
+        agora_brt=pd.Timestamp("2026-11-27 15:00:00", tz="America/Sao_Paulo"),
+    )
+    comp = dados["comp_2025"]
+    d1, d2, d3, d4 = comp["dias"]
+    assert d1["ocorrido"] is True
+    assert d1["y2026"]["pedidos"] == 3 and d1["y2025"]["pedidos"] == 2
+    assert d1["variacao"]["pedidos_pct"] == 50.0
+    assert d1["y2025"]["pct_com_cupom"] == 50.0
+    assert d1["y2026"]["pct_com_cupom"] == 66.7
+    # D2..D4 ainda não ocorreram: 2026 e variação devem ficar None (em branco)
+    for d in (d2, d3, d4):
+        assert d["ocorrido"] is False
+        assert d["y2026"] is None and d["variacao"] is None
+    assert d2["y2025"]["pedidos"] == 1 and d4["y2025"]["pedidos"] == 1
+
+
+def test_black26_bloco3_meta_ads_todos_os_gatilhos():
+    campanhas = [
+        {
+            "campanha": "black26_rmk",
+            "gasto_hoje": 30.0, "gasto_ontem": 20.0, "gasto_3d": 80.0,
+            "compras_hoje": 0, "compras_ontem": 0, "compras_3d": 0,
+            "receita_hoje": 0.0, "receita_3d": 0.0,
+            "cliques_hoje": 10, "cliques_3d": 25,
+            "frequencia_hoje": 2.1, "frequencia_3d": 4.5,
+            "orcamento_dia": 50.0,
+        },
+        {
+            "campanha": "prosp_vendas_recorrente",
+            "gasto_hoje": 95.0, "gasto_ontem": 90.0, "gasto_3d": 270.0,
+            "compras_hoje": 4, "compras_ontem": 3, "compras_3d": 10,
+            "receita_hoje": 900.0, "receita_3d": 2200.0,
+            "cliques_hoje": 80, "cliques_3d": 200,
+            "frequencia_hoje": 1.3, "frequencia_3d": 1.8,
+            "orcamento_dia": 100.0,
+        },
+    ]
+    res = motor_black.avaliar_gatilhos_meta(campanhas, atualizado_em="2026-11-27 14:00")
+    frases = [a["frase"] for a in res["acoes"]]
+    assert "Tire R$50 de black26_rmk e passe para a campanha comum" in frases
+    assert "Reduza black26_rmk à metade" in frases
+    assert "Troque o criativo de black26_rmk" in frases  # CPC hoje = 30/10 = 3.00 > 2.50
+    assert "Aumente prosp_vendas_recorrente em 20% (1 vez por dia)" in frases  # ROAS 9.47 > 6 e 95 >= 90% de 100
+
+    # Caso nada dispare
+    res_ok = motor_black.avaliar_gatilhos_meta([{
+        "campanha": "black26_loja_fisica_2811",
+        "gasto_hoje": 20.0, "gasto_ontem": 10.0, "gasto_3d": 30.0,
+        "compras_hoje": 1, "compras_ontem": 1, "compras_3d": 2,
+        "receita_hoje": 100.0, "receita_3d": 150.0,
+        "cliques_hoje": 20, "cliques_3d": 30,
+        "frequencia_hoje": 1.2, "frequencia_3d": 1.5,
+        "orcamento_dia": 50.0,
+    }])
+    assert [a["frase"] for a in res_ok["acoes"]] == ["Não mexa em nada"]
+
+
+def test_black26_bloco4_saude_custo_variante_vs_padrao_e_semaforo():
+    # 4 sextas anteriores a 27/11/2026: 30/10, 06/11, 13/11, 20/11
+    # Em cada sexta base: 2 pedidos de R$200 (sem desconto), custo R$100 cada -> margem base = R$200/sexta
+    pedidos_base = []
+    itens_base = []
+    for idx, dt in enumerate(["2026-10-30", "2026-11-06", "2026-11-13", "2026-11-20"]):
+        for k in range(2):
+            num = f"B{idx}{k}"
+            pedidos_base.append({"numero": num, "email": "base@exemplo.com", "data": f"{dt} 12:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": ""})
+            itens_base.append({"numero": num, "valor": 200.0, "quantidade": 1, "produto_id": "101", "sku": "SKU1"})
+
+    # Na Black D1 (27/11): 5 pedidos de R$200 com 25% desconto (receita líq R$150 cada = R$750)
+    # 3 itens usam produto 101 (tem cost = 80 na Nuvemshop), 2 itens usam produto 202 (sem cost -> usa padrão 50% de 200 = 100)
+    # Custo total Black = 3*80 + 2*100 = 440 -> Margem Black = 750 - 440 = 310 (> 200 base -> verde!)
+    pedidos_bk = []
+    itens_bk = []
+    for k in range(5):
+        num = f"K{k}"
+        pid = "101" if k < 3 else "202"
+        pedidos_bk.append({"numero": num, "email": "bk@exemplo.com", "data": "2026-11-27 11:00:00", "valido": True, "subtotal": 200.0, "desconto": 50.0, "total": 150.0, "cupom": "BLACK25"})
+        itens_bk.append({"numero": num, "valor": 200.0, "quantidade": 1, "produto_id": pid, "sku": ""})
+
+    produtos = pd.DataFrame([
+        {"id": "101", "sku": "SKU1", "custo": 80.0},
+        {"id": "202", "sku": "SKU2", "custo": float("nan")},
+    ])
+    dados = motor_black.calcular_black_2026(
+        pd.DataFrame(pedidos_base + pedidos_bk),
+        pd.DataFrame(itens_base + itens_bk),
+        produtos,
+        config_params={"Black: custo padrão %": "50"},
+        agora_brt=pd.Timestamp("2026-11-27 12:00:00", tz="America/Sao_Paulo"),
+    )
+    saude = dados["saude"]
+    assert saude["pct_itens_padrao"] == 40.0  # 2 de 5 itens sem custo
+    assert saude["custo_black"] == 440.0
+    assert saude["margem_black"] == 310.0
+    assert saude["margem_base"] == 240.0  # 2 pedidos/dia * (200 - 80) = 240
+    assert saude["semaforo"] == "verde"
+    assert saude["frase"].startswith("Para compensar o desconto, precisamos de ")
+
+
+def test_black26_bloco5_projecao_ritmo_e_curva_2025_e_privacidade_aba():
+    pedidos = pd.DataFrame([
+        # 2025: 2 pedidos nas primeiras 12h (50% da receita), 2 pedidos depois (50%) -> total 4 pedidos, R$1000
+        {"numero": "251", "email": "cli1@exemplo.com", "data": "2025-11-28 08:00:00", "valido": True, "subtotal": 250.0, "desconto": 0.0, "total": 250.0, "cupom": "BLACKMONSTRO"},
+        {"numero": "252", "email": "cli2@exemplo.com", "data": "2025-11-28 11:00:00", "valido": True, "subtotal": 250.0, "desconto": 0.0, "total": 250.0, "cupom": "BLACKMONSTRO"},
+        {"numero": "253", "email": "cli3@exemplo.com", "data": "2025-11-29 14:00:00", "valido": True, "subtotal": 250.0, "desconto": 0.0, "total": 250.0, "cupom": "BLACKMONSTRO"},
+        {"numero": "254", "email": "cli4@exemplo.com", "data": "2025-12-01 18:00:00", "valido": True, "subtotal": 250.0, "desconto": 0.0, "total": 250.0, "cupom": "BLACKMONSTRO"},
+        # 2026: 3 pedidos nas primeiras 12h = R$600
+        {"numero": "261", "email": "sigilo@exemplo.com", "data": "2026-11-27 09:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": "BLACK25"},
+        {"numero": "262", "email": "sigilo@exemplo.com", "data": "2026-11-27 10:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": "BLACK25"},
+        {"numero": "263", "email": "sigilo@exemplo.com", "data": "2026-11-27 11:30:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": "BLACK25"},
+    ])
+    dados = motor_black.calcular_black_2026(
+        pedidos, None, None,
+        agora_brt=pd.Timestamp("2026-11-27 12:00:00", tz="America/Sao_Paulo"),
+    )
+    proj = dados["projecao"]
+    assert proj["horas_decorridas"] == 12.0
+    # Ritmo: 600 / 12 * 96 = 4800; Curva 2025: 600 / 0.50 = 1200
+    assert proj["ritmo_atual"]["receita"] == 4800.0
+    assert proj["curva_2025"]["receita"] == 1200.0
+    assert proj["faixa"]["receita"] == {"min": 1200.0, "max": 4800.0}
+    assert proj["falta_bater_2025"]["receita"] == 400.0
+    assert proj["falta_bater_2025"]["pedidos"] == 1
+
+    # Aba Black nunca contém email ou dado pessoal
+    df_aba = saida_black.preparar_aba_black(dados)
+    texto_aba = df_aba.to_string()
+    assert "sigilo@exemplo.com" not in texto_aba
+    assert "cli1@exemplo.com" not in texto_aba

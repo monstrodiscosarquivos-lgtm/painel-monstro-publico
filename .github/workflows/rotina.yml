@@ -28,7 +28,7 @@ concurrency:
 jobs:
   rotina:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Baixar o código
         uses: actions/checkout@v6
@@ -59,6 +59,7 @@ jobs:
         run: python -m painel_monstro.cache_seguro restaurar
 
       - name: Rodar a rotina (coletor, motor, planilha)
+        timeout-minutes: 38
         env:
           NUVEMSHOP_STORE_ID: ${{ secrets.NUVEMSHOP_STORE_ID }}
           NUVEMSHOP_TOKEN: ${{ secrets.NUVEMSHOP_TOKEN }}

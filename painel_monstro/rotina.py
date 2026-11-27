@@ -53,31 +53,47 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
     config = config or carregar()
     conferir_configuracao(config)
     inicio = time.monotonic()
+    tempos: dict[str, float] = {}
+
+    def _medir(chave: str, t0: float) -> float:
+        dur = round(time.monotonic() - t0, 1)
+        tempos[chave] = round(tempos.get(chave, 0.0) + dur, 1)
+        return dur
 
     # 1. Coletor
+    t_etapa = time.monotonic()
+    api = api or nuvemshop_api.NuvemshopAPI(config)
+    req_antes = getattr(api, 'requisicoes', 0)
+    esp_antes = getattr(api, 'esperas_limite_s', 0.0)
     tabelas, coleta = nuvemshop_api.coletar(config, pasta=pasta_api, completo=completo, api=api)
-    print('[1/5] Coletor (Nuvemshop, só leitura)')
+    dur_col = _medir('coletor_nuvemshop', t_etapa)
+    req_col = getattr(api, 'requisicoes', 0) - req_antes
+    esp_col = round(getattr(api, 'esperas_limite_s', 0.0) - esp_antes, 1)
+    print(f'[1/5] Coletor (Nuvemshop, só leitura) · {dur_col} s ({req_col} req, {esp_col} s espera limite)')
     for recurso, r in coleta.items():
-        print(f'      {recurso}: {r["modo"]}, {r["novos"]} novos, {r["atualizados"]} atualizados, {r["total"]} no total')
+        print(f'      {recurso}: {r["modo"]}, {r["novos"]} novos, {r["atualizados"]} atualizados, {r["total"]} no total ({r.get("segundos", 0.0)} s)')
 
-    # 2. Motor
+    # 2. Motor + custos automáticos
+    t_etapa = time.monotonic()
     planilha = planilha or planilha_google.PlanilhaGoogle.conectar(config)
     custos = planilha.ler_custos()
-    api = api or nuvemshop_api.NuvemshopAPI(config)
     custos, paginas_custos = custos_automaticos.preparar(config, custos, tabelas, pasta_api, api=api)
+    _medir('planilha_e_custos', t_etapa)
     for _, dados_custos in paginas_custos:
         for fonte, linhas_custos in dados_custos.groupby('fonte'):
             pendentes = int((linhas_custos['estado'] != 'ok').sum())
             print(f'      Custos {fonte}: {len(linhas_custos) - pendentes} valores disponíveis, {pendentes} pendentes')
+    t_etapa = time.monotonic()
     mes = pd.Timestamp.now(tz=nuvemshop_api.FUSO_LOJA).strftime('%Y-%m')  # o servidor do GitHub usa UTC
     regua_planilha.garantir_aba_regua(planilha)  # janelas e ofertas editáveis (D-017); o motor lê dela
     params_regua = regua_planilha.ler_regua(planilha)
     classificacao, referencia = regua.rodar(tabelas, mes, params_regua)
     etapas = regua.resumo(classificacao, params_regua)
     calculados = indicadores.calcular(tabelas, custos, referencia=referencia)
+    dur_motor = _medir('motor', t_etapa)
     ok = int((calculados.resumo['estado'] == indicadores.OK).sum())
     print(f'[2/5] Motor: régua de hoje (referência {referencia:%d/%m/%Y}) e {len(calculados.resumo)} indicadores '
-          f'({ok} calculados, {len(calculados.resumo) - ok} aguardando dados); aba custos com {len(custos)} mês(es)')
+          f'({ok} calculados, {len(calculados.resumo) - ok} aguardando dados); aba custos com {len(custos)} mês(es) · {dur_motor} s')
     for e in etapas.itertuples():
         print(f'      {e.etapa}: {e.recebem} recebem, {e.controle} no controle')
 
@@ -92,22 +108,34 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
                   planilha.garantir_cabecalho(planilha_google.ABA_ALERTAS, planilha_google.ALERTAS_COLUNAS, planilha_google.ALERTAS_NOTAS)]
     plano_fila = None
     if carrinhos:
-        api = api or nuvemshop_api.NuvemshopAPI(config)
+        t_etapa = time.monotonic()
         plano_fila = carrinhos_planilha.planejar_fila(planilha, api, tabelas, fila_unica=True)
+        print(f'      Plano da fila de carrinhos: {_medir("carrinhos_plano", t_etapa)} s')
     fila_final = {str(i): e for i, e in enumerate(plano_fila.finais)} if plano_fila is not None else None
+    t_etapa = time.monotonic()
     pagina_dos_resumos = resumos_painel.montar_resumos(planilha, tabelas, calculados, classificacao, params_regua=params_regua, fila=fila_final)
     pagina_dos_resumos.extend(paginas_custos)
     pagina_dos_resumos.append(('resumo_email', resumos_painel.montar_resumo_email(
         dict(pagina_dos_resumos), calculados.resumo, plano_fila.resumo_semana if plano_fila is not None else [])))
+    _medir('resumos_painel', t_etapa)
+    t_etapa = time.monotonic()
     resultado_brevo, paginas_brevo = passo_brevo(config, planilha, tabelas, classificacao, params_regua)
     pagina_dos_resumos.extend(paginas_brevo)
+    print(f'      Brevo: {_medir("brevo", t_etapa)} s')
+    t_etapa = time.monotonic()
     pagina_dos_resumos.extend(passo_meta(config, planilha, tabelas))
+    _medir('meta_publicos', t_etapa)
     # Raspadinha (D-062): uso dos cupons e resultado contra o controle; sem campanha não grava nada
+    t_etapa = time.monotonic()
     pagina_dos_resumos.extend(raspadinha.passo_rotina(planilha, tabelas, pd.Timestamp.now(tz=nuvemshop_api.FUSO_LOJA).date()))
     # Newsletter semanal: quarta, a partir das 17h (Brasília); fora disso não grava nada
     pagina_dos_resumos.extend(newsletter.passo_rotina(lambda nome: _ler_aba(planilha, nome), tabelas.produtos, hoje_brt))
+    _medir('raspadinha_newsletter', t_etapa)
+    t_etapa = time.monotonic()
     paginas_anuncios = passo_anuncios(config, planilha, tabelas, pasta_api, completo=anuncios_historico)
+    print(f'      Meta Ads (anúncios): {_medir("meta_anuncios", t_etapa)} s')
     # GA4 (D-076): origem das visitas e vendas, e links das bandas. Falha aqui nunca derruba a rotina.
+    t_etapa = time.monotonic()
     try:
         try:
             prop_ga4 = str(regua_planilha._config_por_nome(planilha).get(ga4.CONFIG_PROPRIEDADE, '')).strip()
@@ -142,9 +170,11 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
         print(f'      K7: {len(df_k7)} linhas no resumo da fita; vendas sem origem no GA4: {sem.iloc[0] if len(sem) else 0}')
     except Exception as erro:  # noqa: BLE001
         print(f'      K7: indisponível ({_resumo_do_erro(erro)}); a aba k7_resumo fica como estava.')
+    _medir('ga4_k7', t_etapa)
     print('[3/5] Tudo calculado; gravando na Planilha Google')
 
     # 4. Grava, aba por aba. Falha numa aba mantém o conteúdo antigo dela; a rodada seguinte recalcula e tenta de novo.
+    t_grav = time.monotonic()
     gravacoes: list = list(cabecalhos)
     erros: list[str] = []
 
@@ -178,10 +208,13 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
             gravacoes.append(com_novas_tentativas(lambda n=nome, d=df: planilha.substituir(n, d), dormir))
         except Exception:
             print('      Anúncios: gravação indisponível; a próxima rodada tenta novamente.')
+    _medir('gravacao_planilha', t_grav)
+    t_etapa = time.monotonic()
     try:
         cad = cadastro.passo_rotina(config, planilha, tabelas, pasta_api, api=api)
-        print(f'      Cadastro: {cad["rascunhos"]} rascunhos, {cad["criados"]} criados, {cad["erros"]} pendências')
+        print(f'      Cadastro: {cad["rascunhos"]} rascunhos, {cad["criados"]} criados, {cad["erros"]} pendências ({_medir("cadastro", t_etapa)} s)')
     except Exception:
+        _medir('cadastro', t_etapa)
         print('      Cadastro: indisponível; conferir a planilha. Demais etapas preservadas.')
     # Lembrete da raspadinha (D-071): quem ganhou cupom e não usou entra na lista do Brevo 2 dias antes de vencer
     try:
@@ -194,15 +227,19 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
     except Exception as erro:  # noqa: BLE001 - nunca derruba a rotina
         print(f'      Raspadinha · lembrete no Brevo: indisponível ({_resumo_do_erro(erro)}); a próxima rodada tenta de novo.')
 
-    # Black Monstro 2026: cálculo das abas black_dia e black_resumo
+    # Black Monstro 2026: cálculo das abas black_dia, black_resumo e Black (5 blocos)
+    t_etapa = time.monotonic()
     try:
+        saida_black.garantir_config_black(planilha)
         raw_m = _ler_aba(planilha, 'margem_premissas')
         premissas_black = motor_black.carregar_premissas_margem(raw_m)
         raw_cfg = _ler_aba(planilha, 'Configuração')
-        cfg_black = {r[0].strip(): r[1].strip() for r in raw_cfg if len(r) >= 2 and r[0].strip()} if raw_cfg else {}
+        cfg_black = {str(r[0]).strip(): str(r[1]).strip() for r in raw_cfg if len(r) >= 2 and str(r[0]).strip()} if raw_cfg else {}
 
-        raw_ads = _ler_aba(planilha, 'anuncios_campanha_dia')
-        df_ads_black = pd.DataFrame(raw_ads[1:], columns=raw_ads[0]) if raw_ads and len(raw_ads) > 1 else None
+        df_ads_black = next((d for n, d in paginas_anuncios if n == 'anuncios_campanha_dia'), None)
+        if df_ads_black is None:
+            raw_ads = _ler_aba(planilha, 'anuncios_campanha_dia')
+            df_ads_black = pd.DataFrame(raw_ads[1:], columns=raw_ads[0]) if raw_ads and len(raw_ads) > 1 else None
 
         raw_rasc = _ler_aba(planilha, 'cadastro_rascunhos')
         df_rasc_black = pd.DataFrame(raw_rasc[1:], columns=raw_rasc[0]) if raw_rasc and len(raw_rasc) > 1 else None
@@ -220,10 +257,23 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
         mat_res_bk = saida_black.preparar_black_resumo(resumo_bk)
         df_res_bk = pd.DataFrame(mat_res_bk[1:], columns=mat_res_bk[0])
 
+        campanhas_meta_bk = saida_black.extrair_meta_black_de_df(df_ads_black, hoje_brt.strftime('%Y-%m-%d'))
+        dados_black_2026 = motor_black.calcular_black_2026(
+            pedidos_df=tabelas.pedidos,
+            itens_df=tabelas.itens,
+            produtos_df=tabelas.produtos,
+            campanhas_meta=campanhas_meta_bk,
+            config_params=cfg_black,
+            agora_brt=hoje_brt,
+        )
+        df_aba_black = saida_black.preparar_aba_black(dados_black_2026)
+
         planilha.substituir('black_dia', df_dia_bk)
         planilha.substituir('black_resumo', df_res_bk)
-        print('      Black: abas black_dia e black_resumo atualizadas.')
+        planilha.substituir(saida_black.ABA_BLACK, df_aba_black)
+        print(f'      Black: abas black_dia, black_resumo e {saida_black.ABA_BLACK} atualizadas ({_medir("black", t_etapa)} s).')
     except Exception as erro_bk:  # noqa: BLE001
+        _medir('black', t_etapa)
         print(f'      Black: indisponível ({_resumo_do_erro(erro_bk)}); mantidas abas anteriores.')
     # Black Monstro 2026 · Lado A no Brevo (adiciona quem usou ANTECIPA10)
     try:
@@ -236,6 +286,8 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
     print('      Brevo: etapa processada; conferir resultado na planilha.')
     for g in gravacoes[antes:]:
         print(f'      {g.aba}: {g.linhas} linhas')
+    resumo_tempos = ' | '.join(f'{k}: {v} s' for k, v in tempos.items())
+    print(f'[Tempos] {resumo_tempos}')
 
     if erros:
         raise ErroRotina('Não consegui gravar: ' + ', '.join(erros) + '. O conteúdo antigo dessas abas foi mantido e a próxima rodada tenta de novo.')
@@ -250,7 +302,7 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
 
     resumo = {'fila': fila, 'coleta': coleta, 'etapas': etapas.to_dict('records'), 'gravacoes': gravacoes,
               'indicadores_calculados': ok, 'indicadores_total': len(calculados.resumo),
-              'segundos': round(time.monotonic() - inicio, 1)}
+              'segundos': round(time.monotonic() - inicio, 1), 'tempos': tempos}
     print(f'Pronto em {resumo["segundos"]} s.')
     escrever_resumo_do_github(resumo)
     return resumo
@@ -407,8 +459,85 @@ def escrever_resumo_do_github(resumo: dict) -> None:
                        f'{f["novas_linhas"]} linhas novas.']
     linhas += ['', f'Indicadores calculados: {resumo["indicadores_calculados"]} de {resumo["indicadores_total"]}. '
                    f'Duração: {resumo["segundos"]} s.']
+    if resumo.get('tempos'):
+        linhas += ['', '| Etapa | Tempo (s) |', '|---|---:|']
+        linhas += [f'| {k} | {v} |' for k, v in resumo['tempos'].items()]
     with open(caminho, 'a', encoding='utf-8') as arq:
         arq.write('\n'.join(linhas) + '\n')
+
+
+BLACK_RAPIDO_INICIO = '2026-11-27'
+BLACK_RAPIDO_FIM = '2026-12-01'
+
+
+def rodar_black_rapido(
+    config: Config | None = None,
+    pasta_api: str = nuvemshop_api.PASTA_PADRAO,
+    api: nuvemshop_api.NuvemshopAPI | None = None,
+    planilha: planilha_google.PlanilhaGoogle | None = None,
+    agora_brt: pd.Timestamp | None = None,
+    sessao_meta=None,
+    forcar_data: bool = False,
+) -> dict:
+    """Workflow leve da Black (ativo só entre 2026-11-27 e 2026-12-01): baixa pedidos das últimas 48h,
+    insights do Meta de hoje/ontem (e 3d) e grava a aba `Black` da planilha."""
+    agora = agora_brt if agora_brt is not None else pd.Timestamp.now(tz=nuvemshop_api.FUSO_LOJA)
+    agora_sp = agora.tz_convert(nuvemshop_api.FUSO_LOJA) if agora.tzinfo is not None else agora.tz_localize(nuvemshop_api.FUSO_LOJA)
+    hoje_str = agora_sp.strftime('%Y-%m-%d')
+    if not forcar_data and not (BLACK_RAPIDO_INICIO <= hoje_str <= BLACK_RAPIDO_FIM):
+        print(f'Black rápido: fora da janela ({BLACK_RAPIDO_INICIO} a {BLACK_RAPIDO_FIM}); hoje é {hoje_str}. Saindo sem alterações.')
+        return {'pulado': True, 'motivo': 'fora_da_janela', 'hoje': hoje_str}
+
+    config = config or carregar()
+    conferir_configuracao(config)
+    inicio = time.monotonic()
+    tempos: dict[str, float] = {}
+
+    t0 = time.monotonic()
+    api = api or nuvemshop_api.NuvemshopAPI(config)
+    armazem = nuvemshop_api.Armazem(pasta_api)
+    tabelas, coleta_ped = nuvemshop_api.baixar_pedidos_recentes(api, armazem, horas=48)
+    tempos['pedidos_48h'] = round(time.monotonic() - t0, 1)
+    print(f'[1/3] Nuvemshop (pedidos 48h): {coleta_ped["baixados_48h"]} baixados, {coleta_ped["novos"]} novos, '
+          f'{coleta_ped["total"]} no cache ({tempos["pedidos_48h"]} s)')
+
+    t0 = time.monotonic()
+    campanhas_meta: list[dict] = []
+    meta_ok = False
+    try:
+        campanhas_meta = saida_black.coletar_meta_black_rapido(config, agora_sp.date(), sessao=sessao_meta)
+        meta_ok = True
+    except Exception as erro_m:  # noqa: BLE001 - falha no Meta não impede atualizar vendas da loja
+        print(f'[2/3] Meta Ads: indisponível ({_resumo_do_erro(erro_m)}); seguindo só com pedidos.')
+    tempos['meta_ads'] = round(time.monotonic() - t0, 1)
+    if meta_ok:
+        print(f'[2/3] Meta Ads: {len(campanhas_meta)} campanha(s) da Black coletadas ({tempos["meta_ads"]} s)')
+
+    t0 = time.monotonic()
+    planilha = planilha or planilha_google.PlanilhaGoogle.conectar(config)
+    saida_black.garantir_config_black(planilha)
+    raw_cfg = _ler_aba(planilha, 'Configuração')
+    cfg_black = {str(r[0]).strip(): str(r[1]).strip() for r in raw_cfg if len(r) >= 2 and str(r[0]).strip()} if raw_cfg else {}
+    if not campanhas_meta:
+        raw_ads = _ler_aba(planilha, 'anuncios_campanha_dia')
+        df_ads_bk = pd.DataFrame(raw_ads[1:], columns=raw_ads[0]) if raw_ads and len(raw_ads) > 1 else None
+        campanhas_meta = saida_black.extrair_meta_black_de_df(df_ads_bk, hoje_str)
+
+    dados = motor_black.calcular_black_2026(
+        pedidos_df=tabelas.pedidos,
+        itens_df=tabelas.itens,
+        produtos_df=tabelas.produtos,
+        campanhas_meta=campanhas_meta,
+        config_params=cfg_black,
+        agora_brt=agora_sp,
+    )
+    df_aba_black = saida_black.preparar_aba_black(dados)
+    planilha.substituir(saida_black.ABA_BLACK, df_aba_black)
+    tempos['planilha_black'] = round(time.monotonic() - t0, 1)
+    duracao = round(time.monotonic() - inicio, 1)
+    print(f'[3/3] Aba {saida_black.ABA_BLACK} gravada ({len(df_aba_black)} linhas) · total {duracao} s.')
+    return {'pulado': False, 'hoje': hoje_str, 'coleta_pedidos': coleta_ped, 'campanhas_meta': len(campanhas_meta),
+            'segundos': duracao, 'tempos': tempos}
 
 
 def rodar_cadastro(config: Config | None = None, pasta_api: str = nuvemshop_api.PASTA_PADRAO,
@@ -439,9 +568,13 @@ def main() -> int:
     analisador.add_argument('--completo', action='store_true', help='baixa tudo de novo da Nuvemshop')
     analisador.add_argument('--anuncios-historico', action='store_true', help='rebaixa histórico de anúncios desde julho/2025')
     analisador.add_argument('--so-cadastro', action='store_true', help='rodada curta: só cria os discos aprovados (D-068)')
+    analisador.add_argument('--black-rapido', action='store_true', help='rodada leve da Black: pedidos 48h, Meta Ads e aba Black')
+    analisador.add_argument('--forcar-data', action='store_true', help='ignora a trava de datas do --black-rapido (para teste)')
     args = analisador.parse_args()
     try:
-        if args.so_cadastro:
+        if args.black_rapido:
+            rodar_black_rapido(forcar_data=args.forcar_data)
+        elif args.so_cadastro:
             rodar_cadastro()
         else:
             rodar(completo=args.completo, anuncios_historico=args.anuncios_historico)

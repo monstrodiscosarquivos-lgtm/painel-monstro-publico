@@ -1,3 +1,22 @@
+# Atualização de sessão · Estabilização da rotina, workflow Black rápido e área Black 2026 no Painel, 27/11/2026
+
+- **Parte A · Rotina do Painel e workflow Black rápido:**
+  - Instrumentação de cronômetros por etapa em `painel_monstro/rotina.py` (`coletor_nuvemshop`, `planilha_e_custos`, `motor`, `carrinhos_plano`, `resumos_painel`, `brevo`, `meta_publicos`, `raspadinha_newsletter`, `meta_anuncios`, `ga4_k7`, `gravacao_planilha`, `cadastro`, `black`), impressos no log e no `$GITHUB_STEP_SUMMARY` (sem dados de cliente), além de contagem de requisições e esperas de rate limit na Nuvemshop.
+  - Salvamento incremental no coletor Nuvemshop (`painel_monstro/coletor/nuvemshop_api.py`, checkpoint a cada 400 registros) e proteção contra loop infinito na paginação (`max_paginas` e controle de URLs visitadas), com teto seguro nas esperas de rate limit.
+  - `.github/workflows/rotina.yml`: `timeout-minutes` do job elevado para `45` e `timeout-minutes: 38` no passo da rotina, garantindo 7 minutos para os passos `if: always()` criptografarem e salvarem o cache mesmo em caso de timeout.
+  - Novo workflow leve `.github/workflows/black-rapido.yml` ("Black rápido", cron `*/20 * * * *`, grupo de concorrência próprio `black-rapido`, ativo somente entre `2026-11-27` e `2026-12-01`): baixa apenas pedidos das últimas 48h e insights do Meta Ads (hoje/ontem/3d) e grava a aba `Black`.
+
+- **Parte B · Área "Black 2026" na aba `Black` e no Painel Web:**
+  - Motor em `painel_monstro/motor/black.py` e saída em `painel_monstro/saidas/black.py` gravando a aba `Black` (somente agregados, sem dados de cliente) e garantindo a configuração `Black: custo padrão %` (valor inicial `50`) na aba `Configuração`.
+  - 5 blocos implementados no motor e na seção "Black 2026" de `apps-script/painel-web/painel-monstro.html` (`Painel.html` regerado via `montar_painel_web.py`):
+    1. Pedidos pagos por cupom (barras empilhadas por dia D1 a D4 e por hora no dia de hoje + tabela com pedidos, receita, ticket médio e desconto).
+    2. 2026 x 2025 por dia da Black (D1 sexta a D4 segunda e total, com variação em % e dias futuros em branco).
+    3. Meta Ads: o que fazer agora (gatilhos automáticos para `black26_rmk`, `prosp_vendas_recorrente`, `black26_loja_fisica_2811` + tabela de métricas e hora da atualização).
+    4. Saúde da Black (margem bruta x linha de base das 4 semanas anteriores, custo real da variante ou padrão configurável com marcação de %, semáforo verde/amarelo/vermelho e frase pronta).
+    5. Projeção dos 4 dias (ritmo atual por hora vs curva horária de 2025, faixa entre os dois e quanto falta para bater 2025).
+
+Próximo passo: Túlio subir os arquivos alterados para o GitHub, atualizar `Painel.html` no Apps Script e conferir a primeira execução do workflow "Black rápido".
+
 # Atualização de sessão · Regras anti-homônimos no cadastro, lote 2026-11-10-a e diagnóstico da loja (D-104), 10/11/2026
 
 - **Regras no código para identificação e descrições (Parte A):**

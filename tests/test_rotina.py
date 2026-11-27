@@ -53,7 +53,8 @@ def test_rotina_faz_coletor_motor_e_planilha(config, mundo, capsys):
     assert {k: v['total'] for k, v in r['coleta'].items()} == {'pedidos': 3, 'clientes': 3, 'produtos': 3}
     assert set(mundo['planilha_falsa'].abas) == {'custos_automaticos', 'clientes', 'pedidos', 'itens', 'produtos', 'indicadores', 'custos', 'alertas', 'Régua', 'rodada', 'resumo_email', 'meta_sumiu_180', 'meta_nao_abre', 'meta_compradores_180', 'meta_resumo', 'atual', 'mensal', 'coortes',
                                                        'regua_hoje', 'regua_resultados', 'carrinhos_dia', 'vale_a_pena',
-                                                       'Configuração', 'anuncios_notas', 'anuncios_direcao', 'anuncios_resumo', 'k7_resumo'}
+                                                       'Configuração', 'anuncios_notas', 'anuncios_direcao', 'anuncios_resumo', 'k7_resumo',
+                                                       'black_dia', 'black_resumo', 'Black'}
     g = {x.aba: x.linhas for x in r['gravacoes']}
     assert (g['clientes'], g['pedidos'], g['itens'], g['produtos']) == (3, 3, 6, 3)
     assert [e['etapa'] for e in r['etapas']][0] == 'Etapa 0 · Pós-compra'
@@ -192,7 +193,7 @@ def test_workflow_tem_permissao_minima_e_nao_roda_duas_ao_mesmo_tempo(fluxo):
     dados, _ = fluxo
     assert dados['permissions'] == {'contents': 'read'}
     assert dados['concurrency']['group'] and dados['concurrency']['cancel-in-progress'] is False
-    assert dados['jobs']['rotina']['timeout-minutes'] <= 30
+    assert dados['jobs']['rotina']['timeout-minutes'] <= 45
 
 
 def test_workflow_usa_python_312_e_roda_a_rotina(fluxo):
@@ -249,3 +250,56 @@ def test_workflow_oferece_historico_meta_separado_da_nuvemshop(fluxo):
     _,texto=fluxo
     assert 'anuncios_historico:' in texto and '--anuncios-historico' in texto
     assert '$ANUNCIOS_HISTORICO' in texto
+
+
+def test_rotina_registra_tempos_por_etapa(config, mundo, capsys):
+    r = rodar(config, mundo)
+    assert 'tempos' in r
+    for chave in ('coletor_nuvemshop', 'motor', 'gravacao_planilha', 'black'):
+        assert chave in r['tempos']
+    saida = capsys.readouterr().out
+    assert '[Tempos]' in saida
+    assert 'coletor_nuvemshop' in saida
+
+
+def test_black_rapido_sai_fora_da_janela(config, mundo, capsys):
+    import pandas as pd
+    res = rotina.rodar_black_rapido(
+        config=config, pasta_api=mundo['pasta'], api=mundo['api'], planilha=mundo['planilha'],
+        agora_brt=pd.Timestamp('2026-12-05 10:00:00', tz='America/Sao_Paulo'),
+    )
+    assert res['pulado'] is True
+    assert mundo['falsa'].chamadas == []
+    assert mundo['planilha_falsa'].abas == {}
+
+
+def test_black_rapido_dentro_da_janela_grava_aba_black_e_config(config, mundo):
+    import pandas as pd
+    mundo['falsa'].dados['orders'].append(
+        pedido_api(50, atualizado='2026-11-27T13:00:00+0000', created_at='2026-11-27T13:00:00+0000',
+                   email='comprador@exemplo.com', coupon=[{'code': 'BLACK25', 'type': 'percentage', 'value': '25'}])
+    )
+    res = rotina.rodar_black_rapido(
+        config=config, pasta_api=mundo['pasta'], api=mundo['api'], planilha=mundo['planilha'],
+        agora_brt=pd.Timestamp('2026-11-27 12:00:00', tz='America/Sao_Paulo'),
+    )
+    assert res['pulado'] is False
+    assert 'Black' in mundo['planilha_falsa'].abas
+    assert 'Configuração' in mundo['planilha_falsa'].abas
+    cfg_rows = mundo['planilha_falsa'].abas['Configuração'].get_all_values()
+    assert any(r and r[0] == 'Black: custo padrão %' and str(r[1]) == '50' for r in cfg_rows)
+
+
+def test_workflow_black_rapido_estrutura():
+    import yaml
+    caminho = os.path.join(RAIZ, '.github', 'workflows', 'black-rapido.yml')
+    dados = yaml.safe_load(open(caminho, encoding='utf-8').read())
+    assert dados['name'] == 'Black rápido'
+    assert dados['concurrency'] == {'group': 'black-rapido', 'cancel-in-progress': False}
+    crons = [c['cron'] for c in dados.get('on', dados.get(True))['schedule']]
+    assert '*/20 * * * *' in crons
+    job = dados['jobs']['black-rapido']
+    assert job['timeout-minutes'] <= 10
+    passos = job['steps']
+    assert any('--black-rapido' in p.get('run', '') for p in passos)
+    assert any('cache_seguro guardar' in p.get('run', '') and 'always()' in str(p.get('if', '')) for p in passos)

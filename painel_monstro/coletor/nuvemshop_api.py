@@ -66,11 +66,15 @@ class NuvemshopAPI:
         self._max_tentativas = max_tentativas
         self._livres: int | None = None
         self._reset_ms = 1000
+        self.requisicoes = 0
+        self.esperas_limite_s = 0.0
 
     def _esperar_vaga(self) -> None:
-        # Balde quase cheio: espera abrir lugar (esvazia 2 por segundo).
+        # Balde quase cheio: espera abrir lugar (esvazia 2 por segundo), com teto seguro.
         if self._livres is not None and self._livres <= 2:
-            self._dormir(max(self._reset_ms / 1000, 0.6))
+            espera = min(max(self._reset_ms / 1000, 0.6), 10.0)
+            self._dormir(espera)
+            self.esperas_limite_s += espera
             self._livres = None
 
     def _guardar_limites(self, resposta: Any) -> None:
@@ -85,18 +89,23 @@ class NuvemshopAPI:
         """GET com controle de limite e novas tentativas. Em listas, 404 quer dizer "nada encontrado"."""
         for tentativa in range(1, self._max_tentativas + 1):
             self._esperar_vaga()
+            self.requisicoes += 1
             try:
                 resposta = self._sessao.get(url, headers=self._cabecalhos, params=params, timeout=60)
             except requests.RequestException as erro:
                 if tentativa == self._max_tentativas:
                     raise ErroAPI(f'Falha de rede ao acessar a Nuvemshop ({type(erro).__name__}).') from None
-                self._dormir(2 ** tentativa)
+                espera = 2 ** tentativa
+                self._dormir(espera)
+                self.esperas_limite_s += espera
                 continue
             self._guardar_limites(resposta)
             if resposta.status_code == 429 or resposta.status_code >= 500:
                 if tentativa == self._max_tentativas:
                     raise ErroAPI(f'A Nuvemshop respondeu {resposta.status_code} depois de {tentativa} tentativas.')
-                self._dormir(max(self._reset_ms / 1000, 1) if resposta.status_code == 429 else 2 ** tentativa)
+                espera = min(max(self._reset_ms / 1000, 1.0), 30.0) if resposta.status_code == 429 else 2 ** tentativa
+                self._dormir(espera)
+                self.esperas_limite_s += espera
                 self._livres = None
                 continue
             if resposta.status_code in (401, 403):
@@ -112,12 +121,17 @@ class NuvemshopAPI:
         resposta = self._get(f'{self._base}/{caminho}', {'per_page': 1, **filtros}, vazio_se_404=True)
         return int(resposta.headers.get('x-total-count', 0)) if resposta is not None else 0
 
-    def listar(self, caminho: str, **params: Any) -> Iterator[dict]:
-        """Todos os registros, seguindo o cabeçalho Link (próxima página)."""
+    def listar(self, caminho: str, max_paginas: int = 100, **params: Any) -> Iterator[dict]:
+        """Todos os registros, seguindo o cabeçalho Link (próxima página), com proteção contra loop."""
         url: str | None = f'{self._base}/{caminho}'
         parametros: dict | None = {'per_page': POR_PAGINA, **params}
         primeira = True
+        paginas = 0
+        vistos: set[str] = set()
         while url:
+            if paginas >= max_paginas:
+                raise ErroAPI(f'{caminho}: limite de {max_paginas} páginas atingido; interrompido para evitar loop.')
+            paginas += 1
             resposta = self._get(url, parametros, vazio_se_404=True)
             if resposta is None:
                 return
@@ -127,7 +141,12 @@ class NuvemshopAPI:
                     raise ErroAPI(f'{caminho}: mais de {LIMITE_CONSULTA} registros numa consulta só; '
                                   'é preciso dividir por período.')
             yield from resposta.json()
-            url, parametros = _proxima(resposta.headers.get('Link', '')), None
+            proxima = _proxima(resposta.headers.get('Link', ''))
+            if proxima and proxima in vistos:
+                raise ErroAPI(f'{caminho}: paginação repetiu um endereço já visitado; interrompido.')
+            if proxima:
+                vistos.add(proxima)
+            url, parametros = proxima, None
 
 
 def _proxima(link: str) -> str | None:
@@ -268,9 +287,13 @@ class Armazem:
         self._gravar('estado', estado)
 
 
+LOTE_CHECKPOINT = 400  # grava o que já baixou a cada 2 páginas para sobreviver a cancelamento
+
+
 def sincronizar(api: NuvemshopAPI, armazem: Armazem, recurso: str, completo: bool = False,
                 agora: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> dict:
-    """Atualiza um recurso. Devolve {'novos', 'atualizados', 'total', 'modo'}."""
+    """Atualiza um recurso gravando incrementalmente no disco. Devolve {'novos', 'atualizados', 'total', 'modo', 'segundos'}."""
+    t0 = time.monotonic()
     definicao = RECURSOS[recurso]
     estado = armazem.estado()
     guardados = armazem.registros(recurso)
@@ -283,14 +306,25 @@ def sincronizar(api: NuvemshopAPI, armazem: Armazem, recurso: str, completo: boo
     params: dict[str, Any] = {'fields': definicao.campos}
     if incremental:
         params['updated_at_min'] = _formato_api(datetime.fromisoformat(anterior) - MARGEM_INCREMENTAL)
-    baixados = [definicao.enxugar(r) for r in api.listar(definicao.caminho, **params)]
 
-    if not incremental and not baixados and guardados:
-        raise ErroAPI(f'{recurso}: a Nuvemshop não devolveu nenhum registro; os dados guardados foram mantidos.')
     base = dict(guardados) if incremental else {}
-    novos = sum(1 for r in baixados if str(r['id']) not in base)
-    for r in baixados:
-        base[str(r['id'])] = r
+    parcial = dict(guardados)
+    novos = 0
+    total_baixados = 0
+    for bruto in api.listar(definicao.caminho, **params):
+        r = definicao.enxugar(bruto)
+        rid = str(r['id'])
+        if rid not in base:
+            novos += 1
+        base[rid] = r
+        parcial[rid] = r
+        total_baixados += 1
+        if total_baixados % LOTE_CHECKPOINT == 0:
+            # Salva progresso parcial sem perder o que já existia; se o job for cancelado, o cache guarda o avanço.
+            armazem.guardar_registros(recurso, parcial)
+
+    if not incremental and total_baixados == 0 and guardados:
+        raise ErroAPI(f'{recurso}: a Nuvemshop não devolveu nenhum registro; os dados guardados foram mantidos.')
 
     # Registro apagado na loja não aparece no incremental: se a contagem não fecha, baixa tudo de novo.
     if incremental and api.total(definicao.caminho) != len(base):
@@ -299,8 +333,46 @@ def sincronizar(api: NuvemshopAPI, armazem: Armazem, recurso: str, completo: boo
     armazem.guardar_registros(recurso, base)
     estado[recurso] = {'sincronizado_em': inicio.astimezone(timezone.utc).isoformat(), 'total': len(base)}
     armazem.guardar_estado(estado)
-    return {'novos': novos, 'atualizados': len(baixados) - novos, 'total': len(base),
+    return {'novos': novos, 'atualizados': total_baixados - novos, 'total': len(base),
             'modo': 'incremental' if incremental else 'completo'}
+
+
+def baixar_pedidos_recentes(api: NuvemshopAPI, armazem: Armazem, horas: int = 48,
+                            agora: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> tuple[Tabelas, dict]:
+    """Coleta leve para o workflow Black rápido: baixa só pedidos atualizados nas últimas `horas`
+    e mescla com o cache existente (preservando histórico de 2025, linha de base e produtos)."""
+    t0 = time.monotonic()
+    definicao = RECURSOS['pedidos']
+    guardados = armazem.registros('pedidos')
+    inicio = agora()
+    corte = inicio - timedelta(hours=horas)
+    params = {'fields': definicao.campos, 'updated_at_min': _formato_api(corte)}
+    base = dict(guardados)
+    novos = 0
+    total_baixados = 0
+    for bruto in api.listar(definicao.caminho, **params):
+        r = definicao.enxugar(bruto)
+        rid = str(r['id'])
+        if rid not in base:
+            novos += 1
+        base[rid] = r
+        total_baixados += 1
+        if total_baixados % LOTE_CHECKPOINT == 0:
+            armazem.guardar_registros('pedidos', base)
+    armazem.guardar_registros('pedidos', base)
+    # Atualiza apenas os pedidos no cache sem tocar em clientes/produtos.
+    clientes_lista = list(armazem.registros('clientes').values())
+    produtos_lista = list(armazem.registros('produtos').values())
+    pedidos_lista = list(base.values())
+    tabelas = montar_tabelas(pedidos_lista, clientes_lista, produtos_lista) if pedidos_lista else Tabelas(
+        clientes=pd.DataFrame(columns=['email', 'nome', 'primeiro_nome', 'telefone', 'cidade', 'estado', 'total_consumido', 'n_compras', 'ultima_compra', 'aceita_marketing', 'newsletter']),
+        pedidos=pd.DataFrame(columns=['numero', 'email', 'data', 'status_pedido', 'status_pagamento', 'valido', 'subtotal', 'desconto', 'frete', 'total', 'taxas', 'total_liquido', 'cupom', 'forma_pagamento', 'forma_entrega', 'estorno']),
+        itens=pd.DataFrame(columns=['numero', 'email', 'data', 'valido', 'produto', 'valor', 'quantidade', 'sku', 'produto_id']),
+        produtos=pd.DataFrame(columns=['url', 'nome', 'categorias', 'preco', 'preco_promocional', 'estoque', 'estoque_ilimitado', 'exibir', 'sku', 'marca', 'custo', 'id', 'criado_em', 'atualizado_em', 'imagem', 'descricao']),
+    )
+    resumo = {'novos': novos, 'atualizados': total_baixados - novos, 'total': len(base),
+              'baixados_48h': total_baixados, 'segundos': round(time.monotonic() - t0, 1)}
+    return tabelas, resumo
 
 
 # ----------------------------------------------------------------------------
@@ -346,18 +418,22 @@ def montar_tabelas(pedidos: list[dict], clientes: list[dict], produtos: list[dic
     tabela_itens = pd.DataFrame(linhas, columns=['numero', 'email', 'data', 'valido', 'produto', 'valor', 'quantidade', 'sku', 'produto_id'])
 
     validos = tabela_pedidos[tabela_pedidos['valido']].groupby('email')['data'].agg(['size', 'max'])
-    c = pd.DataFrame(clientes)
-    c['email'] = _email(c['email'])
-    c = c.drop_duplicates('email', keep='last')
-    nome = c['name'].fillna('').str.strip()
-    tabela_clientes = pd.DataFrame({
-        'email': c['email'], 'nome': nome, 'primeiro_nome': nome.str.split().str[0].str.title(),
-        'telefone': c['phone'], 'cidade': c['city'], 'estado': c['province'],
-        'total_consumido': _numero(c['total_spent']),
-        'n_compras': c['email'].map(validos['size']).fillna(0).astype(int),
-        'ultima_compra': c['email'].map(validos['max']).dt.normalize(),
-        'aceita_marketing': c['accepts_marketing'].fillna(False).astype(bool), 'newsletter': None,
-    }).reset_index(drop=True)
+    if clientes:
+        c = pd.DataFrame(clientes)
+        c['email'] = _email(c['email'])
+        c = c.drop_duplicates('email', keep='last')
+        nome = c['name'].fillna('').str.strip()
+        tabela_clientes = pd.DataFrame({
+            'email': c['email'], 'nome': nome, 'primeiro_nome': nome.str.split().str[0].str.title(),
+            'telefone': c['phone'], 'cidade': c['city'], 'estado': c['province'],
+            'total_consumido': _numero(c['total_spent']),
+            'n_compras': c['email'].map(validos['size']).fillna(0).astype(int),
+            'ultima_compra': c['email'].map(validos['max']).dt.normalize(),
+            'aceita_marketing': c['accepts_marketing'].fillna(False).astype(bool), 'newsletter': None,
+        }).reset_index(drop=True)
+    else:
+        tabela_clientes = pd.DataFrame(columns=['email', 'nome', 'primeiro_nome', 'telefone', 'cidade', 'estado',
+                                                'total_consumido', 'n_compras', 'ultima_compra', 'aceita_marketing', 'newsletter'])
 
     linhas_prod = []
     for pr in produtos:
@@ -374,7 +450,10 @@ def montar_tabelas(pedidos: list[dict], clientes: list[dict], produtos: list[dic
             'criado_em': pr.get('created_at'), 'atualizado_em': pr.get('updated_at'),  # colunas novas ficam no fim
             'imagem': pr.get('image') or None, 'descricao': pr.get('description') or None,
         })
-    tabela_produtos = pd.DataFrame(linhas_prod)
+    tabela_produtos = pd.DataFrame(linhas_prod, columns=[
+        'url', 'nome', 'categorias', 'preco', 'preco_promocional', 'estoque', 'estoque_ilimitado',
+        'exibir', 'sku', 'marca', 'custo', 'id', 'criado_em', 'atualizado_em', 'imagem', 'descricao',
+    ])
     return Tabelas(clientes=tabela_clientes, pedidos=tabela_pedidos, itens=tabela_itens, produtos=tabela_produtos)
 
 
@@ -383,7 +462,12 @@ def coletar(config: Config, pasta: str = PASTA_PADRAO, completo: bool = False,
     """Sincroniza os 3 recursos e devolve (tabelas, resumo por recurso)."""
     api = api or NuvemshopAPI(config)
     armazem = Armazem(pasta)
-    resumo = {r: sincronizar(api, armazem, r, completo=completo) for r in RECURSOS}
+    resumo = {}
+    for r in RECURSOS:
+        t0 = time.monotonic()
+        info = sincronizar(api, armazem, r, completo=completo)
+        info['segundos'] = round(time.monotonic() - t0, 1)
+        resumo[r] = info
     tabelas = montar_tabelas(*(list(armazem.registros(r).values()) for r in ('pedidos', 'clientes', 'produtos')))
     return tabelas, resumo
 
