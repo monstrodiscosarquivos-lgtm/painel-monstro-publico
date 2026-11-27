@@ -432,16 +432,16 @@ footer a{color:var(--muted)}
       <h2>Black 2026</h2>
       <span class="s" id="bk26-atualizado">Carregando…</span>
     </div>
-    <p class="sub">Acompanhamento ao vivo dos 4 dias oficiais (sexta 27/11 a segunda 30/11/2026, horário de Brasília), comparado dia a dia com a Black 2025 (28/11 a 01/12/2025).</p>
+    <p class="sub">Acompanhamento ao vivo de D0 a D4 (quinta 26/11 a segunda 30/11/2026, horário de Brasília), comparado dia a dia com a Black 2025 (27/11 a 01/12/2025).</p>
 
     <h3 style="margin-top:16px">1. Pedidos por cupom</h3>
     <div class="bk-tabs" role="group" aria-label="Visão do gráfico de cupons">
-      <button type="button" id="bk26-btn-dia" class="ativo">Por dia (D1 a D4)</button>
+      <button type="button" id="bk26-btn-dia" class="ativo">Por dia (D0 a D4)</button>
       <button type="button" id="bk26-btn-hora">Por hora (hoje)</button>
     </div>
     <div class="bk-split">
       <div class="chart" style="margin-top:0">
-        <h3 id="bk26-cup-titulo">Pedidos pagos por dia e cupom</h3>
+        <h3 id="bk26-cup-titulo">Pedidos pagos por dia (D0 a D4)</h3>
         <div class="legend" id="bk26-cup-leg"></div>
         <div class="plot" id="bk26-cup-chart"><div class="empty skel">Carregando…</div></div>
       </div>
@@ -449,7 +449,7 @@ footer a{color:var(--muted)}
     </div>
 
     <h3 style="margin-top:24px">2. 2026 x 2025 (por dia da Black)</h3>
-    <p class="sub">Comparação por dia da Black (D1 sexta, D2 sábado, D3 domingo, D4 segunda). Dias futuros de 2026 ficam em branco.</p>
+    <p class="sub">Comparação por dia da Black (D0 quinta a D4 segunda) e total D0 a D4. Dias futuros de 2026 ficam em branco.</p>
     <div class="tbl" id="bk26-comp"><div class="empty skel">Carregando…</div></div>
 
     <h3 style="margin-top:24px">3. Meta Ads: o que fazer agora</h3>
@@ -463,9 +463,11 @@ footer a{color:var(--muted)}
     <div class="grid" id="bk26-saude-cards" style="margin-top:12px"></div>
     <div class="s" id="bk26-saude-nota" style="margin-top:8px"></div>
 
-    <h3 style="margin-top:24px">5. Projeção dos 4 dias</h3>
-    <p class="sub">Total previsto para D1 a D4 pelos dois métodos: ritmo atual por hora e curva horária da Black 2025.</p>
-    <div class="grid" id="bk26-proj" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))"><div class="card skel">Carregando…</div></div>
+    <h3 style="margin-top:24px">5. Projeção robusta e metas (D0 a D4)</h3>
+    <p class="sub">Pedidos fora da curva ficam garantidos e não inflam a projeção. Método por ritmo só entra após 24h de Black.</p>
+    <div id="bk26-proj-expl"></div>
+    <div class="grid" id="bk26-proj" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:12px"><div class="card skel">Carregando…</div></div>
+    <div class="tbl" id="bk26-proj-metas" style="margin-top:12px"></div>
   </section>
 
   <section>
@@ -5250,20 +5252,24 @@ function renderBlack26(){
   if ($("bk26-cup-titulo")){
     $("bk26-cup-titulo").textContent = BK26_MODO === "hora"
       ? ("Pedidos pagos por hora (" + brDiaC(cupons.dia_hora || kv.hoje_data || "") + ")")
-      : "Pedidos pagos por dia (D1 a D4)";
+      : "Pedidos pagos por dia (D0 a D4)";
   }
   bk26StackedSvg(
     $("bk26-cup-chart"),
     BK26_MODO === "hora" ? (cupons.por_hora_hoje || []) : (cupons.por_dia || []),
     series,
     BK26_MODO === "hora" ? "hora" : "rotulo",
-    "Pedidos pagos por cupom na Black 2026"
+    "Pedidos pagos por cupom na Black 2026 (D0 a D4)"
   );
   const cupTbl = $("bk26-cup-tbl");
   if (cupTbl){
     const linhas = cupons.tabela || [];
-    cupTbl.innerHTML = linhas.length ? `<table>
-      <thead><tr><th>Cupom</th><th class="n">Pedidos</th><th class="n">Receita</th><th class="n">Ticket médio</th><th class="n">Desconto</th></tr></thead>
+    const ant = cupons.antecipa || null;
+    const totG = cupons.total_geral || null;
+    const tmBk = cupons.total_pedidos ? (num(cupons.total_receita) / num(cupons.total_pedidos)) : 0;
+    const temDados = linhas.length || (ant && ant.pedidos > 0);
+    cupTbl.innerHTML = temDados ? `<table>
+      <thead><tr><th>Cupom / fase</th><th class="n">Pedidos</th><th class="n">Receita</th><th class="n">Ticket médio</th><th class="n">Desconto</th></tr></thead>
       <tbody>
         ${linhas.map(c => `<tr>
           <td><b>${esc(c.cupom)}</b></td>
@@ -5272,6 +5278,27 @@ function renderBlack26(){
           <td class="n">${brl(c.ticket_medio)}</td>
           <td class="n">${brl(c.desconto)}</td>
         </tr>`).join("")}
+        <tr style="font-weight:600;border-top:2px solid var(--line)">
+          <td>Black (D0 a D4)</td>
+          <td class="n">${int(cupons.total_pedidos || 0)}</td>
+          <td class="n">${brl(cupons.total_receita || 0)}</td>
+          <td class="n">${brl(tmBk)}</td>
+          <td class="n">${brl(cupons.total_desconto || 0)}</td>
+        </tr>
+        ${ant ? `<tr>
+          <td><b>${esc(ant.rotulo || "Antecipa (12 a 25/11)")}</b></td>
+          <td class="n">${int(ant.pedidos || 0)}</td>
+          <td class="n">${brl(ant.receita || 0)}</td>
+          <td class="n">${brl(ant.ticket_medio || 0)}</td>
+          <td class="n">${brl(ant.desconto || 0)}</td>
+        </tr>` : ""}
+        ${totG ? `<tr style="font-weight:700;background:var(--track)">
+          <td>Total geral (${esc(totG.rotulo || "Antecipa + Black")})</td>
+          <td class="n">${int(totG.pedidos || 0)}</td>
+          <td class="n">${brl(totG.receita || 0)}</td>
+          <td class="n">${brl(totG.ticket_medio || 0)}</td>
+          <td class="n">${brl(totG.desconto || 0)}</td>
+        </tr>` : ""}
       </tbody>
     </table>` : '<div class="empty">Nenhum pedido pago registrado na Black 2026 ainda.</div>';
   }
@@ -5311,7 +5338,7 @@ function renderBlack26(){
       </thead>
       <tbody>
         ${dias.map(d => rowComp(`<b>${esc(d.dia)}</b> · ${esc(d.nome)}`, d.ocorrido ? d.y2026 : null, d.y2025, d.ocorrido ? d.variacao : null, false)).join("")}
-        ${rowComp("Total", tot.y2026, tot.y2025, tot.variacao, true)}
+        ${rowComp(esc(tot.rotulo || "Total (D0 a D4)"), tot.y2026, tot.y2025, tot.variacao, true)}
       </tbody>
     </table>` : '<div class="empty">Sem dados de comparação ainda.</div>';
   }
@@ -5388,34 +5415,71 @@ function renderBlack26(){
     $("bk26-saude-nota").textContent = pct(saude.pct_itens_padrao || 0) + " de itens com margem padrão (usado " + pct(mUsado) + ", novo " + pct(mLacrado) + ").";
   }
 
-  /* Bloco 5: Projeção */
+  /* Bloco 5: Projeção robusta e metas */
+  const explEl = $("bk26-proj-expl");
+  if (explEl){
+    explEl.innerHTML = proj.explicacao
+      ? `<div class="card" style="background:var(--surface);border-left:4px solid var(--s2)"><div style="font-size:15px;line-height:1.5">${esc(proj.explicacao)}</div></div>`
+      : "";
+  }
   const projEl = $("bk26-proj");
   if (projEl){
-    const rit = proj.ritmo_atual || {}, cur = proj.curva_2025 || {}, fx = proj.faixa || {}, fal = proj.falta_bater_2025 || {}, t25 = proj.total_2025 || {};
-    const fmtFx = (o, fn) => (o && o.min !== null && o.min !== undefined) ? (fn(o.min) + " a " + fn(o.max)) : "–";
+    const rit = proj.ritmo_atual || {}, cur = proj.curva_2025 || {}, cen = proj.cenarios || {};
+    const cons = cen.conservador || {}, prov = cen.provavel || {}, otim = cen.otimista || {};
+    const fal = proj.falta_bater_2025 || {}, t25 = proj.total_2025 || {}, metas = proj.metas || {};
+    const mHoje = metas.meta_hoje || null;
+    const fmtCen = o => (o && o.receita !== null && o.receita !== undefined) ? brl(o.receita) : "–";
+    const fmtSub = o => (o && o.pedidos !== null && o.pedidos !== undefined)
+      ? (nf1.format(num(o.pedidos)) + " pedidos · margem " + brl(o.margem || 0))
+      : "Aguardando dados";
     projEl.innerHTML = `
       <div class="card">
-        <div class="k">(a) Ritmo atual por hora</div>
-        <div class="v">${brl(rit.receita || 0)}</div>
-        <div class="s">${nf1.format(num(rit.pedidos) || 0)} pedidos · margem ${brl(rit.margem || 0)}</div>
-        <div class="s" style="margin-top:6px">Baseado em ${nf1.format(num(proj.horas_decorridas) || 0)}h de 96h.</div>
+        <div class="k">Cenário conservador</div>
+        <div class="v">${fmtCen(cons)}</div>
+        <div class="s">${fmtSub(cons)}</div>
+      </div>
+      <div class="card" style="border-color:var(--s2)">
+        <div class="k">Cenário provável (curva 2025)</div>
+        <div class="v" style="color:var(--s2)">${fmtCen(prov)}</div>
+        <div class="s">${fmtSub(prov)}</div>
+        <div class="s" style="margin-top:4px">Até esta hora, 2025 tinha ${pct(proj.fracao_2025_receita_pct || 0)} da receita.</div>
       </div>
       <div class="card">
-        <div class="k">(b) Curva horária de 2025</div>
-        <div class="v">${cur.receita !== null && cur.receita !== undefined ? brl(cur.receita) : "–"}</div>
-        <div class="s">${cur.pedidos !== null && cur.pedidos !== undefined ? (nf1.format(num(cur.pedidos)) + " pedidos") : "Sem referência"} · margem ${cur.margem !== null && cur.margem !== undefined ? brl(cur.margem) : "–"}</div>
-        <div class="s" style="margin-top:6px">Até esta hora, 2025 já tinha ${pct(proj.fracao_2025_receita_pct || 0)} da receita total.</div>
+        <div class="k">Cenário otimista</div>
+        <div class="v" style="color:var(--good)">${fmtCen(otim)}</div>
+        <div class="s">${fmtSub(otim)}</div>
       </div>
       <div class="card">
-        <div class="k">Faixa prevista e meta 2025</div>
-        <div class="v" style="font-size:22px">${fmtFx(fx.receita, brl)}</div>
-        <div class="s">Pedidos: ${fmtFx(fx.pedidos, v => nf1.format(v))} · Margem: ${fmtFx(fx.margem, brl)}</div>
-        <div style="margin-top:10px;font-size:14px">
+        <div class="k">Método A · ritmo por hora</div>
+        <div class="v" style="font-size:${rit.disponivel ? "26px" : "18px"}">${rit.disponivel ? brl(rit.receita || 0) : esc(rit.status || "aguardando 24h")}</div>
+        <div class="s">${rit.disponivel ? (nf1.format(num(rit.pedidos) || 0) + " pedidos · margem " + brl(rit.margem || 0)) : (nf1.format(num(proj.horas_decorridas) || 0) + "h de " + int(proj.horas_totais || 120) + "h decorridas")}</div>
+      </div>
+      <div class="card">
+        <div class="k">Meta e piso da Black</div>
+        <div class="v" style="font-size:22px">${brl(metas.piso_black || 24000)}</div>
+        <div class="s">${metas.acima_do_piso ? '<span class="pill p-ok">Acima do piso</span>' : ("Falta " + brl(metas.falta_piso || 0) + " para o piso")}</div>
+        ${mHoje ? `<div class="s" style="margin-top:6px">Hoje (${esc(mHoje.dia)}): <b>${brl(mHoje.realizado || 0)}</b> de ${brl(mHoje.meta || 0)} (${pct(mHoje.atingimento_pct || 0)})</div>` : ""}
+        <div class="s" style="margin-top:6px">
           ${fal.bateu_receita
-            ? '<span class="pill p-ok">Bateu a receita da Black 2025!</span>'
-            : `Falta para bater 2025 (${brl(t25.receita || 0)} / ${int(t25.pedidos || 0)} ped.): <b>${brl(fal.receita || 0)}</b> (${int(fal.pedidos || 0)} pedidos)`}
+            ? '<span class="pill p-ok">Bateu a Black 2025!</span>'
+            : `Falta p/ bater 2025 (${brl(t25.receita || 0)}): <b>${brl(fal.receita || 0)}</b> (${int(fal.pedidos || 0)} ped.)`}
         </div>
       </div>`;
+  }
+  const metasTbl = $("bk26-proj-metas");
+  if (metasTbl){
+    const diarias = ((proj.metas || {}).diarias) || [];
+    metasTbl.innerHTML = diarias.length ? `<table>
+      <thead><tr><th>Dia</th><th class="n">Meta do dia</th><th class="n">Realizado</th><th class="n">Atingimento</th></tr></thead>
+      <tbody>
+        ${diarias.map(m => `<tr>
+          <td><b>${esc(m.dia)}</b> · ${esc(m.nome)} (${esc(brDiaC(m.data))})</td>
+          <td class="n">${brl(m.meta)}</td>
+          <td class="n">${m.ocorrido ? brl(m.realizado) : ""}</td>
+          <td class="n">${m.ocorrido ? pct(m.atingimento_pct) : ""}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>` : "";
   }
 }
 

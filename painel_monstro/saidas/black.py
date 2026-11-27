@@ -69,11 +69,11 @@ def preparar_aba_black(dados: dict[str, Any]) -> pd.DataFrame:
         ["margem_usado_pct", str(dados.get("margem_usado_pct", 60.0)), "Margem padrão (%) usada para discos usados sem custo cadastrado"],
         ["margem_lacrado_pct", str(dados.get("margem_lacrado_pct", 40.0)), "Margem padrão (%) usada para novos/lacrados sem custo cadastrado"],
         ["pct_itens_padrao", str(dados.get("pct_itens_padrao", 0.0)), "% de itens com margem padrão (usado/novo)"],
-        ["cupons_json", json.dumps(dados.get("cupons", {}), ensure_ascii=False), "Bloco 1: Pedidos por cupom (dia, hora hoje e tabela)"],
-        ["comp_2025_json", json.dumps(dados.get("comp_2025", {}), ensure_ascii=False), "Bloco 2: 2026 x 2025 por dia da Black (D1-D4)"],
+        ["cupons_json", json.dumps(dados.get("cupons", {}), ensure_ascii=False), "Bloco 1: Pedidos por cupom (D0-D4, hora hoje, Antecipa e total geral)"],
+        ["comp_2025_json", json.dumps(dados.get("comp_2025", {}), ensure_ascii=False), "Bloco 2: 2026 x 2025 por dia da Black (D0-D4)"],
         ["meta_ads_json", json.dumps(dados.get("meta_ads", {}), ensure_ascii=False), "Bloco 3: Meta Ads e gatilhos de ação"],
         ["saude_json", json.dumps(dados.get("saude", {}), ensure_ascii=False), "Bloco 4: Saúde da Black (margem x volume)"],
-        ["projecao_json", json.dumps(dados.get("projecao", {}), ensure_ascii=False), "Bloco 5: Projeção 4 dias (ritmo atual x curva 2025)"],
+        ["projecao_json", json.dumps(dados.get("projecao", {}), ensure_ascii=False), "Bloco 5: Projeção D0-D4 (cenários, fora da curva e metas)"],
     ]
     return pd.DataFrame(linhas, columns=["chave", "valor", "detalhes"])
 

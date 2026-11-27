@@ -9,12 +9,14 @@ import pandas as pd
 
 
 BLACK_2026_DIAS = (
+    ("D0", "Quinta", "2026-11-26"),
     ("D1", "Sexta", "2026-11-27"),
     ("D2", "Sábado", "2026-11-28"),
     ("D3", "Domingo", "2026-11-29"),
     ("D4", "Segunda", "2026-11-30"),
 )
 BLACK_2025_DIAS = (
+    ("D0", "Quinta", "2025-11-27"),
     ("D1", "Sexta", "2025-11-28"),
     ("D2", "Sábado", "2025-11-29"),
     ("D3", "Domingo", "2025-11-30"),
@@ -22,10 +24,19 @@ BLACK_2025_DIAS = (
 )
 CUPONS_BLACK_2026 = (
     "BLACK25", "BLACK30", "BLACK35",
-    "SULCO25", "SULCO30", "SULCO35",
-    "GRUPO25", "GRUPO30", "GRUPO35",
+    "Lado A 25%", "Lado A 30%", "Lado A 35%",
+    "Grupo VIP 25%", "Grupo VIP 30%", "Grupo VIP 35%",
     "ANTECIPA10", "Sem cupom",
 )
+CUPONS_PRIVADOS_MAP = {
+    "SULCO25": "Lado A 25%",
+    "SULCO30": "Lado A 30%",
+    "SULCO35": "Lado A 35%",
+    "GRUPO25": "Grupo VIP 25%",
+    "GRUPO30": "Grupo VIP 30%",
+    "GRUPO35": "Grupo VIP 35%",
+}
+DIAS_SEMANA_PT = ("Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo")
 CAMPANHAS_BLACK_META = (
     "black26_rmk",
     "prosp_vendas_recorrente",
@@ -33,6 +44,7 @@ CAMPANHAS_BLACK_META = (
 )
 CONFIG_MARGEM_USADO = "Black: margem do usado"
 CONFIG_MARGEM_LACRADO = "Black: margem do lacrado"
+LIMITE_FORA_CURVA_TETO = 1500.0
 
 
 @dataclass
@@ -529,6 +541,77 @@ def calcular_black(
 # ----------------------------------------------------------------------------
 # Black 2026 · 5 blocos (aba "Black" da planilha e seção Black 2026 no Painel)
 # ----------------------------------------------------------------------------
+def _parse_data_cfg(valor: Any, padrao: str) -> str:
+    """Aceita YYYY-MM-DD ou DD/MM/YYYY da aba Configuração; devolve YYYY-MM-DD."""
+    s = str(valor or "").strip()
+    if not s:
+        return padrao
+    m_iso = re.match(r"^(\d{4})-(\d{2})-(\d{2})", s)
+    if m_iso:
+        return f"{m_iso.group(1)}-{m_iso.group(2)}-{m_iso.group(3)}"
+    m_br = re.match(r"^(\d{2})/(\d{2})/(\d{4})", s)
+    if m_br:
+        return f"{m_br.group(3)}-{m_br.group(2)}-{m_br.group(1)}"
+    return padrao
+
+
+def montar_calendario_black(config_params: dict[str, Any] | None = None) -> tuple[list[tuple[str, str, str]], list[tuple[str, str, str]], tuple[str, str]]:
+    """Monta (dias_2026, dias_2025, (antecipa_ini, antecipa_fim)) a partir da aba Configuração."""
+    cfg = config_params or {}
+    cfg_lower = {str(k).strip().lower(): v for k, v in cfg.items()}
+    dt_d0 = _parse_data_cfg(
+        cfg_lower.get("black: acesso lado a", cfg_lower.get("black: acesso vip", "")),
+        "2026-11-26",
+    )
+    dt_inicio = _parse_data_cfg(cfg_lower.get("black: início", cfg_lower.get("black: inicio", "")), "2026-11-27")
+    dt_fim = _parse_data_cfg(cfg_lower.get("black: fim", ""), "2026-11-30")
+
+    d0_date = date.fromisoformat(dt_d0)
+    ini_date = date.fromisoformat(dt_inicio)
+    fim_date = date.fromisoformat(dt_fim)
+    if d0_date > ini_date:
+        d0_date = ini_date
+    if fim_date < ini_date:
+        fim_date = ini_date
+
+    dias_26: list[tuple[str, str, str]] = []
+    dias_25: list[tuple[str, str, str]] = []
+    cursor = d0_date
+    while cursor <= fim_date:
+        offset_inicio = (cursor - ini_date).days
+        cod = f"D{offset_inicio + 1}" if offset_inicio >= 0 else f"D{offset_inicio + 1}"  # D0 para 1 dia antes do início
+        if cursor < ini_date:
+            cod = f"D{0 if (ini_date - cursor).days == 1 else -(ini_date - cursor).days + 1}"
+        nome_dia = DIAS_SEMANA_PT[cursor.weekday()]
+        dias_26.append((cod, nome_dia, cursor.isoformat()))
+        d25 = cursor - timedelta(days=364)  # 52 semanas antes: mesmo dia da semana em 2025
+        dias_25.append((cod, DIAS_SEMANA_PT[d25.weekday()], d25.isoformat()))
+        cursor += timedelta(days=1)
+
+    ant_ini = _parse_data_cfg(cfg_lower.get("black: início do antecipa", cfg_lower.get("black: inicio do antecipa", "")), "2026-11-12")
+    ant_fim_default = (d0_date - timedelta(days=1)).isoformat()
+    ant_fim = _parse_data_cfg(cfg_lower.get("black: fim do antecipa", ""), ant_fim_default)
+    return dias_26, dias_25, (ant_ini, ant_fim)
+
+
+def mascarar_cupom_privado(cupom: str) -> str:
+    """Troca códigos privados (SULCO*/GRUPO*) por rótulos públicos ('Lado A 25%', 'Grupo VIP 25%', etc.)."""
+    c = str(cupom or "").strip().upper()
+    if c in CUPONS_PRIVADOS_MAP:
+        return CUPONS_PRIVADOS_MAP[c]
+    m_s = re.fullmatch(r"SULCO(\d+)", c)
+    if m_s:
+        return f"Lado A {m_s.group(1)}%"
+    if c.startswith("SULCO"):
+        return "Lado A"
+    m_g = re.fullmatch(r"GRUPO(\d+)", c)
+    if m_g:
+        return f"Grupo VIP {m_g.group(1)}%"
+    if c.startswith("GRUPO"):
+        return "Grupo VIP"
+    return cupom
+
+
 def _normalizar_cupom_black(valor: Any) -> str:
     if valor is None or (isinstance(valor, float) and pd.isna(valor)):
         return "Sem cupom"
@@ -536,13 +619,13 @@ def _normalizar_cupom_black(valor: Any) -> str:
     if not texto or texto.upper() in ("NONE", "NAN", "SEM_CUPOM", "SEM CUPOM"):
         return "Sem cupom"
     primeiro = texto.split(",")[0].strip().upper()
-    return primeiro or "Sem cupom"
+    return mascarar_cupom_privado(primeiro) if primeiro else "Sem cupom"
 
 
 def _preparar_pedidos_black(pedidos_df: pd.DataFrame | None) -> pd.DataFrame:
     if pedidos_df is None or pedidos_df.empty:
         return pd.DataFrame(columns=[
-            "numero", "data_ts", "dt", "hora", "valido_bool",
+            "numero", "numero_str", "data_ts", "dt", "hora", "valido_bool",
             "subtotal_num", "desconto_num", "total_num", "receita_num", "cupom_norm",
         ])
     df = pedidos_df.copy()
@@ -563,9 +646,15 @@ def _preparar_pedidos_black(pedidos_df: pd.DataFrame | None) -> pd.DataFrame:
     return df
 
 
-def calcular_bloco_cupons(df_p: pd.DataFrame, hoje_str: str) -> dict[str, Any]:
-    """Bloco 1: Pedidos pagos por cupom (por dia D1-D4, por hora hoje e tabela resumo)."""
-    datas_26 = [d[2] for d in BLACK_2026_DIAS]
+def calcular_bloco_cupons(
+    df_p: pd.DataFrame,
+    hoje_str: str,
+    dias_26: list[tuple[str, str, str]] | None = None,
+    antecipa_periodo: tuple[str, str] = ("2026-11-12", "2026-11-25"),
+) -> dict[str, Any]:
+    """Bloco 1: Pedidos pagos por cupom (D0 a D4, por hora hoje, tabela resumo + linha Antecipa e Total geral)."""
+    dias_26 = dias_26 or list(BLACK_2026_DIAS)
+    datas_26 = [d[2] for d in dias_26]
     p26 = df_p[df_p["valido_bool"] & df_p["dt"].isin(datas_26)].copy()
 
     def _serie(cupom: str) -> str:
@@ -583,7 +672,7 @@ def calcular_bloco_cupons(df_p: pd.DataFrame, hoje_str: str) -> dict[str, Any]:
         series_presentes = list(CUPONS_BLACK_2026)
 
     por_dia = []
-    for codigo, nome_dia, dt in BLACK_2026_DIAS:
+    for codigo, nome_dia, dt in dias_26:
         sub = p26[p26["dt"] == dt]
         contagem = {s: int((sub["serie"] == s).sum()) for s in series_presentes}
         por_dia.append({
@@ -594,13 +683,12 @@ def calcular_bloco_cupons(df_p: pd.DataFrame, hoje_str: str) -> dict[str, Any]:
             "cupons": contagem,
         })
 
-    # Dia de referência para o gráfico por hora: hoje se dentro da Black, senão último dia com pedidos ou D1
     if hoje_str in datas_26:
         dia_hora = hoje_str
     elif not p26.empty:
         dia_hora = str(p26["dt"].max())
     else:
-        dia_hora = BLACK_2026_DIAS[0][2]
+        dia_hora = datas_26[0]
 
     sub_hj = p26[p26["dt"] == dia_hora]
     por_hora = []
@@ -614,7 +702,6 @@ def calcular_bloco_cupons(df_p: pd.DataFrame, hoje_str: str) -> dict[str, Any]:
             "cupons": contagem,
         })
 
-    # Tabela por cupom
     tabela = []
     if not p26.empty:
         for cupom, grp in p26.groupby("cupom_norm"):
@@ -631,15 +718,47 @@ def calcular_bloco_cupons(df_p: pd.DataFrame, hoje_str: str) -> dict[str, Any]:
         ordem_padrao = {c: i for i, c in enumerate(CUPONS_BLACK_2026)}
         tabela.sort(key=lambda r: (ordem_padrao.get(r["cupom"], 999), -r["receita"]))
 
+    # Linha à parte: Antecipa (cupom ANTECIPA10 no período configurado; não entra nos gráficos D0..D4)
+    ant_ini, ant_fim = antecipa_periodo
+    p_ant = df_p[df_p["valido_bool"] & (df_p["dt"] >= ant_ini) & (df_p["dt"] <= ant_fim) & (df_p["cupom_norm"] == "ANTECIPA10")]
+    n_ant = int(len(p_ant))
+    rec_ant = float(p_ant["receita_num"].sum()) if n_ant else 0.0
+    desc_ant = float(p_ant["desconto_num"].sum()) if n_ant else 0.0
+    rot_ant = f"Antecipa ({int(ant_ini[8:10])} a {int(ant_fim[8:10])}/{ant_fim[5:7]})"
+    antecipa = {
+        "rotulo": rot_ant,
+        "inicio": ant_ini,
+        "fim": ant_fim,
+        "pedidos": n_ant,
+        "receita": round(rec_ant, 2),
+        "ticket_medio": round(rec_ant / n_ant, 2) if n_ant else 0.0,
+        "desconto": round(desc_ant, 2),
+    }
+
+    tot_bk_ped = int(len(p26))
+    tot_bk_rec = float(p26["receita_num"].sum()) if tot_bk_ped else 0.0
+    tot_bk_desc = float(p26["desconto_num"].sum()) if tot_bk_ped else 0.0
+    geral_ped = tot_bk_ped + n_ant
+    geral_rec = tot_bk_rec + rec_ant
+    geral_desc = tot_bk_desc + desc_ant
+
     return {
         "series": series_presentes,
         "por_dia": por_dia,
         "dia_hora": dia_hora,
         "por_hora_hoje": por_hora,
         "tabela": tabela,
-        "total_pedidos": int(len(p26)),
-        "total_receita": round(float(p26["receita_num"].sum()), 2) if not p26.empty else 0.0,
-        "total_desconto": round(float(p26["desconto_num"].sum()), 2) if not p26.empty else 0.0,
+        "total_pedidos": tot_bk_ped,
+        "total_receita": round(tot_bk_rec, 2),
+        "total_desconto": round(tot_bk_desc, 2),
+        "antecipa": antecipa,
+        "total_geral": {
+            "rotulo": "Antecipa + Black",
+            "pedidos": geral_ped,
+            "receita": round(geral_rec, 2),
+            "ticket_medio": round(geral_rec / geral_ped, 2) if geral_ped else 0.0,
+            "desconto": round(geral_desc, 2),
+        },
     }
 
 
@@ -663,14 +782,21 @@ def _metricas_dia_comp(sub: pd.DataFrame) -> dict[str, Any]:
     }
 
 
-def calcular_bloco_2026_x_2025(df_p: pd.DataFrame, hoje_str: str) -> dict[str, Any]:
-    """Bloco 2: Comparação D1..D4 (2026 x 2025). Dias futuros de 2026 ficam em branco (None)."""
+def calcular_bloco_2026_x_2025(
+    df_p: pd.DataFrame,
+    hoje_str: str,
+    dias_26: list[tuple[str, str, str]] | None = None,
+    dias_25: list[tuple[str, str, str]] | None = None,
+) -> dict[str, Any]:
+    """Bloco 2: Comparação D0..D4 (2026 x 2025) e Total D0 a D4. Dias futuros de 2026 ficam em branco (None)."""
+    dias_26 = dias_26 or list(BLACK_2026_DIAS)
+    dias_25 = dias_25 or list(BLACK_2025_DIAS)
     validos = df_p[df_p["valido_bool"]]
     dias_out = []
     sub_26_total_list = []
     sub_25_total_list = []
 
-    for (cod, nome, dt26), (_, _, dt25) in zip(BLACK_2026_DIAS, BLACK_2025_DIAS):
+    for (cod, nome, dt26), (_, _, dt25) in zip(dias_26, dias_25):
         s25 = validos[validos["dt"] == dt25]
         m25 = _metricas_dia_comp(s25)
         sub_25_total_list.append(s25)
@@ -718,9 +844,11 @@ def calcular_bloco_2026_x_2025(df_p: pd.DataFrame, hoje_str: str) -> dict[str, A
         m26_tot = None
         var_tot = None
 
+    rotulo_total = f"Total ({dias_26[0][0]} a {dias_26[-1][0]})" if dias_26 else "Total"
     return {
         "dias": dias_out,
         "total": {
+            "rotulo": rotulo_total,
             "y2026": m26_tot,
             "y2025": m25_tot,
             "variacao": var_tot,
@@ -880,10 +1008,12 @@ def calcular_bloco_saude(
     produtos_df: pd.DataFrame | None,
     hoje_str: str,
     premissas: PremissasMargem | None = None,
+    dias_26: list[tuple[str, str, str]] | None = None,
 ) -> dict[str, Any]:
     """Bloco 4: Saúde da Black (margem bruta x volume) comparada às 4 semanas anteriores."""
     if premissas is None:
         premissas = PremissasMargem()
+    dias_26 = dias_26 or list(BLACK_2026_DIAS)
 
     # Mapas de custo da variante e tipo (usado/lacrado) na Nuvemshop
     custo_por_pid: dict[str, float] = {}
@@ -934,9 +1064,9 @@ def calcular_bloco_saude(
 
     validos = df_p[df_p["valido_bool"]]
 
-    # Linha de base: média das 4 sextas, 4 sábados, 4 domingos e 4 segundas anteriores a 27/11/2026
+    # Linha de base: média das 4 semanas anteriores a cada dia D0..D4
     base_por_dia = []
-    for codigo, nome, dt_black in BLACK_2026_DIAS:
+    for codigo, nome, dt_black in dias_26:
         dt_ref = date.fromisoformat(dt_black)
         datas_base = [(dt_ref - timedelta(days=7 * k)).isoformat() for k in (1, 2, 3, 4)]
         sub_b = validos[validos["dt"].isin(datas_base)]
@@ -1036,42 +1166,92 @@ def calcular_bloco_saude(
     }
 
 
+def _fmt_brl_curto(v: float) -> str:
+    """Formata R$ em português simples: ex. R$7.614 ou R$18,8 mil."""
+    if v >= 10000.0:
+        mil = v / 1000.0
+        s = f"{mil:.1f}".replace(".", ",")
+        if s.endswith(",0"):
+            s = s[:-2]
+        return f"R${s} mil"
+    return "R$" + f"{round(v):,}".replace(",", ".")
+
+
 def calcular_bloco_projecao(
     df_p: pd.DataFrame,
     saude: dict[str, Any],
     agora_brt: pd.Timestamp,
+    dias_26: list[tuple[str, str, str]] | None = None,
+    dias_25: list[tuple[str, str, str]] | None = None,
+    config_params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Bloco 5: Projeção dos 4 dias (96h) por ritmo atual e pela curva horária de 2025."""
+    """Bloco 5: Projeção robusta de D0 a D4 com isolamento de pedidos fora da curva,
+    Método A só após 24h, três cenários (conservador, provável, otimista) e metas."""
+    dias_26 = dias_26 or list(BLACK_2026_DIAS)
+    dias_25 = dias_25 or list(BLACK_2025_DIAS)
     agora_naive = agora_brt.tz_convert("America/Sao_Paulo").tz_localize(None) if agora_brt.tzinfo is not None else agora_brt
-    inicio_26 = pd.Timestamp("2026-11-27 00:00:00")
-    inicio_25 = pd.Timestamp("2025-11-28 00:00:00")
-    horas_totais = 96.0
+    hoje_str = agora_naive.strftime("%Y-%m-%d")
+
+    inicio_26 = pd.Timestamp(dias_26[0][2] + " 00:00:00")
+    inicio_25 = pd.Timestamp(dias_25[0][2] + " 00:00:00")
+    horas_totais = float(len(dias_26) * 24)
     horas_decorridas = max(0.0, min(horas_totais, (agora_naive - inicio_26).total_seconds() / 3600.0))
 
-    ped_26 = int(saude.get("pedidos_black", 0))
-    rec_26 = float(saude.get("receita_black", 0.0))
-    marg_26 = float(saude.get("margem_black", 0.0))
+    validos = df_p[df_p["valido_bool"]]
+    datas_26 = [d[2] for d in dias_26]
+    p26 = validos[validos["dt"].isin(datas_26)].copy()
 
-    # Método (a): ritmo atual por hora
-    if horas_decorridas > 0:
+    # Corte de pedido fora da curva: min(3x mediana dos últimos 90 dias, R$1.500)
+    corte_90d_ini = (date.fromisoformat(dias_26[0][2]) - timedelta(days=90)).isoformat()
+    corte_90d_fim = (date.fromisoformat(dias_26[0][2]) - timedelta(days=1)).isoformat()
+    p_90d = validos[(validos["dt"] >= corte_90d_ini) & (validos["dt"] <= corte_90d_fim)]
+    mediana_90d = float(p_90d["receita_num"].median()) if not p_90d.empty else 0.0
+    limite_fora_curva = round(min(3.0 * mediana_90d, LIMITE_FORA_CURVA_TETO), 2) if mediana_90d > 0 else LIMITE_FORA_CURVA_TETO
+
+    ped_26 = int(len(p26))
+    rec_26 = float(p26["receita_num"].sum()) if ped_26 else 0.0
+    marg_26 = float(saude.get("margem_black", 0.0))
+    taxa_margem = (marg_26 / rec_26) if rec_26 > 0 else 0.0
+
+    p_fora = p26[p26["receita_num"] > limite_fora_curva] if not p26.empty else p26
+    p_norm = p26[p26["receita_num"] <= limite_fora_curva] if not p26.empty else p26
+
+    n_garantidos = int(len(p_fora))
+    rec_garantida = float(p_fora["receita_num"].sum()) if n_garantidos else 0.0
+    marg_garantida = rec_garantida * taxa_margem
+
+    n_normal = int(len(p_norm))
+    rec_normal = float(p_norm["receita_num"].sum()) if n_normal else 0.0
+    marg_normal = marg_26 - marg_garantida
+
+    # Método (a): ritmo atual por hora (somente após 24h de Black, sem fora da curva + garantidos)
+    ritmo_disponivel = horas_decorridas >= 24.0
+    if ritmo_disponivel:
         fator_ritmo = horas_totais / horas_decorridas
         ritmo = {
-            "pedidos": round(ped_26 * fator_ritmo, 1),
-            "receita": round(rec_26 * fator_ritmo, 2),
-            "margem": round(marg_26 * fator_ritmo, 2),
+            "disponivel": True,
+            "status": "ok",
+            "pedidos": round(n_normal * fator_ritmo + n_garantidos, 1),
+            "receita": round(rec_normal * fator_ritmo + rec_garantida, 2),
+            "margem": round(marg_normal * fator_ritmo + marg_garantida, 2),
         }
     else:
-        ritmo = {"pedidos": 0.0, "receita": 0.0, "margem": 0.0}
+        ritmo = {
+            "disponivel": False,
+            "status": "aguardando 24h",
+            "pedidos": None,
+            "receita": None,
+            "margem": None,
+        }
 
-    # Base 2025 (4 dias: 28/11 a 01/12/2025)
-    validos = df_p[df_p["valido_bool"]]
-    datas_25 = [d[2] for d in BLACK_2025_DIAS]
+    # Base 2025 (D0 a D4: 27/11 a 01/12/2025)
+    datas_25 = [d[2] for d in dias_25]
     p25 = validos[validos["dt"].isin(datas_25)].copy()
     ped_25_total = int(len(p25))
     rec_25_total = float(p25["receita_num"].sum()) if ped_25_total else 0.0
 
-    # Método (b): curva horária de 2025
-    curva = {"pedidos": None, "receita": None, "margem": None}
+    # Método (b): curva horária de 2025 (sem fora da curva + garantidos)
+    curva = {"disponivel": False, "pedidos": None, "receita": None, "margem": None}
     fracao_25_rec = 0.0
     fracao_25_ped = 0.0
     if ped_25_total > 0 and horas_decorridas > 0:
@@ -1084,29 +1264,114 @@ def calcular_bloco_projecao(
             fracao_25_ped = len(ate_agora) / ped_25_total
             fracao_25_rec = (float(ate_agora["receita_num"].sum()) / rec_25_total) if rec_25_total > 0 else 0.0
         curva = {
-            "pedidos": round(ped_26 / fracao_25_ped, 1) if fracao_25_ped > 0 else None,
-            "receita": round(rec_26 / fracao_25_rec, 2) if fracao_25_rec > 0 else None,
-            "margem": round(marg_26 / fracao_25_rec, 2) if fracao_25_rec > 0 else None,
+            "disponivel": fracao_25_rec > 0 or fracao_25_ped > 0,
+            "pedidos": round(n_normal / fracao_25_ped + n_garantidos, 1) if fracao_25_ped > 0 else None,
+            "receita": round(rec_normal / fracao_25_rec + rec_garantida, 2) if fracao_25_rec > 0 else None,
+            "margem": round(marg_normal / fracao_25_rec + marg_garantida, 2) if fracao_25_rec > 0 else None,
         }
 
-    def _faixa(a: float | None, b: float | None) -> dict[str, float | None]:
-        vals = [v for v in (a, b) if v is not None]
-        if not vals:
-            return {"min": None, "max": None}
-        return {"min": min(vals), "max": max(vals)}
+    # Três cenários (conservador, provável, otimista)
+    def _cenario_campo(campo: str, acum: float) -> tuple[float | None, float | None, float | None]:
+        r_val = ritmo.get(campo) if ritmo_disponivel else None
+        c_val = curva.get(campo)
+        candidatos = [max(acum, v) for v in (r_val, c_val) if v is not None]
+        if not candidatos:
+            return (round(acum, 2), round(acum, 2), round(acum, 2)) if acum > 0 else (None, None, None)
+        cons = round(min(candidatos), 2 if campo != "pedidos" else 1)
+        otim = round(max(candidatos), 2 if campo != "pedidos" else 1)
+        prov_base = max(acum, c_val) if c_val is not None else max(acum, r_val)
+        prov = round(prov_base, 2 if campo != "pedidos" else 1)
+        return cons, prov, otim
+
+    c_ped, p_ped, o_ped = _cenario_campo("pedidos", float(ped_26))
+    c_rec, p_rec, o_rec = _cenario_campo("receita", rec_26)
+    c_mrg, p_mrg, o_mrg = _cenario_campo("margem", marg_26)
+
+    cenarios = {
+        "conservador": {"pedidos": c_ped, "receita": c_rec, "margem": c_mrg},
+        "provavel": {"pedidos": p_ped, "receita": p_rec, "margem": p_mrg},
+        "otimista": {"pedidos": o_ped, "receita": o_rec, "margem": o_mrg},
+    }
+
+    # Explicação simples gerada a partir dos dados
+    partes = [f"Até agora: {ped_26} pedido{'s' if ped_26 != 1 else ''} e {_fmt_brl_curto(rec_26)}."]
+    if n_garantidos > 0:
+        partes.append(
+            f"Desses, {n_garantidos} pedido{'s' if n_garantidos != 1 else ''} grande{'s' if n_garantidos != 1 else ''} "
+            f"soma{'m' if n_garantidos != 1 else ''} {_fmt_brl_curto(rec_garantida)} e já "
+            f"{'estão garantidos' if n_garantidos != 1 else 'está garantido'}, mas não entram na conta da projeção."
+        )
+    if c_rec is not None and o_rec is not None:
+        if abs(o_rec - c_rec) < 100.0:
+            partes.append(f"Pelo ritmo normal, devemos fechar perto de {_fmt_brl_curto(p_rec or c_rec)}.")
+        else:
+            partes.append(f"Pelo ritmo normal, devemos fechar entre {_fmt_brl_curto(c_rec)} e {_fmt_brl_curto(o_rec)}.")
+    if rec_25_total > 0:
+        partes.append(f"A Black 2025 inteira fez {_fmt_brl_curto(rec_25_total)}.")
+    explicacao = " ".join(partes)
+
+    # Metas da Configuração: piso da Black e metas diárias de D0 a D4
+    cfg = config_params or {}
+    cfg_lower = {str(k).strip().lower(): v for k, v in cfg.items()}
+    piso_black = _parse_num(cfg_lower.get("black: piso da black", "24000")) or 24000.0
+    metas_str = str(cfg_lower.get("black: metas diárias de 26 a 30/11", cfg_lower.get("black: metas diarias de 26 a 30/11", "5000, 8000, 7000, 7000, 5000")))
+    metas_vals = [_parse_num(x) for x in metas_str.split(",") if str(x).strip()]
+    while len(metas_vals) < len(dias_26):
+        metas_vals.append(0.0)
+
+    metas_diarias = []
+    meta_hoje_info = None
+    for idx, (cod, nome, dt) in enumerate(dias_26):
+        meta_d = metas_vals[idx]
+        real_d = float(p26[p26["dt"] == dt]["receita_num"].sum()) if not p26.empty else 0.0
+        ating_d = round((real_d / meta_d * 100.0), 1) if meta_d > 0 else 0.0
+        item_m = {
+            "dia": cod,
+            "nome": nome,
+            "data": dt,
+            "meta": round(meta_d, 2),
+            "realizado": round(real_d, 2),
+            "atingimento_pct": ating_d,
+            "ocorrido": dt <= hoje_str,
+        }
+        metas_diarias.append(item_m)
+        if dt == hoje_str:
+            meta_hoje_info = item_m
+
+    if meta_hoje_info is None and metas_diarias:
+        meta_hoje_info = metas_diarias[-1] if hoje_str > dias_26[-1][2] else metas_diarias[0]
+
+    metas_resumo = {
+        "piso_black": round(piso_black, 2),
+        "realizado_total": round(rec_26, 2),
+        "acima_do_piso": rec_26 >= piso_black,
+        "falta_piso": round(max(0.0, piso_black - rec_26), 2),
+        "meta_hoje": meta_hoje_info,
+        "diarias": metas_diarias,
+    }
 
     return {
         "horas_decorridas": round(horas_decorridas, 1),
         "horas_totais": horas_totais,
         "fracao_2025_pedidos_pct": round(fracao_25_ped * 100.0, 1),
         "fracao_2025_receita_pct": round(fracao_25_rec * 100.0, 1),
+        "fora_da_curva": {
+            "limite": limite_fora_curva,
+            "mediana_90d": round(mediana_90d, 2),
+            "pedidos": n_garantidos,
+            "receita": round(rec_garantida, 2),
+            "margem": round(marg_garantida, 2),
+        },
+        "explicacao": explicacao,
         "ritmo_atual": ritmo,
         "curva_2025": curva,
+        "cenarios": cenarios,
         "faixa": {
-            "pedidos": _faixa(ritmo["pedidos"], curva["pedidos"]),
-            "receita": _faixa(ritmo["receita"], curva["receita"]),
-            "margem": _faixa(ritmo["margem"], curva["margem"]),
+            "pedidos": {"min": c_ped, "max": o_ped},
+            "receita": {"min": c_rec, "max": o_rec},
+            "margem": {"min": c_mrg, "max": o_mrg},
         },
+        "metas": metas_resumo,
         "total_2025": {
             "pedidos": ped_25_total,
             "receita": round(rec_25_total, 2),
@@ -1139,17 +1404,20 @@ def calcular_black_2026(
     atualizado_em = agora_sp.strftime("%Y-%m-%d %H:%M")
 
     prem = premissas if premissas is not None else carregar_premissas_margem(valores_margem_premissas, config_params)
+    dias_26, dias_25, antecipa_periodo = montar_calendario_black(config_params)
 
     df_p = _preparar_pedidos_black(pedidos_df)
-    cupons = calcular_bloco_cupons(df_p, hoje_str)
-    comp_2025 = calcular_bloco_2026_x_2025(df_p, hoje_str)
+    cupons = calcular_bloco_cupons(df_p, hoje_str, dias_26=dias_26, antecipa_periodo=antecipa_periodo)
+    comp_2025 = calcular_bloco_2026_x_2025(df_p, hoje_str, dias_26=dias_26, dias_25=dias_25)
     meta_ads = avaliar_gatilhos_meta(campanhas_meta, atualizado_em=meta_atualizado_em or atualizado_em)
-    saude = calcular_bloco_saude(df_p, itens_df, produtos_df, hoje_str, premissas=prem)
-    projecao = calcular_bloco_projecao(df_p, saude, agora_sp)
+    saude = calcular_bloco_saude(df_p, itens_df, produtos_df, hoje_str, premissas=prem, dias_26=dias_26)
+    projecao = calcular_bloco_projecao(df_p, saude, agora_sp, dias_26=dias_26, dias_25=dias_25, config_params=config_params)
 
     return {
         "atualizado_em": atualizado_em,
         "hoje_data": hoje_str,
+        "periodo_inicio": dias_26[0][2],
+        "periodo_fim": dias_26[-1][2],
         "margem_usado_pct": saude["margem_usado_pct"],
         "margem_lacrado_pct": saude["margem_lacrado_pct"],
         "pct_itens_padrao": saude["pct_itens_padrao"],

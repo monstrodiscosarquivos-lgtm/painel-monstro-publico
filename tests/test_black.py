@@ -129,39 +129,59 @@ def test_calculo_black_dias_e_metas():
 # ----------------------------------------------------------------------------
 # Testes da área Black 2026 (5 blocos + aba Black)
 # ----------------------------------------------------------------------------
-def test_black26_bloco1_cupons_ignora_cancelados_e_agrupa_dia_hora():
+def test_black26_bloco1_d0_a_d4_cupons_mascarados_e_antecipa_separado():
     pedidos = pd.DataFrame([
-        {"numero": "1", "email": "a@exemplo.com", "data": "2026-11-27 10:15:00", "valido": True, "subtotal": 300.0, "desconto": 75.0, "total": 225.0, "cupom": "BLACK25"},
-        {"numero": "2", "email": "b@exemplo.com", "data": "2026-11-27 10:45:00", "valido": True, "subtotal": 500.0, "desconto": 150.0, "total": 350.0, "cupom": "SULCO30"},
-        {"numero": "3", "email": "c@exemplo.com", "data": "2026-11-27 14:20:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": None},
-        {"numero": "4", "email": "d@exemplo.com", "data": "2026-11-27 15:00:00", "valido": False, "subtotal": 999.0, "desconto": 300.0, "total": 699.0, "cupom": "BLACK35"},
+        # Antecipa (12 a 25/11): entra só na linha Antecipa + Total geral, nunca nos gráficos D0..D4
+        {"numero": "A1", "email": "ant@exemplo.com", "data": "2026-11-15 11:00:00", "valido": True, "subtotal": 200.0, "desconto": 20.0, "total": 180.0, "cupom": "ANTECIPA10"},
+        # D0 (26/11): acesso antecipado com SULCO30, GRUPO25 e BLACK25 às 23h50
+        {"numero": "1", "email": "a@exemplo.com", "data": "2026-11-26 10:15:00", "valido": True, "subtotal": 500.0, "desconto": 150.0, "total": 350.0, "cupom": "SULCO30"},
+        {"numero": "2", "email": "b@exemplo.com", "data": "2026-11-26 11:45:00", "valido": True, "subtotal": 300.0, "desconto": 75.0, "total": 225.0, "cupom": "GRUPO25"},
+        {"numero": "3", "email": "c@exemplo.com", "data": "2026-11-26 23:50:00", "valido": True, "subtotal": 400.0, "desconto": 100.0, "total": 300.0, "cupom": "BLACK25"},
+        # D1 (27/11): sem cupom e cancelado (ignorado)
+        {"numero": "4", "email": "d@exemplo.com", "data": "2026-11-27 10:20:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": None},
+        {"numero": "5", "email": "e@exemplo.com", "data": "2026-11-27 15:00:00", "valido": False, "subtotal": 999.0, "desconto": 300.0, "total": 699.0, "cupom": "BLACK35"},
     ])
+    cfg = {
+        "Black: acesso Lado A": "2026-11-26",
+        "Black: início": "2026-11-27",
+        "Black: fim": "2026-11-30",
+        "Black: início do Antecipa": "2026-11-12",
+        "Black: fim do Antecipa": "2026-11-25",
+    }
     dados = motor_black.calcular_black_2026(
         pedidos, None, None,
+        config_params=cfg,
         agora_brt=pd.Timestamp("2026-11-27 16:00:00", tz="America/Sao_Paulo"),
     )
     bloco1 = dados["cupons"]
-    assert bloco1["total_pedidos"] == 3
-    assert bloco1["total_receita"] == 775.0  # (300-75) + (500-150) + 200
-    assert bloco1["total_desconto"] == 225.0
-    d1 = bloco1["por_dia"][0]
-    assert d1["dia"] == "D1" and d1["total_pedidos"] == 3
-    assert d1["cupons"]["BLACK25"] == 1 and d1["cupons"]["SULCO30"] == 1 and d1["cupons"]["Sem cupom"] == 1
-    hora10 = bloco1["por_hora_hoje"][10]
-    assert hora10["hora"] == "10h" and hora10["total_pedidos"] == 2
-    tab = {r["cupom"]: r for r in bloco1["tabela"]}
-    assert "BLACK35" not in tab  # cancelado ignorado
-    assert tab["BLACK25"]["receita"] == 225.0 and tab["BLACK25"]["desconto"] == 75.0
+    assert bloco1["total_pedidos"] == 4  # 3 no D0 + 1 no D1 (Antecipa não entra aqui)
+    assert bloco1["total_receita"] == 1075.0
+    assert bloco1["total_desconto"] == 325.0
+    assert [d["dia"] for d in bloco1["por_dia"]] == ["D0", "D1", "D2", "D3", "D4"]
+    d0 = bloco1["por_dia"][0]
+    assert d0["total_pedidos"] == 3
+    assert d0["cupons"]["Lado A 30%"] == 1
+    assert d0["cupons"]["Grupo VIP 25%"] == 1
+    assert d0["cupons"]["BLACK25"] == 1
+    # Antecipa separado + Total geral
+    assert bloco1["antecipa"]["pedidos"] == 1 and bloco1["antecipa"]["receita"] == 180.0
+    assert bloco1["total_geral"]["pedidos"] == 5 and bloco1["total_geral"]["receita"] == 1255.0
+    # Nunca expor códigos privados SULCO/GRUPO na aba Black
+    texto_aba = saida_black.preparar_aba_black(dados).to_string()
+    assert "SULCO" not in texto_aba and "GRUPO" not in texto_aba
 
 
-def test_black26_bloco2_comparacao_2026_x_2025_dias_futuros_em_branco():
+def test_black26_bloco2_comparacao_2026_x_2025_com_d0_e_dias_futuros_em_branco():
     pedidos = pd.DataFrame([
-        # 2025: D1 (28/11) 2 pedidos, D2 (29/11) 1 pedido, D4 (01/12) 1 pedido
+        # 2025: D0 (27/11) 1 pedido, D1 (28/11) 2 pedidos, D2 (29/11) 1 pedido, D4 (01/12) 1 pedido
+        {"numero": "2500", "email": "v@exemplo.com", "data": "2025-11-27 15:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": ""},
         {"numero": "2501", "email": "x@exemplo.com", "data": "2025-11-28 09:00:00", "valido": True, "subtotal": 400.0, "desconto": 100.0, "total": 300.0, "cupom": "BLACKMONSTRO"},
         {"numero": "2502", "email": "y@exemplo.com", "data": "2025-11-28 18:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": ""},
         {"numero": "2503", "email": "z@exemplo.com", "data": "2025-11-29 12:00:00", "valido": True, "subtotal": 300.0, "desconto": 75.0, "total": 225.0, "cupom": "BLACKMONSTRO"},
         {"numero": "2504", "email": "w@exemplo.com", "data": "2025-12-01 20:00:00", "valido": True, "subtotal": 300.0, "desconto": 75.0, "total": 225.0, "cupom": "BLACKMONSTRO"},
-        # 2026: D1 (27/11) 3 pedidos
+        # 2026: D0 (26/11) 2 pedidos, D1 (27/11) 3 pedidos
+        {"numero": "2600", "email": "a0@exemplo.com", "data": "2026-11-26 14:00:00", "valido": True, "subtotal": 300.0, "desconto": 75.0, "total": 225.0, "cupom": "SULCO25"},
+        {"numero": "2600b", "email": "a1@exemplo.com", "data": "2026-11-26 23:50:00", "valido": True, "subtotal": 200.0, "desconto": 50.0, "total": 150.0, "cupom": "BLACK25"},
         {"numero": "2601", "email": "a@exemplo.com", "data": "2026-11-27 10:00:00", "valido": True, "subtotal": 400.0, "desconto": 100.0, "total": 300.0, "cupom": "BLACK25"},
         {"numero": "2602", "email": "b@exemplo.com", "data": "2026-11-27 11:00:00", "valido": True, "subtotal": 400.0, "desconto": 100.0, "total": 300.0, "cupom": "BLACK25"},
         {"numero": "2603", "email": "c@exemplo.com", "data": "2026-11-27 12:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": None},
@@ -171,17 +191,17 @@ def test_black26_bloco2_comparacao_2026_x_2025_dias_futuros_em_branco():
         agora_brt=pd.Timestamp("2026-11-27 15:00:00", tz="America/Sao_Paulo"),
     )
     comp = dados["comp_2025"]
-    d1, d2, d3, d4 = comp["dias"]
+    d0, d1, d2, d3, d4 = comp["dias"]
+    assert d0["dia"] == "D0" and d0["ocorrido"] is True
+    assert d0["y2026"]["pedidos"] == 2 and d0["y2025"]["pedidos"] == 1
     assert d1["ocorrido"] is True
     assert d1["y2026"]["pedidos"] == 3 and d1["y2025"]["pedidos"] == 2
     assert d1["variacao"]["pedidos_pct"] == 50.0
-    assert d1["y2025"]["pct_com_cupom"] == 50.0
-    assert d1["y2026"]["pct_com_cupom"] == 66.7
-    # D2..D4 ainda não ocorreram: 2026 e variação devem ficar None (em branco)
     for d in (d2, d3, d4):
         assert d["ocorrido"] is False
         assert d["y2026"] is None and d["variacao"] is None
-    assert d2["y2025"]["pedidos"] == 1 and d4["y2025"]["pedidos"] == 1
+    assert comp["total"]["rotulo"] == "Total (D0 a D4)"
+    assert comp["total"]["y2026"]["pedidos"] == 5 and comp["total"]["y2025"]["pedidos"] == 5
 
 
 def test_black26_bloco3_meta_ads_todos_os_gatilhos():
@@ -306,33 +326,68 @@ def test_premissas_margem_le_configuracao_e_prioriza_aba_margem_premissas():
     assert abs(p_prio.margem_lacrado - 0.38) < 0.001
 
 
-def test_black26_bloco5_projecao_ritmo_e_curva_2025_e_privacidade_aba():
-    pedidos = pd.DataFrame([
-        # 2025: 2 pedidos nas primeiras 12h (50% da receita), 2 pedidos depois (50%) -> total 4 pedidos, R$1000
-        {"numero": "251", "email": "cli1@exemplo.com", "data": "2025-11-28 08:00:00", "valido": True, "subtotal": 250.0, "desconto": 0.0, "total": 250.0, "cupom": "BLACKMONSTRO"},
-        {"numero": "252", "email": "cli2@exemplo.com", "data": "2025-11-28 11:00:00", "valido": True, "subtotal": 250.0, "desconto": 0.0, "total": 250.0, "cupom": "BLACKMONSTRO"},
+def test_black26_bloco5_projecao_robusta_fora_da_curva_24h_cenarios_e_metas():
+    # Pedidos dos últimos 90 dias (mediana = R$200 -> limite fora da curva = min(3*200, 1500) = R$600)
+    hist_90d = [
+        {"numero": f"H{i}", "email": "h@exemplo.com", "data": f"2026-10-{10+i:02d} 12:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": ""}
+        for i in range(5)
+    ]
+    # 2025 (D0 27/11 a D4 01/12): 2 pedidos nas primeiras 36h (50% da receita), 2 depois -> total R$1.000
+    p_2025 = [
+        {"numero": "251", "email": "cli1@exemplo.com", "data": "2025-11-27 10:00:00", "valido": True, "subtotal": 250.0, "desconto": 0.0, "total": 250.0, "cupom": "BLACKMONSTRO"},
+        {"numero": "252", "email": "cli2@exemplo.com", "data": "2025-11-28 09:00:00", "valido": True, "subtotal": 250.0, "desconto": 0.0, "total": 250.0, "cupom": "BLACKMONSTRO"},
         {"numero": "253", "email": "cli3@exemplo.com", "data": "2025-11-29 14:00:00", "valido": True, "subtotal": 250.0, "desconto": 0.0, "total": 250.0, "cupom": "BLACKMONSTRO"},
         {"numero": "254", "email": "cli4@exemplo.com", "data": "2025-12-01 18:00:00", "valido": True, "subtotal": 250.0, "desconto": 0.0, "total": 250.0, "cupom": "BLACKMONSTRO"},
-        # 2026: 3 pedidos nas primeiras 12h = R$600
-        {"numero": "261", "email": "sigilo@exemplo.com", "data": "2026-11-27 09:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": "BLACK25"},
-        {"numero": "262", "email": "sigilo@exemplo.com", "data": "2026-11-27 10:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": "BLACK25"},
-        {"numero": "263", "email": "sigilo@exemplo.com", "data": "2026-11-27 11:30:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": "BLACK25"},
-    ])
+    ]
+    # 2026: 3 pedidos normais de R$200 (R$600) + 1 pedido fora da curva de R$3.000 (> R$600)
+    p_2026 = [
+        {"numero": "261", "email": "sigilo@exemplo.com", "data": "2026-11-26 10:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": "SULCO25"},
+        {"numero": "262", "email": "sigilo@exemplo.com", "data": "2026-11-26 15:00:00", "valido": True, "subtotal": 3000.0, "desconto": 0.0, "total": 3000.0, "cupom": "SULCO35"},
+        {"numero": "263", "email": "sigilo@exemplo.com", "data": "2026-11-27 09:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": "BLACK25"},
+        {"numero": "264", "email": "sigilo@exemplo.com", "data": "2026-11-27 11:00:00", "valido": True, "subtotal": 200.0, "desconto": 0.0, "total": 200.0, "cupom": "BLACK25"},
+    ]
+    cfg = {
+        "Black: piso da Black": "24000",
+        "Black: metas diárias de 26 a 30/11": "5000, 8000, 7000, 7000, 5000",
+    }
+    df_all = pd.DataFrame(hist_90d + p_2025 + p_2026)
+
+    # 1) Antes de 24h (D0 às 18h = 18h decorridas): Método A deve mostrar "aguardando 24h"
+    dados_18h = motor_black.calcular_black_2026(
+        df_all, None, None, config_params=cfg,
+        agora_brt=pd.Timestamp("2026-11-26 18:00:00", tz="America/Sao_Paulo"),
+    )
+    assert dados_18h["projecao"]["ritmo_atual"]["disponivel"] is False
+    assert dados_18h["projecao"]["ritmo_atual"]["status"] == "aguardando 24h"
+
+    # 2) Após 24h (D1 às 12h = 36h decorridas de 120h)
     dados = motor_black.calcular_black_2026(
-        pedidos, None, None,
+        df_all, None, None, config_params=cfg,
         agora_brt=pd.Timestamp("2026-11-27 12:00:00", tz="America/Sao_Paulo"),
     )
     proj = dados["projecao"]
-    assert proj["horas_decorridas"] == 12.0
-    # Ritmo: 600 / 12 * 96 = 4800; Curva 2025: 600 / 0.50 = 1200
-    assert proj["ritmo_atual"]["receita"] == 4800.0
-    assert proj["curva_2025"]["receita"] == 1200.0
-    assert proj["faixa"]["receita"] == {"min": 1200.0, "max": 4800.0}
-    assert proj["falta_bater_2025"]["receita"] == 400.0
-    assert proj["falta_bater_2025"]["pedidos"] == 1
+    assert proj["horas_decorridas"] == 36.0 and proj["horas_totais"] == 120.0
+    assert proj["fora_da_curva"]["limite"] == 600.0
+    assert proj["fora_da_curva"]["pedidos"] == 1 and proj["fora_da_curva"]["receita"] == 3000.0
+    # Ritmo normal: 600 / 36 * 120 = 2000 + 3000 garantido = 5000
+    assert proj["ritmo_atual"]["disponivel"] is True
+    assert proj["ritmo_atual"]["receita"] == 5000.0
+    # Curva 2025: 600 / 0.50 = 1200 + 3000 garantido = 4200
+    assert proj["curva_2025"]["receita"] == 4200.0
+    # Cenários: conservador = 4200, provável = 4200 (curva 2025), otimista = 5000
+    assert proj["cenarios"]["conservador"]["receita"] == 4200.0
+    assert proj["cenarios"]["provavel"]["receita"] == 4200.0
+    assert proj["cenarios"]["otimista"]["receita"] == 5000.0
+    # Explicação simples gerada a partir dos dados
+    assert "Até agora: 4 pedidos" in proj["explicacao"]
+    assert "1 pedido grande soma R$3.000" in proj["explicacao"]
+    # Metas da Configuração
+    assert proj["metas"]["piso_black"] == 24000.0
+    assert proj["metas"]["meta_hoje"]["dia"] == "D1" and proj["metas"]["meta_hoje"]["meta"] == 8000.0
 
-    # Aba Black nunca contém email ou dado pessoal
+    # Aba Black nunca contém email nem códigos privados
     df_aba = saida_black.preparar_aba_black(dados)
     texto_aba = df_aba.to_string()
     assert "sigilo@exemplo.com" not in texto_aba
     assert "cli1@exemplo.com" not in texto_aba
+    assert "SULCO" not in texto_aba and "GRUPO" not in texto_aba
