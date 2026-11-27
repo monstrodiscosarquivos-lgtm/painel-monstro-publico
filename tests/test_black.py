@@ -225,9 +225,9 @@ def test_black26_bloco3_meta_ads_todos_os_gatilhos():
     assert [a["frase"] for a in res_ok["acoes"]] == ["Não mexa em nada"]
 
 
-def test_black26_bloco4_saude_custo_variante_vs_padrao_e_semaforo():
+def test_black26_bloco4_saude_custo_variante_vs_margem_por_tipo_e_semaforo():
     # 4 sextas anteriores a 27/11/2026: 30/10, 06/11, 13/11, 20/11
-    # Em cada sexta base: 2 pedidos de R$200 (sem desconto), custo R$100 cada -> margem base = R$200/sexta
+    # Em cada sexta base: 2 pedidos de R$200 (sem desconto), produto 101 tem cost = 80 -> margem base = 2*(200-80) = R$240/sexta
     pedidos_base = []
     itens_base = []
     for idx, dt in enumerate(["2026-10-30", "2026-11-06", "2026-11-13", "2026-11-20"]):
@@ -237,34 +237,73 @@ def test_black26_bloco4_saude_custo_variante_vs_padrao_e_semaforo():
             itens_base.append({"numero": num, "valor": 200.0, "quantidade": 1, "produto_id": "101", "sku": "SKU1"})
 
     # Na Black D1 (27/11): 5 pedidos de R$200 com 25% desconto (receita líq R$150 cada = R$750)
-    # 3 itens usam produto 101 (tem cost = 80 na Nuvemshop), 2 itens usam produto 202 (sem cost -> usa padrão 50% de 200 = 100)
-    # Custo total Black = 3*80 + 2*100 = 440 -> Margem Black = 750 - 440 = 310 (> 200 base -> verde!)
+    # 3 itens usam produto 101 (cost = 80 -> 3*80 = 240)
+    # 1 item usa produto 202 (Usado sem cost -> margem usado 60% -> custo = 200 * 0.40 = 80)
+    # 1 item usa produto 303 (Novo/Lacrado sem cost -> margem lacrado 40% -> custo = 200 * 0.60 = 120)
+    # Custo total Black = 240 + 80 + 120 = 440 -> Margem Black = 750 - 440 = 310 (> 240 base -> verde!)
     pedidos_bk = []
     itens_bk = []
-    for k in range(5):
+    pids = ["101", "101", "101", "202", "303"]
+    for k, pid in enumerate(pids):
         num = f"K{k}"
-        pid = "101" if k < 3 else "202"
         pedidos_bk.append({"numero": num, "email": "bk@exemplo.com", "data": "2026-11-27 11:00:00", "valido": True, "subtotal": 200.0, "desconto": 50.0, "total": 150.0, "cupom": "BLACK25"})
         itens_bk.append({"numero": num, "valor": 200.0, "quantidade": 1, "produto_id": pid, "sku": ""})
 
     produtos = pd.DataFrame([
-        {"id": "101", "sku": "SKU1", "custo": 80.0},
-        {"id": "202", "sku": "SKU2", "custo": float("nan")},
+        {"id": "101", "sku": "SKU1", "custo": 80.0, "categorias": "LP, Usado"},
+        {"id": "202", "sku": "SKU2", "custo": float("nan"), "categorias": "LP, Usado, Rock"},
+        {"id": "303", "sku": "SKU3", "custo": float("nan"), "categorias": "LP, Novo/Lacrado, MPB"},
     ])
+    # Ignora "Black: custo padrão %" mesmo se presente na Configuração
     dados = motor_black.calcular_black_2026(
         pd.DataFrame(pedidos_base + pedidos_bk),
         pd.DataFrame(itens_base + itens_bk),
         produtos,
-        config_params={"Black: custo padrão %": "50"},
+        config_params={
+            "Black: custo padrão %": "50",
+            "Black: margem do usado": "60%",
+            "Black: margem do lacrado": "40%",
+        },
         agora_brt=pd.Timestamp("2026-11-27 12:00:00", tz="America/Sao_Paulo"),
     )
     saude = dados["saude"]
+    assert saude["margem_usado_pct"] == 60.0
+    assert saude["margem_lacrado_pct"] == 40.0
     assert saude["pct_itens_padrao"] == 40.0  # 2 de 5 itens sem custo
     assert saude["custo_black"] == 440.0
     assert saude["margem_black"] == 310.0
-    assert saude["margem_base"] == 240.0  # 2 pedidos/dia * (200 - 80) = 240
+    assert saude["margem_base"] == 240.0
     assert saude["semaforo"] == "verde"
     assert saude["frase"].startswith("Para compensar o desconto, precisamos de ")
+
+
+def test_premissas_margem_le_configuracao_e_prioriza_aba_margem_premissas():
+    # Padrão sem nenhuma aba: 60% usado e 40% lacrado
+    p_padrao = motor_black.carregar_premissas_margem()
+    assert abs(p_padrao.margem_usado - 0.60) < 0.001
+    assert abs(p_padrao.margem_lacrado - 0.40) < 0.001
+
+    # Com Configuração preenchida
+    p_cfg = motor_black.carregar_premissas_margem(None, {
+        "Black: margem do usado": "55%",
+        "Black: margem do lacrado": "35",
+    })
+    assert abs(p_cfg.margem_usado - 0.55) < 0.001
+    assert abs(p_cfg.margem_lacrado - 0.35) < 0.001
+
+    # Com margem_premissas preenchida, ela tem prioridade sobre a Configuração
+    mock_margem = [
+        ["#", "Pergunta", "Sua estimativa", "Sugestão inicial", "Como estimar", "Valor usado"],
+        ["1", "Discos usados: margem média", "", "60%", "", "62,0%"],
+        ["2", "Lacrados nacionais: margem média", "", "40%", "", "38,0%"],
+        ["", "Custos sobre a venda", "", "", "", "18,7%"],
+    ]
+    p_prio = motor_black.carregar_premissas_margem(mock_margem, {
+        "Black: margem do usado": "55%",
+        "Black: margem do lacrado": "35%",
+    })
+    assert abs(p_prio.margem_usado - 0.62) < 0.001
+    assert abs(p_prio.margem_lacrado - 0.38) < 0.001
 
 
 def test_black26_bloco5_projecao_ritmo_e_curva_2025_e_privacidade_aba():

@@ -58,26 +58,7 @@ def preparar_black_resumo(resumo: dict[str, Any]) -> list[list[str]]:
 # Aba "Black" (área Black 2026 com os 5 blocos) e coleta rápida do Meta Ads
 # ----------------------------------------------------------------------------
 ABA_BLACK = "Black"
-CONFIG_CUSTO_PADRAO = "Black: custo padrão %"
 CAMPANHAS_BLACK = ("black26_rmk", "prosp_vendas_recorrente", "black26_loja_fisica_2811")
-
-
-def garantir_config_black(planilha: Any) -> None:
-    """Garante a linha 'Black: custo padrão %' = 50 na aba Configuração sem sobrescrever edições."""
-    try:
-        aba, criada = planilha._aba("Configuração", 30, 3)
-        atuais = aba.get_all_values()
-        existentes = {str(r[0]).strip() for r in atuais if r and str(r[0]).strip()}
-        if CONFIG_CUSTO_PADRAO not in existentes:
-            linha = [CONFIG_CUSTO_PADRAO, 50, "Percentual de custo padrão quando o produto não tem custo cadastrado na Nuvemshop"]
-            if not atuais:
-                aba.update([["Parâmetro", "Valor", "O que significa"], linha], "A1", raw=True)
-            else:
-                if aba.row_count < len(atuais) + 1:
-                    aba.resize(rows=len(atuais) + 1)
-                aba.update([linha], f"A{len(atuais) + 1}", raw=True)
-    except Exception:  # noqa: BLE001 - nunca derruba a rotina
-        pass
 
 
 def preparar_aba_black(dados: dict[str, Any]) -> pd.DataFrame:
@@ -85,8 +66,9 @@ def preparar_aba_black(dados: dict[str, Any]) -> pd.DataFrame:
     linhas = [
         ["atualizado_em", str(dados.get("atualizado_em", "")), "Última atualização da aba Black (Brasília)"],
         ["hoje_data", str(dados.get("hoje_data", "")), "Data de referência"],
-        ["custo_padrao_pct", str(dados.get("custo_padrao_pct", 50.0)), "Custo padrão (%) usado quando variante não tem cost"],
-        ["pct_itens_padrao", str(dados.get("pct_itens_padrao", 0.0)), "% de itens que usaram custo padrão"],
+        ["margem_usado_pct", str(dados.get("margem_usado_pct", 60.0)), "Margem padrão (%) usada para discos usados sem custo cadastrado"],
+        ["margem_lacrado_pct", str(dados.get("margem_lacrado_pct", 40.0)), "Margem padrão (%) usada para novos/lacrados sem custo cadastrado"],
+        ["pct_itens_padrao", str(dados.get("pct_itens_padrao", 0.0)), "% de itens com margem padrão (usado/novo)"],
         ["cupons_json", json.dumps(dados.get("cupons", {}), ensure_ascii=False), "Bloco 1: Pedidos por cupom (dia, hora hoje e tabela)"],
         ["comp_2025_json", json.dumps(dados.get("comp_2025", {}), ensure_ascii=False), "Bloco 2: 2026 x 2025 por dia da Black (D1-D4)"],
         ["meta_ads_json", json.dumps(dados.get("meta_ads", {}), ensure_ascii=False), "Bloco 3: Meta Ads e gatilhos de ação"],

@@ -230,11 +230,10 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
     # Black Monstro 2026: cálculo das abas black_dia, black_resumo e Black (5 blocos)
     t_etapa = time.monotonic()
     try:
-        saida_black.garantir_config_black(planilha)
         raw_m = _ler_aba(planilha, 'margem_premissas')
-        premissas_black = motor_black.carregar_premissas_margem(raw_m)
         raw_cfg = _ler_aba(planilha, 'Configuração')
         cfg_black = {str(r[0]).strip(): str(r[1]).strip() for r in raw_cfg if len(r) >= 2 and str(r[0]).strip()} if raw_cfg else {}
+        premissas_black = motor_black.carregar_premissas_margem(raw_m, cfg_black)
 
         df_ads_black = next((d for n, d in paginas_anuncios if n == 'anuncios_campanha_dia'), None)
         if df_ads_black is None:
@@ -265,6 +264,7 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
             campanhas_meta=campanhas_meta_bk,
             config_params=cfg_black,
             agora_brt=hoje_brt,
+            premissas=premissas_black,
         )
         df_aba_black = saida_black.preparar_aba_black(dados_black_2026)
 
@@ -515,9 +515,10 @@ def rodar_black_rapido(
 
     t0 = time.monotonic()
     planilha = planilha or planilha_google.PlanilhaGoogle.conectar(config)
-    saida_black.garantir_config_black(planilha)
+    raw_m = _ler_aba(planilha, 'margem_premissas')
     raw_cfg = _ler_aba(planilha, 'Configuração')
     cfg_black = {str(r[0]).strip(): str(r[1]).strip() for r in raw_cfg if len(r) >= 2 and str(r[0]).strip()} if raw_cfg else {}
+    premissas_black = motor_black.carregar_premissas_margem(raw_m, cfg_black)
     if not campanhas_meta:
         raw_ads = _ler_aba(planilha, 'anuncios_campanha_dia')
         df_ads_bk = pd.DataFrame(raw_ads[1:], columns=raw_ads[0]) if raw_ads and len(raw_ads) > 1 else None
@@ -530,6 +531,7 @@ def rodar_black_rapido(
         campanhas_meta=campanhas_meta,
         config_params=cfg_black,
         agora_brt=agora_sp,
+        premissas=premissas_black,
     )
     df_aba_black = saida_black.preparar_aba_black(dados)
     planilha.substituir(saida_black.ABA_BLACK, df_aba_black)

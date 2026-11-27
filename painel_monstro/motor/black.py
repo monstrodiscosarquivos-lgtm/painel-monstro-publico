@@ -31,14 +31,14 @@ CAMPANHAS_BLACK_META = (
     "prosp_vendas_recorrente",
     "black26_loja_fisica_2811",
 )
-CONFIG_CUSTO_PADRAO = "Black: custo padrão %"
-CUSTO_PADRAO_DEFAULT = 50.0
+CONFIG_MARGEM_USADO = "Black: margem do usado"
+CONFIG_MARGEM_LACRADO = "Black: margem do lacrado"
 
 
 @dataclass
 class PremissasMargem:
     margem_usado: float = 0.60
-    margem_lacrado: float = 0.15
+    margem_lacrado: float = 0.40
     custos_sobre_venda: float = 0.124  # 12.4% (taxas + remuneração)
     custo_pedido: float = 8.0  # embalagem + frete por pedido
     aliquota_imposto: float = 0.063
@@ -58,12 +58,28 @@ def _parse_num(val: Any) -> float:
         return 0.0
 
 
-def carregar_premissas_margem(valores_margem_premissas: list[list[str]] | None = None) -> PremissasMargem:
-    """Extrai premissas da coluna F da aba margem_premissas se fornecida."""
-    if not valores_margem_premissas or len(valores_margem_premissas) < 4:
-        return PremissasMargem()
-
+def carregar_premissas_margem(
+    valores_margem_premissas: list[list[str]] | None = None,
+    config_params: dict[str, Any] | None = None,
+) -> PremissasMargem:
+    """Lê margens da Configuração ('Black: margem do usado' e 'Black: margem do lacrado'; padrão 60% e 40%)
+    e aplica a aba margem_premissas por cima, se existir (margem_premissas tem prioridade)."""
     p = PremissasMargem()
+
+    if config_params:
+        cfg_lower = {str(k).strip().lower(): v for k, v in config_params.items()}
+        for chave, attr in (
+            (CONFIG_MARGEM_USADO.lower(), "margem_usado"),
+            (CONFIG_MARGEM_LACRADO.lower(), "margem_lacrado"),
+        ):
+            if chave in cfg_lower:
+                v = _parse_num(cfg_lower[chave])
+                if v > 0:
+                    setattr(p, attr, v / 100.0 if v > 1.0 else v)
+
+    if not valores_margem_premissas or len(valores_margem_premissas) < 4:
+        return p
+
     try:
         # Linha 5: item 1 (Usados)
         # Linha 6: item 2 (Lacrados nacionais)
@@ -129,7 +145,7 @@ def calcular_black(
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Calcula as tabelas black_dia e black_resumo."""
     if premissas is None:
-        premissas = PremissasMargem()
+        premissas = carregar_premissas_margem(None, config_params)
     if config_params is None:
         config_params = {}
     if vip_entradas_por_dia is None:
@@ -816,10 +832,17 @@ def _calcular_custo_subconjunto(
     itens_por_pedido: dict[str, list[dict[str, Any]]],
     custo_por_pid: dict[str, float],
     custo_por_sku: dict[str, float],
-    custo_padrao_pct: float,
+    tipo_por_pid: dict[str, str],
+    tipo_por_sku: dict[str, str],
+    premissas: PremissasMargem,
 ) -> tuple[float, int, int]:
-    """Devolve (custo_total, total_itens_unidades, itens_com_custo_padrao_unidades)."""
-    fator_padrao = max(0.0, min(100.0, custo_padrao_pct)) / 100.0
+    """Devolve (custo_total, total_itens_unidades, itens_com_margem_padrao_unidades).
+
+    Quando a variante não tem custo cadastrado na Nuvemshop, usa a margem por tipo de produto
+    (usado ou novo/lacrado): custo = preço cheio * (1 - margem).
+    """
+    fator_usado = max(0.0, min(1.0, 1.0 - premissas.margem_usado))
+    fator_lacrado = max(0.0, min(1.0, 1.0 - premissas.margem_lacrado))
     custo_total = 0.0
     total_itens = 0
     itens_padrao = 0
@@ -828,7 +851,7 @@ def _calcular_custo_subconjunto(
         num = str(row.numero_str)
         itens = itens_por_pedido.get(num, [])
         if not itens:
-            custo_total += float(row.subtotal_num if row.subtotal_num > 0 else row.receita_num) * fator_padrao
+            custo_total += float(row.subtotal_num if row.subtotal_num > 0 else row.receita_num) * fator_usado
             total_itens += 1
             itens_padrao += 1
             continue
@@ -843,7 +866,9 @@ def _calcular_custo_subconjunto(
             if custo_unit > 0:
                 custo_total += custo_unit * qtd
             else:
-                custo_total += it["valor"] * qtd * fator_padrao
+                tipo_p = tipo_por_pid.get(it["pid"]) or tipo_por_sku.get(it["sku"]) or "usado"
+                fator = fator_lacrado if tipo_p == "lacrado" else fator_usado
+                custo_total += it["valor"] * qtd * fator
                 itens_padrao += qtd
 
     return round(custo_total, 2), total_itens, itens_padrao
@@ -854,24 +879,38 @@ def calcular_bloco_saude(
     itens_df: pd.DataFrame | None,
     produtos_df: pd.DataFrame | None,
     hoje_str: str,
-    custo_padrao_pct: float = CUSTO_PADRAO_DEFAULT,
+    premissas: PremissasMargem | None = None,
 ) -> dict[str, Any]:
     """Bloco 4: Saúde da Black (margem bruta x volume) comparada às 4 semanas anteriores."""
-    # Mapas de custo da variante na Nuvemshop
+    if premissas is None:
+        premissas = PremissasMargem()
+
+    # Mapas de custo da variante e tipo (usado/lacrado) na Nuvemshop
     custo_por_pid: dict[str, float] = {}
     custo_por_sku: dict[str, float] = {}
+    tipo_por_pid: dict[str, str] = {}
+    tipo_por_sku: dict[str, str] = {}
     if produtos_df is not None and not produtos_df.empty:
+        cat_col = "categorias" if "categorias" in produtos_df.columns else ("categoria" if "categoria" in produtos_df.columns else "")
         for _, r in produtos_df.iterrows():
+            pid = str(r.get("id", "")).strip()
+            if pid.endswith(".0"):
+                pid = pid[:-2]
+            sku = str(r.get("sku", "")).strip()
+            pid_ok = pid if (pid and pid.lower() != "nan") else ""
+            sku_ok = sku if (sku and sku.lower() != "nan") else ""
             custo_v = _parse_num(r.get("custo", r.get("cost", 0)))
             if custo_v > 0:
-                pid = str(r.get("id", "")).strip()
-                if pid.endswith(".0"):
-                    pid = pid[:-2]
-                sku = str(r.get("sku", "")).strip()
-                if pid and pid.lower() != "nan":
-                    custo_por_pid[pid] = custo_v
-                if sku and sku.lower() != "nan":
-                    custo_por_sku[sku] = custo_v
+                if pid_ok:
+                    custo_por_pid[pid_ok] = custo_v
+                if sku_ok:
+                    custo_por_sku[sku_ok] = custo_v
+            if cat_col:
+                tipo_p = classificar_tipo_produto(str(r.get(cat_col, "") or ""))
+                if pid_ok:
+                    tipo_por_pid[pid_ok] = tipo_p
+                if sku_ok:
+                    tipo_por_sku[sku_ok] = tipo_p
 
     # Agrupar itens por número de pedido
     itens_por_pedido: dict[str, list[dict[str, Any]]] = {}
@@ -903,7 +942,9 @@ def calcular_bloco_saude(
         sub_b = validos[validos["dt"].isin(datas_base)]
         rec_b = float(sub_b["receita_num"].sum())
         ped_b = int(len(sub_b))
-        custo_b, _, _ = _calcular_custo_subconjunto(sub_b, itens_por_pedido, custo_por_pid, custo_por_sku, custo_padrao_pct)
+        custo_b, _, _ = _calcular_custo_subconjunto(
+            sub_b, itens_por_pedido, custo_por_pid, custo_por_sku, tipo_por_pid, tipo_por_sku, premissas
+        )
         marg_b = rec_b - custo_b
         base_por_dia.append({
             "dia": codigo,
@@ -925,7 +966,7 @@ def calcular_bloco_saude(
     rec_bk = float(sub_bk["receita_num"].sum()) if ped_bk else 0.0
     desc_bk = float(sub_bk["desconto_num"].sum()) if ped_bk else 0.0
     custo_bk, total_itens_bk, itens_padrao_bk = _calcular_custo_subconjunto(
-        sub_bk, itens_por_pedido, custo_por_pid, custo_por_sku, custo_padrao_pct
+        sub_bk, itens_por_pedido, custo_por_pid, custo_por_sku, tipo_por_pid, tipo_por_sku, premissas
     )
     marg_bk = rec_bk - custo_bk
     pct_itens_padrao = round((itens_padrao_bk / total_itens_bk * 100.0), 1) if total_itens_bk > 0 else 0.0
@@ -972,7 +1013,8 @@ def calcular_bloco_saude(
     frase = f"Para compensar o desconto, precisamos de {_fmt_num(x_extra)} pedidos a mais por dia; estamos com {_fmt_num(y_extra)}."
 
     return {
-        "custo_padrao_pct": round(custo_padrao_pct, 1),
+        "margem_usado_pct": round(premissas.margem_usado * 100.0, 1),
+        "margem_lacrado_pct": round(premissas.margem_lacrado * 100.0, 1),
         "pct_itens_padrao": pct_itens_padrao,
         "dias_ocorridos": n_dias,
         "desconto_dado": round(desc_bk, 2),
@@ -1086,6 +1128,8 @@ def calcular_black_2026(
     config_params: dict[str, Any] | None = None,
     agora_brt: pd.Timestamp | None = None,
     meta_atualizado_em: str = "",
+    premissas: PremissasMargem | None = None,
+    valores_margem_premissas: list[list[str]] | None = None,
 ) -> dict[str, Any]:
     """Calcula os 5 blocos completos da área Black 2026 (agregados, sem dados de cliente)."""
     if agora_brt is None:
@@ -1094,22 +1138,20 @@ def calcular_black_2026(
     hoje_str = agora_sp.strftime("%Y-%m-%d")
     atualizado_em = agora_sp.strftime("%Y-%m-%d %H:%M")
 
-    cfg = config_params or {}
-    custo_cfg = _parse_num(cfg.get(CONFIG_CUSTO_PADRAO, CUSTO_PADRAO_DEFAULT))
-    if custo_cfg <= 0 or custo_cfg > 100:
-        custo_cfg = CUSTO_PADRAO_DEFAULT
+    prem = premissas if premissas is not None else carregar_premissas_margem(valores_margem_premissas, config_params)
 
     df_p = _preparar_pedidos_black(pedidos_df)
     cupons = calcular_bloco_cupons(df_p, hoje_str)
     comp_2025 = calcular_bloco_2026_x_2025(df_p, hoje_str)
     meta_ads = avaliar_gatilhos_meta(campanhas_meta, atualizado_em=meta_atualizado_em or atualizado_em)
-    saude = calcular_bloco_saude(df_p, itens_df, produtos_df, hoje_str, custo_padrao_pct=custo_cfg)
+    saude = calcular_bloco_saude(df_p, itens_df, produtos_df, hoje_str, premissas=prem)
     projecao = calcular_bloco_projecao(df_p, saude, agora_sp)
 
     return {
         "atualizado_em": atualizado_em,
         "hoje_data": hoje_str,
-        "custo_padrao_pct": round(custo_cfg, 1),
+        "margem_usado_pct": saude["margem_usado_pct"],
+        "margem_lacrado_pct": saude["margem_lacrado_pct"],
         "pct_itens_padrao": saude["pct_itens_padrao"],
         "cupons": cupons,
         "comp_2025": comp_2025,

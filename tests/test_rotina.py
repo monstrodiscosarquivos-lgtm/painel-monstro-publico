@@ -273,7 +273,7 @@ def test_black_rapido_sai_fora_da_janela(config, mundo, capsys):
     assert mundo['planilha_falsa'].abas == {}
 
 
-def test_black_rapido_dentro_da_janela_grava_aba_black_e_config(config, mundo):
+def test_black_rapido_dentro_da_janela_grava_aba_black_sem_criar_custo_padrao(config, mundo):
     import pandas as pd
     mundo['falsa'].dados['orders'].append(
         pedido_api(50, atualizado='2026-11-27T13:00:00+0000', created_at='2026-11-27T13:00:00+0000',
@@ -285,9 +285,10 @@ def test_black_rapido_dentro_da_janela_grava_aba_black_e_config(config, mundo):
     )
     assert res['pulado'] is False
     assert 'Black' in mundo['planilha_falsa'].abas
-    assert 'Configuração' in mundo['planilha_falsa'].abas
-    cfg_rows = mundo['planilha_falsa'].abas['Configuração'].get_all_values()
-    assert any(r and r[0] == 'Black: custo padrão %' and str(r[1]) == '50' for r in cfg_rows)
+    # Não deve criar a linha antiga "Black: custo padrão %" na Configuração
+    if 'Configuração' in mundo['planilha_falsa'].abas:
+        cfg_rows = mundo['planilha_falsa'].abas['Configuração'].get_all_values()
+        assert not any(r and r[0] == 'Black: custo padrão %' for r in cfg_rows)
 
 
 def test_workflow_black_rapido_estrutura():

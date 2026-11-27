@@ -7,12 +7,12 @@
   - Novo workflow leve `.github/workflows/black-rapido.yml` ("Black rápido", cron `*/20 * * * *`, grupo de concorrência próprio `black-rapido`, ativo somente entre `2026-11-27` e `2026-12-01`): baixa apenas pedidos das últimas 48h e insights do Meta Ads (hoje/ontem/3d) e grava a aba `Black`.
 
 - **Parte B · Área "Black 2026" na aba `Black` e no Painel Web:**
-  - Motor em `painel_monstro/motor/black.py` e saída em `painel_monstro/saidas/black.py` gravando a aba `Black` (somente agregados, sem dados de cliente) e garantindo a configuração `Black: custo padrão %` (valor inicial `50`) na aba `Configuração`.
+  - Motor em `painel_monstro/motor/black.py` e saída em `painel_monstro/saidas/black.py` gravando a aba `Black` (somente agregados, sem dados de cliente). Para itens sem custo cadastrado na Nuvemshop, o cálculo usa a margem por tipo de produto lida da aba `Configuração` (`Black: margem do usado` = 60% e `Black: margem do lacrado` = 40% por padrão), mantendo prioridade da aba `margem_premissas` quando existir.
   - 5 blocos implementados no motor e na seção "Black 2026" de `apps-script/painel-web/painel-monstro.html` (`Painel.html` regerado via `montar_painel_web.py`):
     1. Pedidos pagos por cupom (barras empilhadas por dia D1 a D4 e por hora no dia de hoje + tabela com pedidos, receita, ticket médio e desconto).
     2. 2026 x 2025 por dia da Black (D1 sexta a D4 segunda e total, com variação em % e dias futuros em branco).
     3. Meta Ads: o que fazer agora (gatilhos automáticos para `black26_rmk`, `prosp_vendas_recorrente`, `black26_loja_fisica_2811` + tabela de métricas e hora da atualização).
-    4. Saúde da Black (margem bruta x linha de base das 4 semanas anteriores, custo real da variante ou padrão configurável com marcação de %, semáforo verde/amarelo/vermelho e frase pronta).
+    4. Saúde da Black (margem bruta x linha de base das 4 semanas anteriores, custo real da variante ou margem padrão por tipo usado/novo com marcação de %, semáforo verde/amarelo/vermelho e frase pronta).
     5. Projeção dos 4 dias (ritmo atual por hora vs curva horária de 2025, faixa entre os dois e quanto falta para bater 2025).
 
 Próximo passo: Túlio subir os arquivos alterados para o GitHub, atualizar `Painel.html` no Apps Script e conferir a primeira execução do workflow "Black rápido".

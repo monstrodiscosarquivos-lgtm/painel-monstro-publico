@@ -5382,7 +5382,10 @@ function renderBlack26(){
       </div>`;
   }
   if ($("bk26-saude-nota")){
-    $("bk26-saude-nota").textContent = "Custo dos produtos: " + pct(saude.pct_itens_padrao || 0) + " dos itens usaram o custo padrão de " + pct(saude.custo_padrao_pct || 50) + " (editável na aba Configuração em \"Black: custo padrão %\").";
+    const normPct = v => (Number.isFinite(v) && v > 0) ? (v <= 1 ? v * 100 : v) : null;
+    const mUsado = normPct(num(saude.margem_usado_pct)) ?? normPct(num(cfgVal(/^black:\s*margem do usado/i))) ?? 60;
+    const mLacrado = normPct(num(saude.margem_lacrado_pct)) ?? normPct(num(cfgVal(/^black:\s*margem do lacrado/i))) ?? 40;
+    $("bk26-saude-nota").textContent = pct(saude.pct_itens_padrao || 0) + " de itens com margem padrão (usado " + pct(mUsado) + ", novo " + pct(mLacrado) + ").";
   }
 
   /* Bloco 5: Projeção */
