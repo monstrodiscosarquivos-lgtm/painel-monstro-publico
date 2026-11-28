@@ -348,3 +348,28 @@ eferencia.
 - **Workflow e concorrência:**
   - `.github/workflows/black-rapido.yml` passou a aceitar `repository_dispatch: types: [black-rapido]`, mantendo `schedule: cron: '*/20 * * * *'` e `workflow_dispatch` como reserva.
   - Concorrência confirmada sem atropelo: `black-rapido.yml` usa `group: black-rapido` (`cancel-in-progress: false`); `rotina.yml` e `cadastro.yml` compartilham `group: rotina-painel` (`cancel-in-progress: false`).
+
+## D-110 · Remoção de códigos de cupons privados e máscara pela Configuração (27/11/2026)
+
+- **Contexto:** códigos de cupom privados (Lado A e Grupo VIP) não devem ficar fixos nem citados no repositório público.
+- **Implementação em `painel_monstro/motor/black.py`:**
+  - Removida a lista fixa e o dicionário de rótulos com códigos privados.
+  - O motor passou a ler `"Black: cupons"` e `"Black: rótulos dos cupons privados"` (formato `"PREFIXO=Rótulo, PREFIXO=Rótulo"`) da aba `Configuração`.
+  - Códigos cujo prefixo combina com um item configurado são exibidos como `"<Rótulo> <número>%"` (com o número do fim do código); `BLACK` e `ANTECIPA` continuam aparecendo pelo código.
+- **Auditoria (`scripts/auditar_publicacao.py`) e testes:**
+  - Adicionada checagem pela variável de ambiente opcional `CUPONS_PRIVADOS`: quando definida, falha sem imprimir os códigos se qualquer código/prefixo listado aparecer nos arquivos versionados; quando ausente, a checagem é pulada.
+  - Testes atualizados para usar somente códigos fictícios (`PRIVA*` / `PRIVB*`) e documentação/scripts limpos de ocorrências anteriores (sem alterar o histórico do git).
+
+## D-111 · Correção do timeout da rotina e análise semanal Cadastro x vendas (27/11/2026)
+
+- **Contexto:** a rotina no GitHub Actions estourou o limite de 38 minutos sem exibir nenhuma linha de log no passo principal; além disso, era necessário responder semanalmente (desde julho/2025, segunda a domingo) se cadastrar mais discos aumenta as vendas e quanto da receita vem de discos recém-cadastrados.
+- **Correções no timeout da rotina:**
+  - Adicionado `PYTHONUNBUFFERED: '1'` nos workflows `.github/workflows/rotina.yml`, `.github/workflows/black-rapido.yml` e `.github/workflows/cadastro.yml`, e `sys.stdout.reconfigure(line_buffering=True)` + `flush=True` em `painel_monstro/rotina.py` para o progresso aparecer em tempo real no GitHub Actions.
+  - Configurado `cliente.set_timeout(60)` em `painel_monstro/saidas/planilha_google.py` para nenhuma chamada à Planilha Google travar indefinidamente sem resposta HTTP.
+  - Otimizado `cadastro.passo_rotina` em `painel_monstro/saidas/cadastro.py` (orçamento `orcamento_s=360` na rotina, reaproveitamento dos produtos já baixados em `tabelas.produtos`, escrita com `batch_update` e salto de escrita quando não há mudanças no rascunho).
+- **Análise semanal Cadastro x vendas (somente agregados, sem dados de cliente):**
+  - Criado motor em `painel_monstro/motor/cadastro_vendas.py` e saída em `painel_monstro/saidas/cadastro_vendas.py` gravando a aba agregada `"Cadastro x vendas"` e criando automaticamente a linha `"Semanas com promoção"` na aba `Configuração`.
+  - Série semanal (segunda a domingo, desde `2025-06-30`): discos cadastrados na semana (`criado_em`), pedidos válidos, itens vendidos, receita, gasto no Meta Ads e marcação automática de semanas promocionais por cupons sazonais/de campanha (excluindo `VOLTA*` e `RASPA*`) somada à lista manual em `"Semanas com promoção"`.
+  - Distribuição por idade do cadastro na venda (`<=7d`, `8-30d`, `31-90d`, `>90d`) em itens e receita, e mediana de dias até vender separada por usado (`estoque <= 1`) e novo/lacrado (`estoque > 1`).
+  - Correlações de Pearson (`r`) e Spearman (`rho`) para defasagens `t`, `t+1` e `t+2`, lado a lado com e sem semanas de promoção, além de regressão linear múltipla (`vendas ~ cadastros_t + cadastros_t-1 + promocao + gasto_meta`) em NumPy puro com efeito estimado de `+10 discos cadastrados`, intervalo de confiança de 95% e aviso de causalidade.
+  - Criada a área `#view-cadvendas` ("Cadastro x vendas") em `apps-script/painel-web/painel-monstro.html` e compilado `apps-script/painel-web/Painel.html` via `montar_painel_web.py`.

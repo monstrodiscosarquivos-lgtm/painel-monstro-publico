@@ -681,7 +681,7 @@ def ficha_pelo_discogs(linha,release,extras):
 
 
 def _data_do_lote(did):
-    m=re.match(r'^(\d{4})-(\d{2})-(\d{2})',str(did)) or re.match(r'^(\d{2})(\d{2})(\d{2})N?[a-z]-',str(did))
+    m=re.match(r'^(\d{4})-(\d{2})-(\d{2})',str(did)) or re.match(r'^(\d{2})(\d{2})(\d{2})[NL]?[a-z]-',str(did))
     if not m: return None
     a,mes,d=m.groups()
     try: return pd.Timestamp(int(a) if len(a)==4 else 2000+int(a),int(mes),int(d),tz='America/Sao_Paulo')
@@ -749,8 +749,10 @@ def conciliar_com_site(planilha,produtos):
     return feitos
 
 
-def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=None):
+def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=None,orcamento_s=None):
     """Enriquece rascunhos e processa só aprovados; erro de uma linha não derruba a loja."""
+    import time
+    inicio_cad=time.monotonic()
     resumo={'criados':0,'erros':0,'rascunhos':0}
     if not ler(planilha,ABA): return resumo
     preparar_abas(planilha)
@@ -760,6 +762,13 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
     fs=ler(planilha,'cadastro_fotos'); fotos_lista=[dict(zip(fs[0],r)) for r in fs[1:]] if fs else []
     c={r[0]:r[1] for r in ler(planilha,'Configuração') if len(r)>1}
     repetidos=[str(r[0]) for r in v[1:] if r and r[0]]
+    exibir_por_pid={}
+    df_prod=getattr(tabelas,'produtos',None)
+    if df_prod is not None and not getattr(df_prod,'empty',True) and 'id' in df_prod.columns:
+        for pr in df_prod.to_dict('records'):
+            pid_n=numero(pr.get('id'))
+            if pid_n:
+                exibir_por_pid[str(int(pid_n))]=pr.get('exibir') in (True,1,'True','TRUE','true','1','sim','Sim')
     def gravador(did):
         def gravar(mudancas):
             # Reencontra o ID e relê status. Não sobrescreve uma edição/reordenação feita no painel.
@@ -772,8 +781,13 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
             if 'produto_id' in mudancas and row.get('produto_id') and str(row['produto_id'])!=str(mudancas['produto_id']):
                 raise ErroCadastro('produto_id alterado; interrompido')
             aba=planilha._ss.worksheet(ABA)
-            for k,val in {**mudancas,'atualizado_em':pd.Timestamp.now(tz='America/Sao_Paulo').strftime('%Y-%m-%d %H:%M')}.items():
-                aba.update([[val]],f'{_letra(atuais[0].index(k)+1)}{n}',raw=True)
+            pacote={**mudancas,'atualizado_em':pd.Timestamp.now(tz='America/Sao_Paulo').strftime('%Y-%m-%d %H:%M')}
+            if hasattr(aba,'batch_update'):
+                lote=[{'range':f'{_letra(atuais[0].index(k)+1)}{n}','values':[[val]]} for k,val in pacote.items() if k in atuais[0]]
+                if lote: aba.batch_update(lote,value_input_option='RAW')
+            else:
+                for k,val in pacote.items():
+                    aba.update([[val]],f'{_letra(atuais[0].index(k)+1)}{n}',raw=True)
         return gravar
     cliente_discogs=discogs or Discogs(config.discogs_token)
     previas_feitas=0  # D-090: prévias (baixar e ajustar fotos) por rodada têm limite
@@ -844,8 +858,12 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                               Path(pasta_api)/('estoque_'+sku_da_linha(did)+'.json'),confirmar_soma)
                 continue
             if l['status']=='criado' and l.get('produto_id'):
-                loja=LojaCadastro(api or NuvemshopAPI(config))
-                if loja.produto(l['produto_id']).get('published') is True: gravar({'status':'publicado'})
+                pid_c=str(l['produto_id']).strip()
+                if pid_c in exibir_por_pid:
+                    if exibir_por_pid[pid_c]: gravar({'status':'publicado'})
+                else:
+                    loja=LojaCadastro(api or NuvemshopAPI(config))
+                    if loja.produto(pid_c).get('published') is True: gravar({'status':'publicado'})
                 if l.get('subir_loja') != 'pedido':
                     continue
 
@@ -880,6 +898,8 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                     raise PendenciaFotos('não foi possível acessar a pasta de entrada') from None
                 minhas_fotos=resolver_fotos(planilha,drive,minhas_fotos)
             if l['status']=='rascunho':
+                if orcamento_s is not None and (time.monotonic()-inicio_cad)>orcamento_s:
+                    continue
                 lacrado=eh_lacrado(l)
                 sem_oficial=lacrado and not tem_foto_oficial(minhas_fotos)
                 dados={'preco_referencia':preco_referencia(l.get('titulo',''),tabelas.produtos,pd.Timestamp.now().date())}
@@ -938,7 +958,10 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                     if aviso:
                         if aviso not in pend: dados['pendencias']='; '.join(filter(None,[pend,aviso]))
                         dados['publicar']='nao'
-                gravar(dados); resumo['rascunhos']+=1
+                mudou={k:val_d for k,val_d in dados.items() if str(l.get(k,''))!=str(val_d)}
+                if mudou:
+                    gravar(mudou)
+                resumo['rascunhos']+=1
                 continue
             if not numero(l.get('preco')): raise ErroCadastro('sem preço')
             loja=LojaCadastro(api or NuvemshopAPI(config))

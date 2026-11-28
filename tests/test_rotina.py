@@ -54,7 +54,7 @@ def test_rotina_faz_coletor_motor_e_planilha(config, mundo, capsys):
     assert set(mundo['planilha_falsa'].abas) == {'custos_automaticos', 'clientes', 'pedidos', 'itens', 'produtos', 'indicadores', 'custos', 'alertas', 'Régua', 'rodada', 'resumo_email', 'meta_sumiu_180', 'meta_nao_abre', 'meta_compradores_180', 'meta_resumo', 'atual', 'mensal', 'coortes',
                                                        'regua_hoje', 'regua_resultados', 'carrinhos_dia', 'vale_a_pena',
                                                        'Configuração', 'anuncios_notas', 'anuncios_direcao', 'anuncios_resumo', 'k7_resumo',
-                                                       'black_dia', 'black_resumo', 'Black'}
+                                                       'black_dia', 'black_resumo', 'Black', 'Cadastro x vendas'}
     g = {x.aba: x.linhas for x in r['gravacoes']}
     assert (g['clientes'], g['pedidos'], g['itens'], g['produtos']) == (3, 3, 6, 3)
     assert [e['etapa'] for e in r['etapas']][0] == 'Etapa 0 · Pós-compra'
@@ -62,12 +62,19 @@ def test_rotina_faz_coletor_motor_e_planilha(config, mundo, capsys):
     assert saida.index('[1/5]') < saida.index('[2/5]') < saida.index('[3/5]') < saida.index('[5/5]')
 
 
+def _snapshot_rotina(planilha_falsa):
+    tabs = {t: a.get_all_values() for t, a in planilha_falsa.abas.items() if t not in ('indicadores', 'custos_automaticos', 'rodada')}
+    if 'black_resumo' in tabs:
+        tabs['black_resumo'] = [[r[0], '', *r[2:]] if r and r[0] == 'atualizado_em' else r for r in tabs['black_resumo']]
+    return tabs
+
+
 def test_segunda_rotina_baixa_so_o_que_mudou_e_nao_duplica(config, mundo):
     rodar(config, mundo)
-    antes = {t: a.get_all_values() for t, a in mundo['planilha_falsa'].abas.items() if t not in ('indicadores', 'custos_automaticos', 'rodada')}
+    antes = _snapshot_rotina(mundo['planilha_falsa'])
     r = rodar(config, mundo)
     assert all(v['modo'] == 'incremental' and v['novos'] == 0 for v in r['coleta'].values())
-    depois = {t: a.get_all_values() for t, a in mundo['planilha_falsa'].abas.items() if t not in ('indicadores', 'custos_automaticos', 'rodada')}
+    depois = _snapshot_rotina(mundo['planilha_falsa'])
     assert depois == antes
     automaticos = mundo['planilha_falsa'].abas['custos_automaticos'].get_all_values()[1:]
     assert len({tuple(l[:3]) for l in automaticos}) == len(automaticos)

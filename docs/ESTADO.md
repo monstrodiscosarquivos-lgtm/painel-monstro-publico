@@ -1,3 +1,27 @@
+# Atualização de sessão · Timeout da rotina corrigido e área Cadastro x vendas (D-111), 27/11/2026
+
+- **Correção do timeout da rotina (38 min sem log):**
+  - `PYTHONUNBUFFERED: '1'` nos workflows (`.github/workflows/rotina.yml`, `black-rapido.yml`, `cadastro.yml`) e `line_buffering=True` + `flush=True` em `painel_monstro/rotina.py` para o log aparecer em tempo real.
+  - Timeout de 60 s nas chamadas HTTP do `gspread` (`painel_monstro/saidas/planilha_google.py`).
+  - `cadastro.passo_rotina` em `painel_monstro/saidas/cadastro.py` otimizado com `orcamento_s=360`, reaproveitamento do cache de produtos já baixado, `batch_update` na planilha e salto de linhas sem alteração.
+- **Análise e aba "Cadastro x vendas" (somente agregados, desde julho/2025):**
+  - Motor `painel_monstro/motor/cadastro_vendas.py` e saída `painel_monstro/saidas/cadastro_vendas.py` conectados na rotina (`Cadastro x vendas` + linha configurável `"Semanas com promoção"` na aba `Configuração`).
+  - Calcula série semanal (segunda a domingo), % de itens e receita por idade do cadastro (`<=7d`, `8-30d`, `31-90d`, `>90d`), mediana de dias até vender (usado vs novo/lacrado), Pearson e Spearman (`t`, `t+1`, `t+2`) com e sem semanas promocionais, e regressão múltipla com efeito de `+10 discos cadastrados` e IC 95%.
+  - Seção `#view-cadvendas` ("Cadastro x vendas") criada em `apps-script/painel-web/painel-monstro.html` e compilada em `apps-script/painel-web/Painel.html`.
+
+Próximo passo: Túlio subir os arquivos alterados para o GitHub, atualizar `Painel.html` no Apps Script e acompanhar a próxima execução da "Rotina do Painel".
+
+# Atualização de sessão · Correção de privacidade dos cupons privados na Black (D-110), 27/11/2026
+
+- **Cupons privados lidos da Configuração (`painel_monstro/motor/black.py`):**
+  - Removidos a lista fixa de cupons privados e o dicionário com códigos reais.
+  - O motor lê `"Black: cupons"` e `"Black: rótulos dos cupons privados"` (`PREFIXO=Rótulo, PREFIXO=Rótulo`) da aba `Configuração`, exibindo `"<Rótulo> <número>%"` e mantendo `BLACK` e `ANTECIPA` pelo código.
+- **Limpeza e auditoria:**
+  - Substituídos códigos anteriores por equivalentes genéricos/fictícios em `scripts/categorias_black.py` e `tests/test_black.py` (sem alterar o histórico do git).
+  - `scripts/auditar_publicacao.py` passou a aceitar a variável de ambiente opcional `CUPONS_PRIVADOS` para barrar vazamento de cupons privados nos arquivos versionados.
+
+Próximo passo: na aba `Configuração` da planilha privada, garantir a linha `"Black: rótulos dos cupons privados"` no formato `PREFIXO=Rótulo, PREFIXO=Rótulo`, subir os arquivos alterados e rodar os relógios do Apps Script.
+
 # Atualização de sessão · Relógios do Apps Script para Rotina do Painel e Black rápido (D-109), 27/11/2026
 
 - **Relógios no Apps Script (`apps-script/vigia-cadastro.gs`):**

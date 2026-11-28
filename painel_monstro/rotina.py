@@ -23,8 +23,8 @@ import pandas as pd
 from painel_monstro.log_publico import comando_seguro, ArgumentParserSeguro, resumo_erro
 from painel_monstro.config import Config, carregar
 from painel_monstro.coletor import nuvemshop_api
-from painel_monstro.motor import black as motor_black, indicadores, regua
-from painel_monstro.saidas import anuncios, black as saida_black, brevo, cadastro, ga4, carrinhos_planilha, custos_automaticos, k7, meta, newsletter, planilha_google, raspadinha, raspadinha_lembrete, regua_planilha, resumos_painel
+from painel_monstro.motor import black as motor_black, cadastro_vendas as motor_cv, indicadores, regua
+from painel_monstro.saidas import anuncios, black as saida_black, brevo, cadastro, cadastro_vendas as saida_cv, ga4, carrinhos_planilha, custos_automaticos, k7, meta, newsletter, planilha_google, raspadinha, raspadinha_lembrete, regua_planilha, resumos_painel
 
 SEGREDOS_OBRIGATORIOS = {
     'NUVEMSHOP_STORE_ID': 'nuvemshop_store_id',
@@ -61,6 +61,7 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
         return dur
 
     # 1. Coletor
+    print('[1/5] Coletor: conectando na Nuvemshop...', flush=True)
     t_etapa = time.monotonic()
     api = api or nuvemshop_api.NuvemshopAPI(config)
     req_antes = getattr(api, 'requisicoes', 0)
@@ -106,11 +107,12 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
     pagina_das_tabelas.append(('indicadores', planilha_google.resumo_indicadores(calculados)))
     cabecalhos = [planilha.garantir_cabecalho(planilha_google.ABA_CUSTOS, planilha_google.CUSTOS_COLUNAS, planilha_google.CUSTOS_NOTAS),
                   planilha.garantir_cabecalho(planilha_google.ABA_ALERTAS, planilha_google.ALERTAS_COLUNAS, planilha_google.ALERTAS_NOTAS)]
+    print('[2/5] Calculando plano da fila, Brevo e Meta Ads...', flush=True)
     plano_fila = None
     if carrinhos:
         t_etapa = time.monotonic()
         plano_fila = carrinhos_planilha.planejar_fila(planilha, api, tabelas, fila_unica=True)
-        print(f'      Plano da fila de carrinhos: {_medir("carrinhos_plano", t_etapa)} s')
+        print(f'      Plano da fila de carrinhos: {_medir("carrinhos_plano", t_etapa)} s', flush=True)
     fila_final = {str(i): e for i, e in enumerate(plano_fila.finais)} if plano_fila is not None else None
     t_etapa = time.monotonic()
     pagina_dos_resumos = resumos_painel.montar_resumos(planilha, tabelas, calculados, classificacao, params_regua=params_regua, fila=fila_final)
@@ -211,7 +213,7 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
     _medir('gravacao_planilha', t_grav)
     t_etapa = time.monotonic()
     try:
-        cad = cadastro.passo_rotina(config, planilha, tabelas, pasta_api, api=api)
+        cad = cadastro.passo_rotina(config, planilha, tabelas, pasta_api, api=api, orcamento_s=360)
         print(f'      Cadastro: {cad["rascunhos"]} rascunhos, {cad["criados"]} criados, {cad["erros"]} pendências ({_medir("cadastro", t_etapa)} s)')
     except Exception:
         _medir('cadastro', t_etapa)
@@ -281,6 +283,31 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
         print(f'      Black · Lado A no Brevo: {res_la.get("status", "ok")}; {res_la.get("adicionados", 0)} adicionados.')
     except Exception as erro_la:  # noqa: BLE001 - nunca derruba a rotina
         print(f'      Black · Lado A no Brevo: indisponível ({_resumo_do_erro(erro_la)}); a próxima rodada tenta de novo.')
+
+    # Cadastro x vendas (D-111): série semanal agregada desde julho/2025
+    t_etapa = time.monotonic()
+    try:
+        saida_cv.garantir_config_promocoes(planilha)
+        raw_cfg_cv = _ler_aba(planilha, 'Configuração')
+        cfg_cv = {str(r[0]).strip(): str(r[1]).strip() for r in raw_cfg_cv if len(r) >= 2 and str(r[0]).strip()} if raw_cfg_cv else {}
+        df_ads_cv = next((d for n, d in paginas_anuncios if n == 'anuncios_campanha_dia'), None)
+        if df_ads_cv is None:
+            raw_ads_cv = _ler_aba(planilha, 'anuncios_campanha_dia')
+            df_ads_cv = pd.DataFrame(raw_ads_cv[1:], columns=raw_ads_cv[0]) if raw_ads_cv and len(raw_ads_cv) > 1 else None
+        dados_cv = motor_cv.calcular_cadastro_vendas(
+            produtos_df=tabelas.produtos,
+            pedidos_df=tabelas.pedidos,
+            itens_df=tabelas.itens,
+            anuncios_campanha_dia_df=df_ads_cv,
+            config_params=cfg_cv,
+            agora_brt=hoje_brt,
+        )
+        df_aba_cv = saida_cv.preparar_aba_cadastro_vendas(dados_cv)
+        planilha.substituir(saida_cv.ABA_CADASTRO_VENDAS, df_aba_cv)
+        print(f'      Cadastro x vendas: {dados_cv["total_semanas"]} semana(s) ({_medir("cadastro_vendas", t_etapa)} s).')
+    except Exception as erro_cv:  # noqa: BLE001
+        _medir('cadastro_vendas', t_etapa)
+        print(f'      Cadastro x vendas: indisponível ({_resumo_do_erro(erro_cv)}); aba anterior mantida.')
 
     print('[5/5] Resumos para o painel e para o email de segunda')
     print('      Brevo: etapa processada; conferir resultado na planilha.')
@@ -566,6 +593,8 @@ def rodar_cadastro(config: Config | None = None, pasta_api: str = nuvemshop_api.
 def main() -> int:
     import argparse
 
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(line_buffering=True)
     analisador = ArgumentParserSeguro(description='Rotina do Painel: coletor, motor e planilha.')
     analisador.add_argument('--completo', action='store_true', help='baixa tudo de novo da Nuvemshop')
     analisador.add_argument('--anuncios-historico', action='store_true', help='rebaixa histórico de anúncios desde julho/2025')

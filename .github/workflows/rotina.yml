@@ -61,6 +61,7 @@ jobs:
       - name: Rodar a rotina (coletor, motor, planilha)
         timeout-minutes: 38
         env:
+          PYTHONUNBUFFERED: '1'
           NUVEMSHOP_STORE_ID: ${{ secrets.NUVEMSHOP_STORE_ID }}
           NUVEMSHOP_TOKEN: ${{ secrets.NUVEMSHOP_TOKEN }}
           NUVEMSHOP_USER_AGENT: ${{ secrets.NUVEMSHOP_USER_AGENT }}

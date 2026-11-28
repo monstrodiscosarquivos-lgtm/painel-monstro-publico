@@ -286,6 +286,7 @@ footer a{color:var(--muted)}
   <button type="button" role="tab" id="tab-fila" aria-selected="false">Fila</button>
   <button type="button" role="tab" id="tab-ads" aria-selected="false">Anúncios</button>
   <button type="button" role="tab" id="tab-cad" aria-selected="false">Cadastro</button>
+  <button type="button" role="tab" id="tab-cadvendas" aria-selected="false">Cadastro x vendas</button>
   <button type="button" role="tab" id="tab-black" aria-selected="false">Black</button>
   <button type="button" role="tab" id="tab-rasp" aria-selected="false">Raspadinha</button>
   <button type="button" role="tab" id="tab-k7" aria-selected="false">K7</button>
@@ -520,6 +521,77 @@ footer a{color:var(--muted)}
     <div class="tbl" id="black-top"><div class="empty skel">Carregando…</div></div>
   </section>
   <div class="secerr" id="e-black" hidden></div>
+</div>
+
+<div id="view-cadvendas" hidden>
+  <section id="sec-cadvendas">
+    <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px">
+      <h2>Cadastro x vendas</h2>
+      <span class="s" id="cv-atualizado">Carregando…</span>
+    </div>
+    <p class="sub">Cadastrar mais discos faz vender mais? Série semanal (segunda a domingo) desde julho/2025, com idade dos discos vendidos, tempo até vender, defasagem e controle por promoção e gasto no Meta.</p>
+    <div class="banner" id="cv-resumo" style="background:var(--surface);border-color:var(--line)"><b>Resumo</b>Aguardando primeira atualização da aba Cadastro x vendas.</div>
+  </section>
+
+  <section>
+    <h2>1. Série semanal (desde julho/2025)</h2>
+    <div class="fl-top" style="margin-top:0">
+      <div class="seg" id="cv-met" role="group" aria-label="Métrica de vendas"></div>
+      <div class="seg" id="cv-rng" role="group" aria-label="Período"></div>
+    </div>
+    <div class="chart">
+      <h3 id="cv-serie-titulo">Discos cadastrados x pedidos por semana</h3>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--s2)"></i>discos cadastrados</span>
+        <span><i class="ln" style="border-color:var(--s1)"></i><span id="cv-leg-y">pedidos na semana</span></span>
+        <span><i class="ln" style="border-color:var(--warn);border-top-style:dotted"></i>semana com promoção</span>
+      </div>
+      <div class="plot" id="cv-serie-chart"><div class="empty skel">Carregando…</div></div>
+    </div>
+    <div class="tbl" id="cv-serie-tbl"><div class="empty skel">Carregando…</div></div>
+  </section>
+
+  <section>
+    <h2>2. Venda de disco novo (idade desde o cadastro)</h2>
+    <p class="sub">Dos discos vendidos nas últimas 12 semanas completas, quanto veio de títulos cadastrados recentemente vs acervo antigo.</p>
+    <div class="grid" id="cv-idade-cards"><div class="card skel">Carregando…</div></div>
+    <div class="chart">
+      <h3>Participação por faixa de idade nas últimas 12 semanas</h3>
+      <div class="plot" id="cv-idade-chart"><div class="empty skel">Carregando…</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Tempo até vender</h2>
+    <p class="sub">Mediana de dias entre a data de criação do produto na Nuvemshop e a venda, separando usados (exemplar único) de novos/lacrados.</p>
+    <div class="grid" id="cv-tempo-cards"><div class="card skel">Carregando…</div></div>
+  </section>
+
+  <section>
+    <h2>4 e 5. Correlação, defasagem e semanas sem promoção</h2>
+    <p class="sub">Comparação lado a lado da relação entre discos cadastrados na semana t e vendas em t, t+1 e t+2, com e sem as semanas de promoção (cupons sazonais e lista manual da Configuração).</p>
+    <div class="tbl" id="cv-corr-tbl"><div class="empty skel">Carregando…</div></div>
+    <div class="chart">
+      <h3>Gráfico de dispersão (cada ponto é uma semana completa)</h3>
+      <div class="fl-top" style="margin-top:0">
+        <div class="seg" id="cv-lag" role="group" aria-label="Defasagem"></div>
+        <div class="seg" id="cv-promo" role="group" aria-label="Filtro de promoção"></div>
+      </div>
+      <div class="legend" style="margin-top:8px">
+        <span><i class="sw" style="background:var(--s2)"></i>semana normal</span>
+        <span><i class="sw" style="background:var(--warn)"></i>semana com promoção</span>
+        <span><i class="ln" style="border-color:var(--accent);border-top-style:dashed"></i>tendência</span>
+      </div>
+      <div class="plot" id="cv-disp-chart"><div class="empty skel">Carregando…</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Efeito estimado isolando promoção e Meta Ads</h2>
+    <p class="sub">Regressão linear múltipla: vendas da semana ~ cadastros da semana + cadastros da semana anterior + promoção (0/1) + gasto Meta da semana.</p>
+    <div id="cv-reg-box"><div class="empty skel">Carregando…</div></div>
+  </section>
+  <div class="secerr" id="e-cadvendas" hidden></div>
 </div>
 
 <div id="view-rasp" hidden>
@@ -892,7 +964,7 @@ const RANGES = {
   aalert: "anuncios_alertas!A1:F100", ares: "anuncios_resumo!A1:B20", anotas: "anuncios_notas!A1:E400", adir: "anuncios_direcao!A1:C400",
   pedMail: "pedidos!B1:B8000", itens: "itens!C1:I9000", prodA: "produtos!B1:H7000", prodM: "produtos!M1:M7000", prodQ: "produtos!Q1:Q7000",
   reguaLog: "regua!A1:E5000", rcamp: "rasp_campanhas!A1:R200", rjog: "rasp_jogadas!A1:Q20000", rev: "rasp_eventos!A1:F50000", rlem: "rasp_lembretes!A1:G20000", prodImg: "produtos!O1:O7000", prodUrl: "produtos!A1:A7000", cad: "cadastro_rascunhos!A1:AZ3000", cadf: "cadastro_fotos!A1:F3000",
-  blackDia: "black_dia!A1:O30", blackRes: "black_resumo!A1:C50", black26: "Black!A1:C50", margem: "margem_premissas!A1:F60",
+  blackDia: "black_dia!A1:O30", blackRes: "black_resumo!A1:C50", black26: "Black!A1:C50", cadVendas: "Cadastro x vendas!A1:C30", margem: "margem_premissas!A1:F60",
   g4d: "ga4_diario!A1:I15000", g4l: "ga4_links!A1:I400", k7: "k7_resumo!A1:F500",
   itNum: "itens!A1:A9000", prodId: "produtos!L1:L7000", cprod: "comissao_produtos!A1:D300", pman: "pedidos_manuais!A1:N500", cajust: "comissao_ajustes!A1:D200"
 };
@@ -965,7 +1037,7 @@ function barChart(host, o){
 /* ---------- estado ---------- */
 const D = {};
 function setErr(sec, msg){ const el = $("e-"+sec); if (!el) return; el.hidden = !msg; el.textContent = msg || ""; }
-const SEC_OF = { itNum:["com"], prodId:["com","cad"], prodImg:["cad","res"], cprod:["com"], pman:["com"], cajust:["com"], g4d:["res"], g4l:["res"], rcamp:["rasp","res"], rjog:["rasp","res"], rev:["rasp"], rlem:["rasp"], reguaLog:["res"], cad:["cad"], cadf:["cad"], pedMail:["res"], itens:["res"], prodA:["res"], prodM:["res"], prodQ:["res"], acd:["ads"], ahoje:["ads"], aads:["ads"], asem:["ads"], aalert:["ads"], ares:["ads"], anotas:["ads"], adir:["ads"], atrib:["valeapena"], ped:["com"], pedNum:["com"], comis:["com"], fila:["fila"], rodada:["fila"], atual:["objetivo","novos","custos"], mensal:["objetivo"], coortes:["novos"], regua:["regua"], reguaRes:["regua"], car:["carrinhos"], vale:["valeapena"], ind:["custos"], res:["carrinhos"], k7:["k7"], blackDia:["black"], blackRes:["black"], black26:["black"], margem:["config"] };
+const SEC_OF = { itNum:["com"], prodId:["com","cad"], prodImg:["cad","res"], cprod:["com"], pman:["com"], cajust:["com"], g4d:["res"], g4l:["res"], rcamp:["rasp","res"], rjog:["rasp","res"], rev:["rasp"], rlem:["rasp"], reguaLog:["res"], cad:["cad"], cadf:["cad"], pedMail:["res"], itens:["res"], prodA:["res"], prodM:["res"], prodQ:["res"], acd:["ads"], ahoje:["ads"], aads:["ads"], asem:["ads"], aalert:["ads"], ares:["ads"], anotas:["ads"], adir:["ads"], atrib:["valeapena"], ped:["com"], pedNum:["com"], comis:["com"], fila:["fila"], rodada:["fila"], atual:["objetivo","novos","custos"], mensal:["objetivo"], coortes:["novos"], regua:["regua"], reguaRes:["regua"], car:["carrinhos"], vale:["valeapena"], ind:["custos"], res:["carrinhos"], k7:["k7"], blackDia:["black"], blackRes:["black"], black26:["black"], cadVendas:["cadvendas"], margem:["config"] };
 
 function renderAtual(){
   const a = rows(D.atual)[0]; if (!a) return;
@@ -1100,6 +1172,7 @@ const cfgVal = re => { const it = CFG.find(x => re.test(x.label)); return it ? i
 
 const CFG_GROUPS = [
   ["Anúncios", "Limites que acendem as cores e os alertas da aba Anúncios.", /^an[uú]ncios:/i],
+  ["Cadastro x vendas", "Datas extras marcadas como semana com promoção (além dos cupons detectados automaticamente).", /^semanas com promo/i],
   ["Ofertas e cupons", "Troque os códigos todo mês, depois de criar os cupons na Nuvemshop.", /cupom|frete grátis|desconto|validade|oferta|aprova/i],
   ["Fila e prazos", "Quando e quantas vezes a Mariana fala com cada cliente.", /contatar|intervalo|toques|mínimo do carrinho|limite|prioridade|comparação|horário/i],
   ["Equipe e envio", "Quem assina as mensagens e quem recebe a fila.", /assinatura|email|site/i]
@@ -5486,6 +5559,263 @@ function renderBlack26(){
 if ($("bk26-btn-dia")) $("bk26-btn-dia").addEventListener("click", () => { BK26_MODO = "dia"; renderBlack26(); });
 if ($("bk26-btn-hora")) $("bk26-btn-hora").addEventListener("click", () => { BK26_MODO = "hora"; renderBlack26(); });
 
+/* ---------- Cadastro de discos x vendas (D-111) ---------- */
+let CV_MET = "pedidos";
+let CV_RNG = "tudo";
+let CV_LAG = "1";
+let CV_PROMO = "todas";
+
+function cvFmtDia(iso){
+  const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : String(iso || "");
+}
+function cvFmtCorr(v){
+  if (v === null || v === undefined || !isFinite(Number(v))) return "–";
+  const n = Number(v);
+  return (n >= 0 ? "+" : "") + nf2.format(n);
+}
+function cvSegBtns(el, opcoes, ativo, onChg){
+  if (!el) return;
+  el.innerHTML = opcoes.map(([k, lab]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${String(k === ativo)}">${esc(lab)}</button>`).join("");
+  el.querySelectorAll("button").forEach(b => b.addEventListener("click", () => onChg(b.dataset.k)));
+}
+function renderCadVendas(){
+  if (!D.cadVendas) return;
+  const kv = {};
+  (D.cadVendas || []).forEach(r => { if (r && r[0]) kv[String(r[0]).trim()] = r[1] ?? ""; });
+  if (!kv.semanas_json){
+    if ($("cv-resumo")) $("cv-resumo").innerHTML = "<b>Resumo</b>Aguardando primeira atualização da aba Cadastro x vendas.";
+    return;
+  }
+  let semanas = [], ult12 = {}, tempo = {}, corr = {}, reg = {};
+  try { semanas = JSON.parse(kv.semanas_json || "[]"); } catch(e){}
+  try { ult12 = JSON.parse(kv.ultimas_12_json || "{}"); } catch(e){}
+  try { tempo = JSON.parse(kv.tempo_venda_json || "{}"); } catch(e){}
+  try { corr = JSON.parse(kv.correlacao_json || "{}"); } catch(e){}
+  try { reg = JSON.parse(kv.regressao_json || "{}"); } catch(e){}
+
+  if ($("cv-atualizado")){
+    $("cv-atualizado").textContent = kv.atualizado_em ? ("Atualizado em " + kv.atualizado_em + " (Brasília) · " + int(num(kv.total_semanas) || semanas.length) + " semanas") : "";
+  }
+  if ($("cv-resumo")){
+    $("cv-resumo").innerHTML = `<b>Resumo</b>${esc(kv.resumo_frase || "Série semanal calculada.")}`;
+  }
+
+  cvSegBtns($("cv-met"), [["pedidos","Pedidos"],["receita","Receita"]], CV_MET, k => { CV_MET = k; renderCadVendas(); });
+  cvSegBtns($("cv-rng"), [["12","Últimas 12 semanas"],["tudo","Desde jul/2025"]], CV_RNG, k => { CV_RNG = k; renderCadVendas(); });
+  cvSegBtns($("cv-lag"), [["0","Mesma semana (t)"],["1","Semana seguinte (t+1)"],["2","2 semanas depois (t+2)"]], CV_LAG, k => { CV_LAG = k; renderCadVendas(); });
+  cvSegBtns($("cv-promo"), [["todas","Todas as semanas"],["sem_promo","Sem semanas de promoção"]], CV_PROMO, k => { CV_PROMO = k; renderCadVendas(); });
+
+  const ws = CV_RNG === "12" ? semanas.slice(-12) : semanas;
+  const ehRec = CV_MET === "receita";
+  const fmtY = v => ehRec ? brl(v) : int(v);
+  if ($("cv-serie-titulo")) $("cv-serie-titulo").textContent = ehRec ? "Discos cadastrados x receita por semana" : "Discos cadastrados x pedidos por semana";
+  if ($("cv-leg-y")) $("cv-leg-y").textContent = ehRec ? "receita líquida (R$)" : "pedidos na semana";
+
+  const sh = $("cv-serie-chart");
+  if (sh){
+    if (!ws.length){ sh.innerHTML = '<div class="empty">Ainda sem semanas para mostrar.</div>'; }
+    else {
+      const W = Math.max(sh.clientWidth || 320, 300), H = 230, L = 40, R = 58, T = 12, B = 26, pw = W-L-R, ph = H-T-B, n = ws.length, step = pw/n, bw = Math.max(3, Math.min(20, step*0.6));
+      const mb = niceMax(Math.max(...ws.map(w => num(w.discos_cadastrados) || 0), 1));
+      const ys = ws.map(w => num(ehRec ? w.receita : w.pedidos) || 0);
+      const ml = niceMax(Math.max(...ys, 1));
+      const xc = i => L + step*i + step/2, yb = v => T + ph - v/mb*ph, yl = v => T + ph - v/ml*ph;
+      let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Série semanal de cadastros e vendas">`;
+      for (let i = 0; i <= 4; i++){ const y = T + ph*i/4; s += `<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--line)"/>`; }
+      s += `<text x="${L-6}" y="${T+4}" text-anchor="end">${nf0.format(mb)}</text><text x="${L-6}" y="${T+ph+4}" text-anchor="end">0</text><text x="${W-R+6}" y="${T+4}">${esc(fmtY(ml)).replace("R$ ","R$")}</text><text x="${W-R+6}" y="${T+ph+4}">0</text>`;
+      const every = Math.ceil(n / Math.max(1, Math.floor(pw / 50)));
+      ws.forEach((w,i) => {
+        if (w.promocao) s += `<line x1="${xc(i)}" x2="${xc(i)}" y1="${T}" y2="${T+ph}" stroke="var(--warn)" stroke-dasharray="2 3"/>`;
+        const cad = num(w.discos_cadastrados) || 0;
+        if (cad > 0){ const top = yb(cad); s += `<rect x="${xc(i)-bw/2}" y="${top}" width="${bw}" height="${T+ph-top}" rx="2" fill="var(--s2)" opacity="${w.completa ? .82 : .42}"/>`; }
+        if (i % every === 0) s += `<text x="${xc(i)}" y="${H-8}" text-anchor="middle">${esc(diaLabel(w.semana_inicio))}</text>`;
+      });
+      let pathD = "", on = false;
+      ws.forEach((w,i) => {
+        const v = ys[i];
+        pathD += (on ? "L" : "M") + xc(i).toFixed(1) + "," + yl(v).toFixed(1);
+        on = true;
+      });
+      s += `<path d="${pathD}" fill="none" stroke="var(--s1)" stroke-width="2.2" stroke-linejoin="round"/>`;
+      ws.forEach((w,i) => { s += `<circle cx="${xc(i)}" cy="${yl(ys[i])}" r="${w.promocao ? 3.4 : 2.5}" fill="${w.promocao ? "var(--warn)" : "var(--s1)"}"/>`; });
+      ws.forEach((_,i) => s += `<rect data-i="${i}" x="${L+step*i}" y="${T}" width="${step}" height="${ph}" fill="transparent"/>`);
+      sh.innerHTML = s + "</svg>";
+      adTipCtl(sh.closest(".chart"), sh.querySelector("svg"), i => {
+        const w = ws[i];
+        return `<b>Semana ${esc(cvFmtDia(w.semana_inicio))}</b>${w.completa ? "" : " (em andamento)"}<br>Cadastrados: ${int(w.discos_cadastrados)}<br>Pedidos: ${int(w.pedidos)} · Itens: ${int(w.itens_vendidos)}<br>Receita: ${brl(w.receita)}<br>Meta Ads: ${brl(w.gasto_meta)}${w.promocao ? "<br>Promoção: " + esc(w.motivo_promocao || "sim") : ""}`;
+      });
+    }
+  }
+
+  const tblEl = $("cv-serie-tbl");
+  if (tblEl){
+    const linhasTbl = ws.slice().reverse();
+    tblEl.innerHTML = linhasTbl.length ? `<table>
+      <thead><tr><th>Semana (seg a dom)</th><th class="n">Cadastrados</th><th class="n">Pedidos</th><th class="n">Itens</th><th class="n">Receita</th><th class="n">Meta Ads</th><th>Campanha</th></tr></thead>
+      <tbody>${linhasTbl.map(w => `<tr>
+        <td><b>${esc(cvFmtDia(w.semana_inicio))}</b>${w.completa ? "" : ' <span class="s">(aberta)</span>'}</td>
+        <td class="n">${int(w.discos_cadastrados)}</td>
+        <td class="n">${int(w.pedidos)}</td>
+        <td class="n">${int(w.itens_vendidos)}</td>
+        <td class="n">${brl(w.receita)}</td>
+        <td class="n">${brl(w.gasto_meta)}</td>
+        <td>${w.promocao ? `<span class="pill p-wait" title="${esc(w.motivo_promocao || "")}">Promoção</span>` : '<span class="pill p-info">Normal</span>'}</td>
+      </tr>`).join("")}</tbody></table>` : '<div class="empty">Sem semanas registradas ainda.</div>';
+  }
+
+  /* 2. Venda de disco novo */
+  const fxDefs = [
+    ["0_7", "Até 7 dias", "var(--bk-c1)"],
+    ["8_30", "8 a 30 dias", "var(--bk-c2)"],
+    ["31_90", "31 a 90 dias", "var(--bk-c3)"],
+    ["mais_90", "Mais de 90 dias", "var(--bk-c4)"]
+  ];
+  const fxs = ult12.faixas || {};
+  const idCards = $("cv-idade-cards");
+  if (idCards){
+    idCards.innerHTML = fxDefs.map(([k, lab]) => {
+      const f = fxs[k] || {};
+      return `<div class="card">
+        <div class="k">${esc(lab)}</div>
+        <div class="v">${pct(f.pct_receita)}</div>
+        <div class="s">da receita · <b>${pct(f.pct_itens)}</b> dos itens</div>
+      </div>`;
+    }).join("");
+  }
+  const idCh = $("cv-idade-chart");
+  if (idCh){
+    const sem12 = semanas.filter(s => s.completa).slice(-12);
+    if (!sem12.length){ idCh.innerHTML = '<div class="empty">Ainda sem semanas completas.</div>'; }
+    else {
+      const recBar = fxDefs.map(([k, lab, cor]) => `<span style="flex:${Math.max(0.5, (fxs[k]||{}).pct_receita || 0)};background:${cor};height:18px;display:inline-block" title="${esc(lab)}: ${pct((fxs[k]||{}).pct_receita)} da receita"></span>`).join("");
+      const itBar = fxDefs.map(([k, lab, cor]) => `<span style="flex:${Math.max(0.5, (fxs[k]||{}).pct_itens || 0)};background:${cor};height:18px;display:inline-block" title="${esc(lab)}: ${pct((fxs[k]||{}).pct_itens)} dos itens"></span>`).join("");
+      idCh.innerHTML = `
+        <div class="legend">${fxDefs.map(([, lab, cor]) => `<span><i class="sw" style="background:${cor}"></i>${esc(lab)}</span>`).join("")}</div>
+        <div style="padding:8px 4px">
+          <div class="s" style="margin-bottom:4px"><b>Receita</b> (${int(ult12.n_semanas || sem12.length)} semanas · menos de 30d: <b>${pct(ult12.pct_rec_menos_30d)}</b>)</div>
+          <div class="obar" style="height:18px;border-radius:9px">${recBar}</div>
+          <div class="s" style="margin:10px 0 4px"><b>Itens vendidos</b> (${int(ult12.itens_analisados || 0)} itens · menos de 30d: <b>${pct(ult12.pct_itens_menos_30d)}</b>)</div>
+          <div class="obar" style="height:18px;border-radius:9px">${itBar}</div>
+        </div>`;
+    }
+  }
+
+  /* 3. Tempo até vender */
+  const tCards = $("cv-tempo-cards");
+  if (tCards){
+    const u = tempo.usado_estoque_1 || {}, n = tempo.novo_lacrado || {};
+    const u12 = (tempo.ultimas_12_semanas || {}).usado_estoque_1 || {};
+    const n12 = (tempo.ultimas_12_semanas || {}).novo_lacrado || {};
+    const fmtDias = x => x == null ? "–" : nf1.format(x) + " dias";
+    tCards.innerHTML = `
+      <div class="card">
+        <div class="k">Usado (exemplar único)</div>
+        <div class="v">${fmtDias(u.mediana)}</div>
+        <div class="s">mediana entre cadastro e venda (${int(u.n || 0)} vendas; faixa central: ${u.p25 != null ? nf0.format(u.p25) + " a " + nf0.format(u.p75) + " dias" : "–"})</div>
+        <div class="s" style="margin-top:4px">Últimas 12 semanas: <b>${fmtDias(u12.mediana)}</b> (${int(u12.n || 0)} vendas)</div>
+      </div>
+      <div class="card">
+        <div class="k">Novo / Lacrado</div>
+        <div class="v">${fmtDias(n.mediana)}</div>
+        <div class="s">mediana entre cadastro e venda (${int(n.n || 0)} vendas; faixa central: ${n.p25 != null ? nf0.format(n.p25) + " a " + nf0.format(n.p75) + " dias" : "–"})</div>
+        <div class="s" style="margin-top:4px">Últimas 12 semanas: <b>${fmtDias(n12.mediana)}</b> (${int(n12.n || 0)} vendas)</div>
+      </div>`;
+  }
+
+  /* 4 e 5. Correlação lado a lado */
+  const cTbl = $("cv-corr-tbl");
+  const corTodas = corr.todas || [], corSem = corr.sem_promocao || [];
+  if (cTbl){
+    cTbl.innerHTML = corTodas.length ? `<table>
+      <thead>
+        <tr>
+          <th rowspan="2">Defasagem</th>
+          <th colspan="3" style="text-align:center">Todas as semanas</th>
+          <th colspan="3" style="text-align:center">Sem semanas com promoção</th>
+        </tr>
+        <tr>
+          <th class="n">n</th><th class="n">Pearson r</th><th class="n">Spearman ρ</th>
+          <th class="n">n</th><th class="n">Pearson r</th><th class="n">Spearman ρ</th>
+        </tr>
+      </thead>
+      <tbody>${[0,1,2].map(idx => {
+        const a = corTodas[idx] || {}, b = corSem[idx] || {};
+        const prA = ehRec ? a.pearson_receita : a.pearson_pedidos;
+        const spA = ehRec ? a.spearman_receita : a.spearman_pedidos;
+        const prB = ehRec ? b.pearson_receita : b.pearson_pedidos;
+        const spB = ehRec ? b.spearman_receita : b.spearman_pedidos;
+        return `<tr>
+          <td><b>${esc(a.rotulo || "")}</b></td>
+          <td class="n">${int(a.n || 0)}</td><td class="n">${esc(cvFmtCorr(prA))}</td><td class="n">${esc(cvFmtCorr(spA))}</td>
+          <td class="n">${int(b.n || 0)}</td><td class="n">${esc(cvFmtCorr(prB))}</td><td class="n">${esc(cvFmtCorr(spB))}</td>
+        </tr>`;
+      }).join("")}</tbody></table>` : '<div class="empty">Sem dados suficientes para correlação ainda.</div>';
+  }
+
+  /* Gráfico de dispersão */
+  const dp = $("cv-disp-chart");
+  if (dp){
+    const listaCorr = CV_PROMO === "sem_promo" ? corSem : corTodas;
+    const itemLag = listaCorr.find(x => String(x.lag) === String(CV_LAG)) || listaCorr[0] || {};
+    const pts = itemLag.pontos || [];
+    if (pts.length < 3){
+      dp.innerHTML = '<div class="empty">Menos de 3 semanas completas neste recorte para o gráfico de dispersão.</div>';
+    } else {
+      const xs = pts.map(p => num(p.cadastros) || 0);
+      const yPts = pts.map(p => num(ehRec ? p.receita : p.pedidos) || 0);
+      const W = Math.max(dp.clientWidth || 320, 300), H = 250, L = 54, R = 14, T = 12, B = 34, pw = W-L-R, ph = H-T-B;
+      const mx = niceMax(Math.max(...xs, 1)), my = niceMax(Math.max(...yPts, 1));
+      const x = v => L + v/mx*pw, y = v => T + ph - v/my*ph;
+      let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Dispersão cadastros x vendas">`;
+      for (let i = 0; i <= 4; i++){ const v = my*i/4; s += `<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${esc(fmtY(v)).replace("R$ ","R$")}</text>`; }
+      for (let i = 0; i <= 4; i++){ const v = mx*i/4; s += `<text x="${x(v)}" y="${T+ph+14}" text-anchor="middle">${nf0.format(v)}</text>`; }
+      s += `<text x="${L+pw/2}" y="${H-4}" text-anchor="middle">discos cadastrados na semana t</text>`;
+      const n = xs.length, ma = xs.reduce((a,b)=>a+b)/n, mb2 = yPts.reduce((a,b)=>a+b)/n;
+      let num_ = 0, den = 0; for (let i = 0; i < n; i++){ num_ += (xs[i]-ma)*(yPts[i]-mb2); den += (xs[i]-ma)**2; }
+      const sl = den ? num_/den : 0, ic = mb2 - sl*ma, x0 = Math.min(...xs), x1 = Math.max(...xs);
+      const cl = v => Math.max(0, Math.min(my, v));
+      if (x1 > x0) s += `<line x1="${x(x0)}" y1="${y(cl(ic+sl*x0))}" x2="${x(x1)}" y2="${y(cl(ic+sl*x1))}" stroke="var(--accent)" stroke-width="1.8" stroke-dasharray="6 4"/>`;
+      pts.forEach((p,i) => {
+        const cor = p.promocao ? "var(--warn)" : "var(--s2)";
+        s += `<circle data-i="${i}" cx="${x(xs[i])}" cy="${y(yPts[i])}" r="5" fill="${cor}" fill-opacity=".45" stroke="${cor}" stroke-width="1.5"/>`;
+      });
+      dp.innerHTML = s + "</svg>";
+      adTipCtl(dp.closest(".chart"), dp.querySelector("svg"), i => {
+        const p = pts[i];
+        return `<b>Semana ${esc(cvFmtDia(p.semana_t))}</b><br>Cadastrados em t: ${int(p.cadastros)}<br>${ehRec ? "Receita" : "Pedidos"} em ${esc(cvFmtDia(p.semana_y))}: ${fmtY(yPts[i])}${p.promocao ? "<br>Com promoção" : ""}`;
+      });
+    }
+  }
+
+  /* 5. Regressão múltipla */
+  const rBox = $("cv-reg-box");
+  if (rBox){
+    const rp = reg.pedidos || {}, rr = reg.receita || {};
+    const fmtIc = (ef, ic, unit) => {
+      if (ef == null) return "–";
+      const f = v => (unit === "R$" ? brl(v) : ((v >= 0 ? "+" : "") + nf1.format(v) + " ped."));
+      const p1 = f(ef);
+      if (!ic || ic.length < 2) return `<b>${esc(p1)}</b>`;
+      return `<b>${esc(p1)}</b> <span class="s">(IC 95%: ${esc(f(ic[0]))} a ${esc(f(ic[1]))})</span>`;
+    };
+    if (!rp.disponivel && !rr.disponivel){
+      rBox.innerHTML = `<div class="banner"><b>Regressão múltipla aguardando histórico</b>São necessárias ao menos 6 semanas completas consecutivas (${int(rp.n || 0)} disponíveis agora). Aviso: ${esc(rp.aviso || "correlação não é causa; com poucas semanas o resultado é indicativo")}.</div>`;
+    } else {
+      rBox.innerHTML = `
+        <div class="tbl"><table>
+          <thead><tr><th>Efeito de +10 discos cadastrados</th><th>Pedidos</th><th>Receita</th></tr></thead>
+          <tbody>
+            <tr><td>Na mesma semana (t)</td><td>${fmtIc(rp.efeito_10_semana, rp.ic_10_semana, "ped")}</td><td>${fmtIc(rr.efeito_10_semana, rr.ic_10_semana, "R$")}</td></tr>
+            <tr><td>Na semana seguinte (t+1)</td><td>${fmtIc(rp.efeito_10_seguinte, rp.ic_10_seguinte, "ped")}</td><td>${fmtIc(rr.efeito_10_seguinte, rr.ic_10_seguinte, "R$")}</td></tr>
+            <tr><td><b>Efeito combinado (t + t+1)</b></td><td>${fmtIc(rp.efeito_10_combinado, rp.ic_10_combinado, "ped")}</td><td>${fmtIc(rr.efeito_10_combinado, rr.ic_10_combinado, "R$")}</td></tr>
+          </tbody>
+        </table></div>
+        <div class="s" style="margin-top:8px">Modelo ajustado com n = ${int(rp.n || rr.n)} semanas completas${rp.r2 != null ? ` (R² pedidos: ${nf2.format(rp.r2)})` : ""}. <b>Aviso:</b> ${esc(rp.aviso || rr.aviso || "correlação não é causa; com poucas semanas o resultado é indicativo")}.</div>`;
+    }
+  }
+}
+
 /* ---------- Black Monstro 2026 ---------- */
 function renderBlack(){
   if (!D.blackRes || !D.blackDia) return;
@@ -5839,16 +6169,16 @@ function renderMargemPremissas(){
   }
 }
 
-const RENDER = { itNum:renderCom, prodId:renderCom, cprod:renderCom, pman:renderCom, cajust:renderCom, itens:renderCom, prodA:renderCom, g4d:()=>{}, g4l:()=>{}, k7:renderK7, rcamp:()=>rpR(), rjog:()=>rpR(), rev:()=>rpR(), rlem:()=>rpR(), prodUrl:cdR, prodImg:cdR, cad:cdR, cadf:cdR, acd:adR, ahoje:adR, aads:adR, asem:adR, aalert:adR, ares:adR, anotas:adR, adir:adR, atrib:renderAtrib, ped:()=>{renderCom(); renderAtrib();}, pedNum:()=>{renderCom(); renderAtrib();}, cauto:renderCom, comis:renderCom, fila:renderFila, rodada:renderFila, regcfg:renderRegCfg, bplano:renderBrevo, blackDia:renderBlack, blackRes:renderBlack, black26:renderBlack26, margem:renderMargemPremissas, atual:()=>{renderAtual(); if (D.mensal) renderMensal();}, mensal:renderMensal, coortes:renderCoortes, regua:renderRegua, reguaRes:renderReguaRes, car:renderCar, vale:renderVale, ind:()=>{}, res:renderCarRes,
+const RENDER = { itNum:renderCom, prodId:renderCom, cprod:renderCom, pman:renderCom, cajust:renderCom, itens:renderCom, prodA:renderCom, g4d:()=>{}, g4l:()=>{}, k7:renderK7, rcamp:()=>rpR(), rjog:()=>rpR(), rev:()=>rpR(), rlem:()=>rpR(), prodUrl:cdR, prodImg:cdR, cad:cdR, cadf:cdR, acd:adR, ahoje:adR, aads:adR, asem:adR, aalert:adR, ares:adR, anotas:adR, adir:adR, atrib:renderAtrib, ped:()=>{renderCom(); renderAtrib();}, pedNum:()=>{renderCom(); renderAtrib();}, cauto:renderCom, comis:renderCom, fila:renderFila, rodada:renderFila, regcfg:renderRegCfg, bplano:renderBrevo, blackDia:renderBlack, blackRes:renderBlack, black26:renderBlack26, cadVendas:renderCadVendas, margem:renderMargemPremissas, atual:()=>{renderAtual(); if (D.mensal) renderMensal();}, mensal:renderMensal, coortes:renderCoortes, regua:renderRegua, reguaRes:renderReguaRes, car:renderCar, vale:renderVale, ind:()=>{}, res:renderCarRes,
   cfg:()=>{renderCfg(); renderBrevoPill(); if (D.msgs) renderMsgs(); renderCom(); adR();}, msgs:renderMsgs, custos:()=>{renderCustos(); renderCom();} };
 
 ["g4d","g4l","k7","ped","pedNum","pedMail","itens","prodA","prodM","prodQ","prodId","margem","cauto","custos","atrib","acd","cfg","fila","reguaLog","rjog","rcamp"].forEach(k => { const o = RENDER[k]; RENDER[k] = () => { if (o) o(); rsR(); if (VIEW === "k7") renderK7(); }; });
 let VIEW = (window.PM?.nivel === "k7") ? "k7" : "painel";
 function showView(v){
   if (window.PM?.nivel === "k7") v = "k7";
-  else if (!["painel","res","fila","ads","cad","black","rasp","k7","com","config"].includes(v)) v = "painel";
+  else if (!["painel","res","fila","ads","cad","cadvendas","black","rasp","k7","com","config"].includes(v)) v = "painel";
   VIEW = v;
-  ["painel","res","fila","ads","cad","black","rasp","k7","com","config"].forEach(k => { const el = $("view-"+k); if (el) el.hidden = v !== k; const tab = $("tab-"+k); if (tab) tab.setAttribute("aria-selected", String(v === k)); });
+  ["painel","res","fila","ads","cad","cadvendas","black","rasp","k7","com","config"].forEach(k => { const el = $("view-"+k); if (el) el.hidden = v !== k; const tab = $("tab-"+k); if (tab) tab.setAttribute("aria-selected", String(v === k)); });
   try { localStorage.setItem("pm-view", v); } catch(e){}
   if (v === "painel"){ if (D.mensal) renderMensal(); if (D.coortes) renderCoortes(); if (D.car) renderCar(); }
   if (v === "fila") renderFila();
@@ -5856,6 +6186,7 @@ function showView(v){
   if (v === "ads") adR();
   if (v === "res") rsR();
   if (v === "cad") cdR();
+  if (v === "cadvendas") renderCadVendas();
   if (v === "black") { renderBlack26(); renderBlack(); }
   if (v === "rasp") rpR();
   if (v === "k7") renderK7();
@@ -5866,6 +6197,7 @@ $("tab-fila").onclick = () => showView("fila");
 $("tab-ads").onclick = () => showView("ads");
 $("tab-res").onclick = () => showView("res");
 $("tab-cad").onclick = () => showView("cad");
+if ($("tab-cadvendas")) $("tab-cadvendas").addEventListener("click", () => showView("cadvendas"));
 $("tab-black").onclick = () => showView("black");
 $("tab-rasp").onclick = () => showView("rasp");
 if ($("tab-k7")) $("tab-k7").onclick = () => showView("k7");
@@ -5876,7 +6208,7 @@ $("tab-config").onclick = () => showView("config");
     showView("k7");
     return;
   }
-  let v = location.hash === "#k7" ? "k7" : (location.hash === "#configuracoes" ? "config" : (location.hash === "#fila" ? "fila" : (location.hash === "#comissao" ? "com" : (location.hash === "#anuncios" ? "ads" : (location.hash === "#resultados" ? "res" : (location.hash === "#black" ? "black" : (location.hash === "#cadastro" ? "cad" : (location.hash === "#raspadinha" ? "rasp" : null))))))));
+  let v = location.hash === "#k7" ? "k7" : (location.hash === "#configuracoes" ? "config" : (location.hash === "#fila" ? "fila" : (location.hash === "#comissao" ? "com" : (location.hash === "#anuncios" ? "ads" : (location.hash === "#resultados" ? "res" : (location.hash === "#black" ? "black" : (location.hash === "#cadastro-x-vendas" ? "cadvendas" : (location.hash === "#cadastro" ? "cad" : (location.hash === "#raspadinha" ? "rasp" : null)))))))));
   if (!v){ try { v = localStorage.getItem("pm-view"); } catch(e){} }
   if (v) showView(v);
 })();
@@ -5943,7 +6275,7 @@ async function start(){
   }
 }
 $("refresh").onclick = async () => { if (!MCP) return; $("refresh").disabled = true; try { await MCP.invalidate(SERVER, TOOL); } catch(e){} setTimeout(()=>$("refresh").disabled=false, 3000); };
-let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(()=>{ if (D.mensal) renderMensal(); if (D.coortes) renderCoortes(); if (D.car) renderCar(); if (VIEW === "ads") adR(); if (VIEW === "res") rsR(); }, 200); });
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(()=>{ if (D.mensal) renderMensal(); if (D.coortes) renderCoortes(); if (D.car) renderCar(); if (VIEW === "ads") adR(); if (VIEW === "res") rsR(); if (VIEW === "cadvendas") renderCadVendas(); }, 200); });
 start();
 })();
 </script>

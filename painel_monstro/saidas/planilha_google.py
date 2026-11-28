@@ -142,6 +142,8 @@ class PlanilhaGoogle:
             # BackOffHTTPClient: se o Google limitar o uso (429), espera e repete só aquela requisição, sem refazer o resto
             cliente = (gspread.service_account_from_dict(chave, http_client=BackOffHTTPClient) if chave
                        else gspread.service_account(filename=caminho, http_client=BackOffHTTPClient))
+            if hasattr(cliente, 'set_timeout'):
+                cliente.set_timeout(60)
             return cls(cliente.open_by_key(config.planilha_id))
         except gspread.exceptions.SpreadsheetNotFound:
             raise ErroPlanilha(f'A planilha não foi encontrada. Compartilhe-a como Editor com {email}.') from None
