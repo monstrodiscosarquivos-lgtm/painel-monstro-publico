@@ -355,9 +355,20 @@ class LojaCadastro:
         except Exception: raise ErroCadastro('DELETE imagem não confirmado') from None
 
 
+DRIVE_TIMEOUT_S=20
+DRIVE_MAX_TENTATIVAS=2  # 1 tentativa inicial + no máximo 1 nova tentativa (somente GET/erro transitório)
+
+
+class _OrcamentoEsgotado(Exception):
+    """Sinal interno: o tempo limite do cadastro na rodada acabou; o restante fica para a próxima."""
+
+
 class DriveFotos:
     """Pastas privadas da loja, conta de serviço existente, sem link público."""
     def __init__(self,config,pasta_id='',sessao=None):
+        self._sem_gravacao=False
+        self._gravacoes_puladas=0
+        self._aviso_sem_gravacao_impresso=False
         if sessao: self.s=sessao
         else:
             scopes=['https://www.googleapis.com/auth/drive']
@@ -378,15 +389,26 @@ class DriveFotos:
             raise ErroCadastro('pasta de entrada sem raiz única acessível')
         self.raiz=meta['parents'][0]
     def request(self,metodo,caminho,**kw):
-        try:
-            r=self.s.request(metodo,'https://www.googleapis.com'+caminho,timeout=60,**kw)
-            if r.status_code not in (200,201):
+        # Escrita (POST) não repete; leitura (GET) faz no máximo 1 nova tentativa em erro transitório (429/5xx/rede).
+        tentativas=DRIVE_MAX_TENTATIVAS if str(metodo).upper()=='GET' else 1
+        timeout=min(kw.pop('timeout',DRIVE_TIMEOUT_S),DRIVE_TIMEOUT_S)
+        for tentativa in range(1,tentativas+1):
+            try:
+                r=self.s.request(metodo,'https://www.googleapis.com'+caminho,timeout=timeout,**kw)
+                if r.status_code in (200,201):
+                    return r
+                if tentativa<tentativas and (r.status_code==429 or r.status_code>=500):
+                    time.sleep(1)
+                    continue
                 try: motivo=(r.json().get('error',{}).get('errors') or [{}])[0].get('reason','')
                 except Exception: motivo=''
                 raise ErroCadastro(f'Drive {r.status_code}'+(f' {motivo}' if motivo else '')+'; conferir permissão e espaço da conta de serviço')
-            return r
-        except ErroCadastro: raise
-        except Exception: raise ErroCadastro('Drive indisponível') from None
+            except ErroCadastro: raise
+            except Exception:
+                if tentativa<tentativas:
+                    time.sleep(1)
+                    continue
+                raise ErroCadastro('Drive indisponível') from None
     def listar(self,q):
         rs=[]; token=None
         while True:
@@ -419,17 +441,29 @@ class DriveFotos:
         if self.entrada not in pais and fid not in {f['id'] for f in self.arquivos_entrada()}: raise ErroCadastro('foto fora da pasta de entrada')
         return self.request('GET','/drive/v3/files/'+fid,params={'alt':'media'}).content
     def guardar(self,id_disco,nome,jpeg):
-        destino=self.pasta(self.pasta(self.raiz,'site'),id_disco)
-        rs=self.listar(f"'{destino}' in parents and name = '{nome}'")
-        if rs: return rs[0]['id']
-        limite='cadastro_'+uuid.uuid4().hex
-        metadata=json.dumps({'name':nome,'parents':[destino]}).encode('utf-8')
-        corpo=(f'--{limite}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'.encode()+metadata+
-               f'\r\n--{limite}\r\nContent-Type: image/jpeg\r\n\r\n'.encode()+jpeg+
-               f'\r\n--{limite}--\r\n'.encode())
-        r=self.request('POST','/upload/drive/v3/files',params={'uploadType':'multipart'},
-                       headers={'Content-Type':f'multipart/related; boundary={limite}'},data=corpo)
-        return r.json()['id']
+        if getattr(self,'_sem_gravacao',False):
+            self._gravacoes_puladas=getattr(self,'_gravacoes_puladas',0)+1
+            return ''
+        try:
+            destino=self.pasta(self.pasta(self.raiz,'site'),id_disco)
+            rs=self.listar(f"'{destino}' in parents and name = '{nome}'")
+            if rs: return rs[0]['id']
+            limite='cadastro_'+uuid.uuid4().hex
+            metadata=json.dumps({'name':nome,'parents':[destino]}).encode('utf-8')
+            corpo=(f'--{limite}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'.encode()+metadata+
+                   f'\r\n--{limite}\r\nContent-Type: image/jpeg\r\n\r\n'.encode()+jpeg+
+                   f'\r\n--{limite}--\r\n'.encode())
+            r=self.request('POST','/upload/drive/v3/files',params={'uploadType':'multipart'},
+                           headers={'Content-Type':f'multipart/related; boundary={limite}'},data=corpo)
+            return r.json()['id']
+        except Exception:
+            # Disjuntor: na primeira falha (ex. 403/storageQuotaExceeded), desativa gravação pelo resto da rodada.
+            self._sem_gravacao=True
+            self._gravacoes_puladas=getattr(self,'_gravacoes_puladas',0)+1
+            if not getattr(self,'_aviso_sem_gravacao_impresso',False):
+                print('Cadastro: cópia ajustada não guardada no Drive; gravação no Drive desativada pelo resto da rodada.')
+                self._aviso_sem_gravacao_impresso=True
+            return ''
 
 
 def ler(planilha,nome):
@@ -529,26 +563,37 @@ def previas_prontas(linha,fs):
     return isinstance(refs,list) and len(refs)>0 and len(refs)==len(site)
 
 
-def ajustar_fotos(id_disco,fs,drive,lacrado=False):
+def ajustar_fotos(id_disco,fs,drive,lacrado=False,prazo=None):
     fotos_site=sorted([f for f in fs if foto_publicavel(f, lacrado)],key=lambda f:float(f['ordem']))
     if not fotos_site: raise ErroCadastro('sem fotos do disco')
     ordens=[int(f['ordem']) for f in fotos_site]
     if len(set(ordens))!=len(ordens) or any(x<=0 for x in ordens): raise ErroCadastro('ordem de fotos inválida ou duplicada')
     ajustadas=[]; refs=[]
     for i,f in enumerate(fotos_site,1):
+        if prazo is not None and time.monotonic()>prazo:
+            raise _OrcamentoEsgotado()
         jpg=fotos.processar(drive.baixar(f['arquivo_drive_id']),f.get('papel',''),f.get('cantos',''))
         nome=f'{i:03d}-'+hashlib.sha256(jpg).hexdigest()[:16]+'.jpg'
-        try: fid=drive.guardar(id_disco,nome,jpg)
-        except Exception as erro:
-            # A cópia ajustada no Drive é só arquivo; a loja recebe a imagem direto (attachment).
-            # Conta de serviço sem cota no Drive pessoal não pode impedir o cadastro.
-            print('Cadastro: cópia ajustada não guardada no Drive; detalhes na planilha.'); fid=''
+        if getattr(drive,'_sem_gravacao',False):
+            setattr(drive,'_gravacoes_puladas',getattr(drive,'_gravacoes_puladas',0)+1)
+            fid=''
+        else:
+            try: fid=drive.guardar(id_disco,nome,jpg)
+            except Exception:
+                # A cópia ajustada no Drive é só arquivo; a loja recebe a imagem direto (attachment).
+                # Disjuntor também para drives simulados que levantam exceção.
+                setattr(drive,'_sem_gravacao',True)
+                setattr(drive,'_gravacoes_puladas',getattr(drive,'_gravacoes_puladas',0)+1)
+                if not getattr(drive,'_aviso_sem_gravacao_impresso',False):
+                    print('Cadastro: cópia ajustada não guardada no Drive; gravação no Drive desativada pelo resto da rodada.')
+                    setattr(drive,'_aviso_sem_gravacao_impresso',True)
+                fid=''
         refs.append({'ordem':i,'papel':f.get('papel',''),'arquivo_drive_id':fid})
         ajustadas.append((i,nome,jpg))
     return ajustadas,refs
 
 
-def processar_linha(linha,fs,loja,drive,gravar,caminho,confirmar=lambda:True):
+def processar_linha(linha,fs,loja,drive,gravar,caminho,confirmar=lambda:True,prazo=None):
     """gravar persiste por ID na planilha; se falhar após POST, o diário impede duplicação."""
     if linha.get('status')!='aprovado': return
     if not linha.get('id'): raise ErroCadastro('sem id estável')
@@ -568,7 +613,7 @@ def processar_linha(linha,fs,loja,drive,gravar,caminho,confirmar=lambda:True):
     if sem_oficial:
         ajustadas,refs=[],[]
     else:
-        ajustadas,refs=ajustar_fotos(linha['id'],fs,drive,lacrado=lacrado)
+        ajustadas,refs=ajustar_fotos(linha['id'],fs,drive,lacrado=lacrado,prazo=prazo)
     gravar({'fotos_ajustadas':json.dumps(refs,ensure_ascii=False)})
     manifesto=[nome for _,nome,_ in ajustadas]
     if estado.get('manifesto') and estado['manifesto']!=manifesto:
@@ -749,10 +794,12 @@ def conciliar_com_site(planilha,produtos):
     return feitos
 
 
-def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=None,orcamento_s=None):
+def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=None,orcamento_s=None,limite_previas=LIMITE_PREVIAS_POR_RODADA):
     """Enriquece rascunhos e processa só aprovados; erro de uma linha não derruba a loja."""
-    import time
     inicio_cad=time.monotonic()
+    prazo=(inicio_cad+orcamento_s) if orcamento_s is not None else None
+    def _estourou():
+        return prazo is not None and time.monotonic()>prazo
     resumo={'criados':0,'erros':0,'rascunhos':0}
     if not ler(planilha,ABA): return resumo
     preparar_abas(planilha)
@@ -792,6 +839,10 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
     cliente_discogs=discogs or Discogs(config.discogs_token)
     previas_feitas=0  # D-090: prévias (baixar e ajustar fotos) por rodada têm limite
     for r in v[1:]:
+        if _estourou():
+            resumo['orcamento_esgotado']=True
+            print('Cadastro: tempo limite da rodada atingido; restante fica para a próxima rodada.')
+            break
         l=dict(zip(cab,r)); did=str(l.get('id',''))
         if not did: continue
         if l.get('status') not in ('rascunho','aprovado','criado','publicado','somar_estoque') and l.get('subir_loja') != 'pedido': continue
@@ -898,8 +949,8 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                     raise PendenciaFotos('não foi possível acessar a pasta de entrada') from None
                 minhas_fotos=resolver_fotos(planilha,drive,minhas_fotos)
             if l['status']=='rascunho':
-                if orcamento_s is not None and (time.monotonic()-inicio_cad)>orcamento_s:
-                    continue
+                if _estourou():
+                    raise _OrcamentoEsgotado()
                 lacrado=eh_lacrado(l)
                 sem_oficial=lacrado and not tem_foto_oficial(minhas_fotos)
                 dados={'preco_referencia':preco_referencia(l.get('titulo',''),tabelas.produtos,pd.Timestamp.now().date())}
@@ -914,24 +965,29 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                 for k,val in dict(peso_kg=peso_padrao(l),altura_cm=2.5,largura_cm=32,comprimento_cm=32).items():
                     if not numero(l.get(k)): dados[k]=val
                 if not l.get('discogs_id') and config.discogs_token:
+                    if _estourou(): raise _OrcamentoEsgotado()
                     cat=re.search(r'(?:cat[aá]logo|catno)\s*[:=]\s*([^\n;]+)',l.get('ficha',''),re.I)
                     try: dados.update(cliente_discogs.buscar(l.get('titulo',''),cat[1] if cat else '',l.get('discogs_url','')))
                     except ErroDiscogs: dados['discogs_confianca']='baixa'
-                if minhas_fotos and not sem_oficial and not previas_prontas(l,minhas_fotos) and previas_feitas<LIMITE_PREVIAS_POR_RODADA:
+                if minhas_fotos and not sem_oficial and not previas_prontas(l,minhas_fotos) and previas_feitas<limite_previas:
+                    if _estourou(): raise _OrcamentoEsgotado()
                     previas_feitas+=1
                     atual=dados.get('pendencias',l.get('pendencias',''))
                     try:
                         drive=drive or DriveFotos(config,c.get('Cadastro: pasta de entrada Drive (ID)',''))
-                        _,refs=ajustar_fotos(did,minhas_fotos,drive,lacrado=lacrado)
+                        _,refs=ajustar_fotos(did,minhas_fotos,drive,lacrado=lacrado,prazo=prazo)
                         dados['fotos_ajustadas']=json.dumps(refs,ensure_ascii=False)
                         if sem_aviso_fotos(atual)!=atual: dados['pendencias']=sem_aviso_fotos(atual)
+                    except _OrcamentoEsgotado:
+                        raise
                     except Exception as erro:
                         motivo=str(erro) if isinstance(erro,ErroCadastro) else type(erro).__name__
                         print('Cadastro: fotos não ajustadas; detalhes na planilha.')
                         aviso=f'conferir fotos/Drive ({motivo})'
                         if aviso not in atual:   # um aviso só, com o motivo; não repetir a cada rodada
                             dados['pendencias']='; '.join(filter(None,[sem_aviso_fotos(atual),aviso]))
-                if l.get('discogs_url') and config.discogs_token and minhas_fotos and previas_feitas<LIMITE_PREVIAS_POR_RODADA:
+                if l.get('discogs_url') and config.discogs_token and minhas_fotos and previas_feitas<limite_previas:
+                    if _estourou(): raise _OrcamentoEsgotado()
                     previas_feitas+=1
                     pend=dados.get('pendencias',l.get('pendencias',''))
                     aviso=''
@@ -944,7 +1000,7 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                         url=imagens[0]['uri']
                         parsed=urlparse(url)
                         if parsed.scheme!='https' or parsed.hostname!='i.discogs.com': raise ErroCadastro('imagem inválida')
-                        resposta=requests.get(url,timeout=30,allow_redirects=False)
+                        resposta=requests.get(url,timeout=20,allow_redirects=False)
                         if resposta.status_code!=200: raise ErroCadastro('imagem indisponível')
                         propria=next(f for f in minhas_fotos if f.get('papel') in ('capa','referencia'))
                         drive=drive or DriveFotos(config,c.get('Cadastro: pasta de entrada Drive (ID)',''))
@@ -963,6 +1019,7 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                     gravar(mudou)
                 resumo['rascunhos']+=1
                 continue
+            if _estourou(): raise _OrcamentoEsgotado()
             if not numero(l.get('preco')): raise ErroCadastro('sem preço')
             loja=LojaCadastro(api or NuvemshopAPI(config))
             if not l.get('produto_id') or l.get('cadastro_execucao') or (Path(pasta_api)/('cadastro_'+sku_da_linha(did)+'.json')).exists():
@@ -979,8 +1036,12 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
                     return fotos_atuais==minhas_fotos and len(matches)==1 and matches[0].get('status')=='aprovado' and all(
                         str(matches[0].get(k,''))==str(l.get(k,'')) for k in COLUNAS if k not in ('produto_id','link_loja','cadastro_execucao','fotos_ajustadas')+COLUNAS_CONFERENCIA)
                 processar_linha(l,minhas_fotos,loja,drive,gravar,
-                                 Path(pasta_api)/('cadastro_'+sku_da_linha(did)+'.json'),confirmar)
+                                 Path(pasta_api)/('cadastro_'+sku_da_linha(did)+'.json'),confirmar,prazo=prazo)
                 resumo['criados']+=1
+        except _OrcamentoEsgotado:
+            resumo['orcamento_esgotado']=True
+            print('Cadastro: tempo limite da rodada atingido; restante fica para a próxima rodada.')
+            break
         except PendenciaFotos as erro:
             resumo['erros']+=1
             anterior=pendencias_sem_busca_fotos(l.get('pendencias',''))
@@ -991,4 +1052,8 @@ def passo_rotina(config,planilha,tabelas,pasta_api,api=None,drive=None,discogs=N
             motivo=str(erro) if isinstance(erro,ErroCadastro) else 'falha de processamento; conferir antes de tentar novamente'
             try: gravar({'status':'erro: '+motivo})
             except Exception: pass
+    puladas=getattr(drive,'_gravacoes_puladas',0) if drive is not None else 0
+    if puladas:
+        resumo['drive_gravacoes_puladas']=puladas
+        print(f'Cadastro: gravação no Drive desativada nesta rodada ({puladas} cópia(s) pulada(s)).')
     return resumo

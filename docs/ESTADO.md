@@ -32,6 +32,17 @@ Próximo passo: na aba `Configuração` da planilha privada, garantir a linha `"
 
 Próximo passo: Túlio subir os arquivos alterados para o GitHub, colar `apps-script/vigia-cadastro.gs` no projeto `vigia-cadastro` do Apps Script, rodar `instalarRelogios()` uma vez e autorizar.
 
+# Atualização de sessão · Disjuntor do Drive e prazo duro do cadastro na rotina, 28/11/2026
+
+- **Correção do timeout de 38 min na Rotina do Painel (`painel_monstro/saidas/cadastro.py` e `painel_monstro/rotina.py`):**
+  - **Disjuntor em `DriveFotos.guardar`**: na primeira falha de gravação no Drive (como `403 storageQuotaExceeded`), marca o Drive como sem gravação pelo resto da rodada sem repetir a requisição; todas as chamadas seguintes devolvem `''` na hora sem chamada HTTP. Imprime o aviso uma única vez e mostra a contagem total de cópias puladas no fim de `passo_rotina`.
+  - **Timeout e retry reduzidos no Drive**: `DRIVE_TIMEOUT_S = 20` (antes 60s) e no máximo 1 nova tentativa em `GET` transitório (0 retries em `POST` ou 4xx).
+  - **Prazo duro (`orcamento_s`)**: checado antes de cada linha, antes de cada foto em `ajustar_fotos`, antes de cada prévia Discogs e antes de cada criação de produto; ao estourar, interrompe o cadastro imediatamente (`break`) e deixa a rotina seguir.
+  - **Limites diferenciados**: rotina completa passa `orcamento_s=180` e `limite_previas=5`; workflow `--so-cadastro` mantém os limites anteriores com o disjuntor do Drive ativo.
+  - Testes adicionados em `tests/test_cadastro.py` simulando Drive recusando todas as gravações, timeout/retry e estouro de orçamento dentro de `ajustar_fotos`.
+
+Próximo passo: Túlio subir os arquivos alterados para o GitHub e conferir a próxima rodada da Rotina do Painel no Actions (deve ficar abaixo de 10 minutos).
+
 # Atualização de sessão · Estabilização da rotina, workflow Black rápido e área Black 2026 no Painel, 27/11/2026
 
 - **Parte A · Rotina do Painel e workflow Black rápido:**

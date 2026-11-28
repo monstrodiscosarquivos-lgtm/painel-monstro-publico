@@ -213,7 +213,7 @@ def rodar(config: Config | None = None, completo: bool = False, pasta_api: str =
     _medir('gravacao_planilha', t_grav)
     t_etapa = time.monotonic()
     try:
-        cad = cadastro.passo_rotina(config, planilha, tabelas, pasta_api, api=api, orcamento_s=360)
+        cad = cadastro.passo_rotina(config, planilha, tabelas, pasta_api, api=api, orcamento_s=180, limite_previas=5)
         print(f'      Cadastro: {cad["rascunhos"]} rascunhos, {cad["criados"]} criados, {cad["erros"]} pendências ({_medir("cadastro", t_etapa)} s)')
     except Exception:
         _medir('cadastro', t_etapa)

@@ -12,6 +12,7 @@ Responde:
 from __future__ import annotations
 
 from datetime import date, timedelta
+from statistics import NormalDist
 import math
 import re
 from typing import Any
@@ -47,7 +48,7 @@ def _t_crit_95(df: int) -> float:
         return 1.96
     if df in _T_CRIT_95:
         return _T_CRIT_95[df]
-    z = 1.95996398454
+    z = NormalDist().inv_cdf(0.975)  # 1,96 (intervalo de 95%)
     return z + (z ** 3 + z) / (4.0 * df) + (5.0 * z ** 5 + 16.0 * z ** 3 + 3.0 * z) / (96.0 * df ** 2)
 
 

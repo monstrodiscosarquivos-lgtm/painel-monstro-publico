@@ -925,3 +925,94 @@ def test_d107_produto_oculto_recebe_ficha_nova(tmp_path, monkeypatch):
     assert fichas and fichas[0][0] == 123
     assert fichas[0][1]['name'] == {'pt': 'LP Frank Sinatra - All Alone (1962) - (Vinil Usado)'}
     assert set(fichas[0][1]) == {'name', 'brand', 'description', 'seo_title', 'seo_description', 'tags'}
+
+
+def test_disjuntor_drive_recusa_gravacao_uma_vez_e_cadastro_termina_rapido(tmp_path, capsys):
+    """Simula Drive recusando todas as gravações (403 storageQuotaExceeded): disjuntor desativa na 1ª falha,
+    não faz novas requisições de gravação, avisa uma vez só + contagem no fim, e termina em poucos segundos."""
+    import time
+
+    posts_drive = []
+    class SessaoDriveSemCota:
+        def request(self, metodo, url, timeout=None, **kw):
+            assert timeout is not None and timeout <= 20
+            if metodo == 'POST':
+                posts_drive.append(url)
+                return Resp({'error': {'errors': [{'reason': 'storageQuotaExceeded'}]}}, status=403)
+            # GETs de pasta/arquivo
+            if 'fields=mimeType' in str(kw.get('params')) or kw.get('params', {}).get('fields') == 'mimeType,parents':
+                return Resp({'mimeType': 'image/jpeg', 'parents': ['entrada-1']})
+            if kw.get('params', {}).get('alt') == 'media':
+                return Resp(b'', status=200)
+            return Resp({'files': []})
+
+    drive = object.__new__(c.DriveFotos)
+    drive.s = SessaoDriveSemCota()
+    drive.raiz = 'raiz-1'
+    drive.entrada = 'entrada-1'
+    drive._sem_gravacao = False
+    drive._gravacoes_puladas = 0
+    drive._aviso_sem_gravacao_impresso = False
+    # Usa imagem válida do helper Drive().baixar para fotos.processar
+    drive_ok = Drive()
+    drive.baixar = drive_ok.baixar
+
+    # 6 rascunhos com 2 fotos cada (12 fotos no total)
+    linhas = [linha(id=f'disco-cota-{i}', status='rascunho') for i in range(6)]
+    fotos_rows = []
+    for i in range(6):
+        fotos_rows.append({'id_disco': f'disco-cota-{i}', 'ordem': '1', 'papel': 'capa', 'arquivo_drive_id': f'f{i}a', 'observacao': '', 'cantos': '[]'})
+        fotos_rows.append({'id_disco': f'disco-cota-{i}', 'ordem': '2', 'papel': 'contracapa', 'arquivo_drive_id': f'f{i}b', 'observacao': '', 'cantos': '[]'})
+
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame(linhas, columns=c.COLUNAS))
+    p.substituir('cadastro_fotos', pd.DataFrame(fotos_rows, columns=c.FOTOS))
+
+    t0 = time.monotonic()
+    res = c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, drive=drive, orcamento_s=180, limite_previas=5)
+    duracao = time.monotonic() - t0
+
+    assert duracao < 5.0
+    assert len(posts_drive) == 1  # só 1 tentativa de gravação; disjuntor bloqueou as demais
+    assert res['rascunhos'] == 6
+    assert res['drive_gravacoes_puladas'] == 10  # 5 rascunhos (limite_previas=5) * 2 fotos = 10 cópias puladas
+    saida = capsys.readouterr().out
+    assert saida.count('cópia ajustada não guardada no Drive') == 1
+    assert '10 cópia(s) pulada(s)' in saida
+
+
+def test_drive_request_timeout_20s_e_maximo_1_retry(monkeypatch):
+    monkeypatch.setattr(c.time, 'sleep', lambda s: None)
+    chamadas = []
+    class SessaoErro:
+        def request(self, metodo, url, timeout=None, **kw):
+            chamadas.append((metodo, timeout))
+            return Resp({}, status=503)
+
+    drive = object.__new__(c.DriveFotos)
+    drive.s = SessaoErro()
+    with pytest.raises(c.ErroCadastro):
+        drive.request('GET', '/drive/v3/files')
+    assert chamadas == [('GET', 20), ('GET', 20)]  # 1 inicial + 1 retry
+
+    chamadas.clear()
+    with pytest.raises(c.ErroCadastro):
+        drive.request('POST', '/drive/v3/files')
+    assert chamadas == [('POST', 20)]  # escrita nunca repete
+
+
+def test_orcamento_duro_interrompe_dentro_de_ajustar_fotos(tmp_path, monkeypatch):
+    """Confere que orcamento_s é checado antes de cada foto em ajustar_fotos e interrompe passo_rotina."""
+    relogio = iter([0.0, 0.1, 0.2, 0.3, 10.0, 10.1, 10.2])  # estoura no meio da 2ª foto
+    monkeypatch.setattr(c.time, 'monotonic', lambda: next(relogio, 10.5))
+
+    p = PlanilhaGoogle(PlanilhaFalsa())
+    p.substituir(c.ABA, pd.DataFrame([linha(id='disco-prazo-1', status='rascunho'), linha(id='disco-prazo-2', status='rascunho')], columns=c.COLUNAS))
+    p.substituir('cadastro_fotos', pd.DataFrame([
+        {'id_disco': 'disco-prazo-1', 'ordem': '1', 'papel': 'capa', 'arquivo_drive_id': 'a1', 'observacao': '', 'cantos': '[]'},
+        {'id_disco': 'disco-prazo-1', 'ordem': '2', 'papel': 'contracapa', 'arquivo_drive_id': 'a2', 'observacao': '', 'cantos': '[]'},
+    ], columns=c.FOTOS))
+
+    res = c.passo_rotina(Config(), p, SimpleNamespace(produtos=pd.DataFrame()), tmp_path, drive=Drive(), orcamento_s=1.0)
+    assert res.get('orcamento_esgotado') is True
+    assert res['rascunhos'] == 0  # parou antes de concluir o 1º rascunho e não travou a rotina
