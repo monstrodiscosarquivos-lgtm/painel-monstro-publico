@@ -7,6 +7,7 @@ manual: primeiros nomes e endereços sem base comparativa exigem leitura humana.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -39,9 +40,20 @@ def termos_clientes(raiz_privada):
     return termos
 
 
+def cupons_privados_env(valor=None):
+    """Lê códigos ou prefixos privados da variável opcional CUPONS_PRIVADOS (sem expô-los nos erros)."""
+    bruto = os.environ.get('CUPONS_PRIVADOS', '') if valor is None else valor
+    codigos = []
+    for parte in re.split(r'[,;\n]+', bruto or ''):
+        item = parte.split('=', 1)[0].strip()
+        if len(item) >= 3:
+            codigos.append(item.casefold())
+    return list(dict.fromkeys(codigos))
+
+
 def auditar(raiz=RAIZ,raiz_privada=RAIZ):
     raiz=Path(raiz); segredos=antigo.valores_secretos()
-    termos=termos_clientes(raiz_privada); problemas=[]
+    termos=termos_clientes(raiz_privada); cupons_privados=cupons_privados_env(); problemas=[]
     arquivos=arquivos_versionados(raiz)
     for caminho in arquivos:
         p=raiz/caminho
@@ -54,6 +66,8 @@ def auditar(raiz=RAIZ,raiz_privada=RAIZ):
             comparavel=linha.casefold()
             if any(termo in comparavel for termo in termos):
                 problemas.append(f'{caminho}:{n}: coincide com dado de cliente do cache privado')
+            if cupons_privados and any(cod in comparavel for cod in cupons_privados):
+                problemas.append(f'{caminho}:{n}: contém código de cupom privado')
             if re.search(r'https://docs\.google\.com/spreadsheets/d/[A-Za-z0-9_-]{25,}',linha):
                 problemas.append(f'{caminho}:{n}: endereço concreto de planilha privada')
             if re.search(r'https://drive\.google\.com/(?:drive/folders|file/d)/[A-Za-z0-9_-]{25,}',linha):

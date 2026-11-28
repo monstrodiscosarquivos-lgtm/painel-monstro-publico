@@ -22,20 +22,12 @@ BLACK_2025_DIAS = (
     ("D3", "Domingo", "2025-11-30"),
     ("D4", "Segunda", "2025-12-01"),
 )
-CUPONS_BLACK_2026 = (
+CUPONS_PUBLICOS_PADRAO = (
     "BLACK25", "BLACK30", "BLACK35",
-    "Lado A 25%", "Lado A 30%", "Lado A 35%",
-    "Grupo VIP 25%", "Grupo VIP 30%", "Grupo VIP 35%",
     "ANTECIPA10", "Sem cupom",
 )
-CUPONS_PRIVADOS_MAP = {
-    "SULCO25": "Lado A 25%",
-    "SULCO30": "Lado A 30%",
-    "SULCO35": "Lado A 35%",
-    "GRUPO25": "Grupo VIP 25%",
-    "GRUPO30": "Grupo VIP 30%",
-    "GRUPO35": "Grupo VIP 35%",
-}
+CONFIG_CUPONS_BLACK = "Black: cupons"
+CONFIG_ROTULOS_PRIVADOS = "Black: rótulos dos cupons privados"
 DIAS_SEMANA_PT = ("Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo")
 CAMPANHAS_BLACK_META = (
     "black26_rmk",
@@ -199,9 +191,11 @@ def calcular_black(
         else:
             metas_por_dia[d] = 0.0
 
-    # Cupons oficiais
-    cupons_str = config_params.get("Black: cupons", "ANTECIPA10, LADOA15, LADOA20, LADOA30, BLACK15, BLACK20, BLACK30")
-    cupons_oficiais = {c.strip().upper() for c in cupons_str.split(",") if c.strip()}
+    # Cupons oficiais e rótulos privados da Configuração
+    rotulos_privados = _rotulos_privados_da_config(config_params)
+    cupons_cfg = _cupons_da_config(config_params)
+    cupons_oficiais = set(cupons_cfg) if cupons_cfg else {"ANTECIPA10", "BLACK25", "BLACK30", "BLACK35"}
+    cupons_oficiais_mascarados = {mascarar_cupom_privado(c, rotulos_privados) for c in cupons_oficiais}
     prefixo_ads = config_params.get("Black: prefixo das campanhas de anúncio", "black26_").strip().lower()
 
     # Mapeamento produto_id -> categoria
@@ -370,12 +364,15 @@ def calcular_black(
     # 2. Análise por cupom
     cupons_stats = {}
     for _, p in p_periodo.iterrows():
-        c = p["cupom_clean"] or "SEM_CUPOM"
+        bruto = p["cupom_clean"] or "SEM_CUPOM"
+        c = mascarar_cupom_privado(bruto, rotulos_privados) if bruto != "SEM_CUPOM" else "SEM_CUPOM"
+        eh_oficial = bruto in cupons_oficiais or c in cupons_oficiais_mascarados
         if c not in cupons_stats:
-            cupons_stats[c] = {"pedidos": 0, "faturamento": 0.0, "desconto": 0.0}
+            cupons_stats[c] = {"pedidos": 0, "faturamento": 0.0, "desconto": 0.0, "oficial": False}
         cupons_stats[c]["pedidos"] += 1
         cupons_stats[c]["faturamento"] += p["total_num"]
         cupons_stats[c]["desconto"] += p["desconto_num"]
+        cupons_stats[c]["oficial"] = cupons_stats[c]["oficial"] or eh_oficial
 
     cupons_lista = []
     for c, st in cupons_stats.items():
@@ -386,7 +383,7 @@ def calcular_black(
             "faturamento": round(st["faturamento"], 2),
             "desconto": round(st["desconto"], 2),
             "ticket_medio": round(tm, 2),
-            "oficial": c in cupons_oficiais,
+            "oficial": st["oficial"],
         })
     cupons_lista.sort(key=lambda x: x["faturamento"], reverse=True)
 
@@ -594,35 +591,76 @@ def montar_calendario_black(config_params: dict[str, Any] | None = None) -> tupl
     return dias_26, dias_25, (ant_ini, ant_fim)
 
 
-def mascarar_cupom_privado(cupom: str) -> str:
-    """Troca códigos privados (SULCO*/GRUPO*) por rótulos públicos ('Lado A 25%', 'Grupo VIP 25%', etc.)."""
+def parsear_rotulos_privados(valor: Any) -> list[tuple[str, str]]:
+    """Lê 'PREFIXO=Rótulo, PREFIXO=Rótulo' (ou dict/lista) e devolve pares únicos em ordem."""
+    if not valor:
+        return []
+    if isinstance(valor, dict):
+        itens = [(str(k).strip().upper(), str(v).strip()) for k, v in valor.items()]
+    elif isinstance(valor, (list, tuple)):
+        itens = [(str(k).strip().upper(), str(v).strip()) for k, v in valor]
+    else:
+        itens = []
+        for parte in re.split(r"[,;\n]+", str(valor)):
+            if "=" not in parte:
+                continue
+            pref, rot = parte.split("=", 1)
+            itens.append((pref.strip().upper(), rot.strip()))
+    vistos: dict[str, str] = {}
+    for pref, rot in itens:
+        if pref and rot:
+            vistos[pref] = rot
+    return list(vistos.items())
+
+
+def _rotulos_privados_da_config(config_params: dict[str, Any] | None) -> list[tuple[str, str]]:
+    if not config_params:
+        return []
+    cfg_lower = {str(k).strip().lower(): v for k, v in config_params.items()}
+    bruto = cfg_lower.get(
+        CONFIG_ROTULOS_PRIVADOS.lower(),
+        cfg_lower.get("black: rotulos dos cupons privados", ""),
+    )
+    return parsear_rotulos_privados(bruto)
+
+
+def _cupons_da_config(config_params: dict[str, Any] | None) -> list[str]:
+    if not config_params:
+        return []
+    cfg_lower = {str(k).strip().lower(): v for k, v in config_params.items()}
+    bruto = str(cfg_lower.get(CONFIG_CUPONS_BLACK.lower(), "") or "")
+    return list(dict.fromkeys(c.strip().upper() for c in re.split(r"[,;\n]+", bruto) if c.strip()))
+
+
+def mascarar_cupom_privado(cupom: str, rotulos_privados: Any = None) -> str:
+    """Troca códigos cujos prefixos estão em 'Black: rótulos dos cupons privados' por '<Rótulo> <número>%'.
+
+    Cupons começando com BLACK ou ANTECIPA continuam aparecendo pelo código.
+    """
     c = str(cupom or "").strip().upper()
-    if c in CUPONS_PRIVADOS_MAP:
-        return CUPONS_PRIVADOS_MAP[c]
-    m_s = re.fullmatch(r"SULCO(\d+)", c)
-    if m_s:
-        return f"Lado A {m_s.group(1)}%"
-    if c.startswith("SULCO"):
-        return "Lado A"
-    m_g = re.fullmatch(r"GRUPO(\d+)", c)
-    if m_g:
-        return f"Grupo VIP {m_g.group(1)}%"
-    if c.startswith("GRUPO"):
-        return "Grupo VIP"
-    return cupom
+    if not c:
+        return str(cupom or "")
+    if c.startswith("BLACK") or c.startswith("ANTECIPA"):
+        return c
+    pares = sorted(parsear_rotulos_privados(rotulos_privados), key=lambda kv: -len(kv[0]))
+    for prefixo, rotulo in pares:
+        if c.startswith(prefixo):
+            m = re.search(r"(\d+)$", c)
+            return f"{rotulo} {m.group(1)}%" if m else rotulo
+    return c
 
 
-def _normalizar_cupom_black(valor: Any) -> str:
+def _normalizar_cupom_black(valor: Any, rotulos_privados: Any = None) -> str:
     if valor is None or (isinstance(valor, float) and pd.isna(valor)):
         return "Sem cupom"
     texto = str(valor).strip()
     if not texto or texto.upper() in ("NONE", "NAN", "SEM_CUPOM", "SEM CUPOM"):
         return "Sem cupom"
     primeiro = texto.split(",")[0].strip().upper()
-    return mascarar_cupom_privado(primeiro) if primeiro else "Sem cupom"
+    return mascarar_cupom_privado(primeiro, rotulos_privados) if primeiro else "Sem cupom"
 
 
-def _preparar_pedidos_black(pedidos_df: pd.DataFrame | None) -> pd.DataFrame:
+def _preparar_pedidos_black(pedidos_df: pd.DataFrame | None, rotulos_privados: Any = None) -> pd.DataFrame:
     if pedidos_df is None or pedidos_df.empty:
         return pd.DataFrame(columns=[
             "numero", "numero_str", "data_ts", "dt", "hora", "valido_bool",
@@ -641,7 +679,7 @@ def _preparar_pedidos_black(pedidos_df: pd.DataFrame | None) -> pd.DataFrame:
         max(0.0, s - d) if s > 0 else max(0.0, t)
         for s, d, t in zip(df["subtotal_num"], df["desconto_num"], df["total_num"])
     ]
-    df["cupom_norm"] = df["cupom"].apply(_normalizar_cupom_black) if "cupom" in df.columns else "Sem cupom"
+    df["cupom_norm"] = df["cupom"].apply(lambda v: _normalizar_cupom_black(v, rotulos_privados)) if "cupom" in df.columns else "Sem cupom"
     df["numero_str"] = df["numero"].astype(str).str.strip()
     return df
 
@@ -651,25 +689,43 @@ def calcular_bloco_cupons(
     hoje_str: str,
     dias_26: list[tuple[str, str, str]] | None = None,
     antecipa_periodo: tuple[str, str] = ("2026-11-12", "2026-11-25"),
+    config_params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Bloco 1: Pedidos pagos por cupom (D0 a D4, por hora hoje, tabela resumo + linha Antecipa e Total geral)."""
     dias_26 = dias_26 or list(BLACK_2026_DIAS)
     datas_26 = [d[2] for d in dias_26]
     p26 = df_p[df_p["valido_bool"] & df_p["dt"].isin(datas_26)].copy()
 
+    rotulos_privados = _rotulos_privados_da_config(config_params)
+    cupons_cfg = _cupons_da_config(config_params)
+    if cupons_cfg:
+        cupons_base = list(dict.fromkeys(mascarar_cupom_privado(c, rotulos_privados) for c in cupons_cfg))
+    else:
+        cupons_base = list(CUPONS_PUBLICOS_PADRAO)
+        if not p26.empty:
+            prefixos_rot = tuple(rot for _, rot in rotulos_privados)
+            for c_obs in p26["cupom_norm"]:
+                if c_obs not in cupons_base and (
+                    c_obs.startswith("BLACK") or c_obs.startswith("ANTECIPA")
+                    or (prefixos_rot and c_obs.startswith(prefixos_rot))
+                ):
+                    cupons_base.append(c_obs)
+    if "Sem cupom" not in cupons_base:
+        cupons_base.append("Sem cupom")
+
     def _serie(cupom: str) -> str:
-        return cupom if cupom in CUPONS_BLACK_2026 else "Outros"
+        return cupom if cupom in cupons_base else "Outros"
 
     if not p26.empty:
         p26["serie"] = p26["cupom_norm"].map(_serie)
     else:
         p26["serie"] = pd.Series(dtype=str)
 
-    series_presentes = [c for c in CUPONS_BLACK_2026 if not p26.empty and (p26["serie"] == c).any()]
+    series_presentes = [c for c in cupons_base if not p26.empty and (p26["serie"] == c).any()]
     if not p26.empty and (p26["serie"] == "Outros").any():
         series_presentes.append("Outros")
     if not series_presentes:
-        series_presentes = list(CUPONS_BLACK_2026)
+        series_presentes = list(cupons_base)
 
     por_dia = []
     for codigo, nome_dia, dt in dias_26:
@@ -715,7 +771,7 @@ def calcular_bloco_cupons(
                 "ticket_medio": round(rec / n, 2) if n else 0.0,
                 "desconto": round(desc, 2),
             })
-        ordem_padrao = {c: i for i, c in enumerate(CUPONS_BLACK_2026)}
+        ordem_padrao = {c: i for i, c in enumerate(cupons_base)}
         tabela.sort(key=lambda r: (ordem_padrao.get(r["cupom"], 999), -r["receita"]))
 
     # Linha à parte: Antecipa (cupom ANTECIPA10 no período configurado; não entra nos gráficos D0..D4)
@@ -1405,9 +1461,10 @@ def calcular_black_2026(
 
     prem = premissas if premissas is not None else carregar_premissas_margem(valores_margem_premissas, config_params)
     dias_26, dias_25, antecipa_periodo = montar_calendario_black(config_params)
+    rotulos_privados = _rotulos_privados_da_config(config_params)
 
-    df_p = _preparar_pedidos_black(pedidos_df)
-    cupons = calcular_bloco_cupons(df_p, hoje_str, dias_26=dias_26, antecipa_periodo=antecipa_periodo)
+    df_p = _preparar_pedidos_black(pedidos_df, rotulos_privados=rotulos_privados)
+    cupons = calcular_bloco_cupons(df_p, hoje_str, dias_26=dias_26, antecipa_periodo=antecipa_periodo, config_params=config_params)
     comp_2025 = calcular_bloco_2026_x_2025(df_p, hoje_str, dias_26=dias_26, dias_25=dias_25)
     meta_ads = avaliar_gatilhos_meta(campanhas_meta, atualizado_em=meta_atualizado_em or atualizado_em)
     saude = calcular_bloco_saude(df_p, itens_df, produtos_df, hoje_str, premissas=prem, dias_26=dias_26)

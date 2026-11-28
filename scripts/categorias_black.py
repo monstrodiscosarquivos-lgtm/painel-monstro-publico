@@ -1,6 +1,6 @@
 """Black Monstro 2026: pré-venda e livros cada um só na sua categoria.
 
-Os cupons BLACK e SULCO excluem as categorias de pré-venda e de livros, mas um produto que
+Os cupons da Black excluem as categorias de pré-venda e de livros, mas um produto que
 também está em outra categoria continua pegando o desconto. Este script:
 - deixa os produtos que ainda são pré-venda (PRE_VENDA) SÓ na categoria de endereço /pre-venda1/;
 - tira das categorias de pré-venda os que já viraram venda normal (SAIR_DA_PRE), mantendo as outras;

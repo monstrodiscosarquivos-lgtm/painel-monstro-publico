@@ -65,3 +65,16 @@ def test_auditor_de_email_confere_o_endereco_completo_e_nao_so_sufixo():
     assert historico.EMAIL.findall('nome pessoa@'+'gmail.com fim')==['pessoa@'+'gmail.com']
     assert any('email' in p for p in historico.examinar('exemplo.py',b'pessoa@'+b'gmail.com',{},'teste'))
     assert not historico.examinar('exemplo.py',b'cliente@exemplo.com',{},'teste')
+
+
+def test_auditor_detecta_cupons_privados_apenas_quando_variavel_de_ambiente_definida(tmp_path,monkeypatch):
+    raiz=repo(tmp_path)
+    (raiz/'codigo.py').write_text('cupom="CODPRIV25"\n',encoding='utf-8')
+    monkeypatch.delenv('CUPONS_PRIVADOS',raising=False)
+    _,problemas_sem=a.auditar(raiz,raiz)
+    assert problemas_sem==[]
+
+    monkeypatch.setenv('CUPONS_PRIVADOS','CODPRIV25, OUTROPRIV=Grupo VIP')
+    _,problemas_com=a.auditar(raiz,raiz)
+    assert any('código de cupom privado' in p for p in problemas_com)
+    assert all('CODPRIV25' not in p and 'codpriv25' not in p for p in problemas_com)
